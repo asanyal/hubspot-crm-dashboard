@@ -1,0 +1,815 @@
+// app/components/DealStageSelector.tsx
+'use client';
+
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAppState } from '../context/AppContext';
+import { 
+  useReactTable, 
+  getCoreRowModel, 
+  getSortedRowModel,
+  flexRender,
+  createColumnHelper,
+  SortingState
+} from '@tanstack/react-table';
+
+interface Stage {
+  pipeline_id: string;
+  pipeline_name: string;
+  stage_id: string;
+  stage_name: string;
+  display_order: number;
+  probability: number;
+  closed_won: boolean;
+  closed_lost: boolean;
+}
+
+interface Deal {
+  Deal_Name: string;
+  Owner: string;
+  Amount: string;
+  Created_At: string;
+  Last_Update: string;
+  Expected_Close_Date: string;
+  Closed_Won: boolean;
+  Closed_Lost: boolean;
+}
+
+const DealStageSelector: React.FC = () => {
+  const { state, updateState } = useAppState();
+  const { 
+    selectedStage, 
+    availableStages, 
+    dealsByStage, 
+    loading, 
+    stagesLoading, 
+    error,
+    lastFetched 
+  } = state.dealsByStage;
+  
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'Created_At', desc: true }
+  ]);
+  const [hasMounted, setHasMounted] = useState(false);
+  const [failedStages, setFailedStages] = useState<Set<string>>(new Set());
+  const router = useRouter();
+  
+  // Track URL parameters
+  const [urlStage, setUrlStage] = useState<string | null>(null);
+  const [urlAutoload, setUrlAutoload] = useState<boolean>(false);
+  
+  // Loading timeout reference - used to track the automatic loading reset
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Timestamp for data expiration (5 minutes = 300000 milliseconds)
+  const DATA_EXPIRY_TIME = 300000;
+  
+  // Get URL search parameters
+  const getSearchParams = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      return new URLSearchParams(window.location.search);
+    }
+    return new URLSearchParams();
+  }, []);
+  
+  // Handle search input change
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  };
+
+  
+  // Set hasMounted to true after component mounts and read URL parameters
+  useEffect(() => {
+    setHasMounted(true);
+    
+    // Read URL parameters on mount
+    const searchParams = getSearchParams();
+    const stageFromUrl = searchParams.get('stage');
+    const autoload = searchParams.get('autoload') === 'true';
+    
+    // Store URL parameters in state
+    setUrlStage(stageFromUrl);
+    setUrlAutoload(autoload);
+    
+    return () => {
+      // Clear any state when component unmounts
+      setFailedStages(new Set());
+      setHasMounted(false);
+      
+      // Clear any timeouts to prevent memory leaks
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
+  }, [getSearchParams]);
+  
+  // Setup safety timeout for loading state
+  useEffect(() => {
+    // Clear any existing timeout when loading state changes
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+    
+    // Set a new timeout if we're in loading state
+    if (loading) {
+      loadingTimeoutRef.current = setTimeout(() => {
+        console.log('Loading timeout triggered - resetting loading state');
+        updateState('dealsByStage.loading', false);
+      }, 15000); // 15 seconds should be enough for any normal API call
+    }
+    
+    return () => {
+      // Clear timeout on cleanup
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
+  }, [loading, updateState]);
+  
+  // Update the fetchStages function to be more robust
+  const fetchStages = useCallback(async (): Promise<void> => {
+    console.log('fetchStages called, current state:', {
+      stagesLoading,
+      availableStagesLength: availableStages.length,
+      lastFetched,
+      currentTime: Date.now()
+    });
+
+    // If we already have stages and they're not stale, just ensure loading state is false
+    if (availableStages.length > 0 && lastFetched && (Date.now() - lastFetched <= DATA_EXPIRY_TIME)) {
+      console.log('Using existing stages data');
+      updateState('dealsByStage.stagesLoading', false);
+      return;
+    }
+
+    // Set loading state before starting the fetch
+    updateState('dealsByStage.stagesLoading', true);
+    updateState('dealsByStage.error', null);
+    
+    try {
+      console.log('Fetching pipeline stages...');
+      const response = await fetch('/api/hubspot/stages');
+      
+      console.log(`Stages response status: ${response.status}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Stages error response: ${errorText}`);
+        throw new Error(`Failed to fetch stages: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log(`Received ${data.length} pipeline stages:`, data);
+      
+      if (!Array.isArray(data) || data.length === 0) {
+        throw new Error('No valid stages received from the API');
+      }
+      
+      // Sort stages by display order
+      const sortedStages = [...data].sort((a, b) => a.display_order - b.display_order);
+      
+      // Update the context
+      updateState('dealsByStage.availableStages', sortedStages);
+      updateState('dealsByStage.lastFetched', Date.now());
+      
+      console.log('Successfully updated stages in state:', {
+        stagesCount: sortedStages.length,
+        stages: sortedStages
+      });
+      
+      // If we have a URL stage parameter, ensure it exists in the fetched stages
+      if (urlStage && !sortedStages.some((s: Stage) => s.stage_name === urlStage)) {
+        console.warn(`URL stage "${urlStage}" not found in available stages`);
+        setUrlStage(null);
+      }
+    } catch (error) {
+      console.error('Error fetching stages:', error);
+      updateState('dealsByStage.error', 'Failed to load stages. Please try refreshing.');
+      updateState('dealsByStage.availableStages', []);
+    } finally {
+      console.log('Setting stagesLoading to false');
+      updateState('dealsByStage.stagesLoading', false);
+    }
+  }, [updateState, urlStage, availableStages.length, lastFetched, DATA_EXPIRY_TIME]);
+
+  // Simplify the initial fetch effect
+  useEffect(() => {
+    console.log('Initial fetch effect running:', {
+      hasMounted,
+      availableStagesLength: availableStages.length,
+      stagesLoading,
+      lastFetched
+    });
+
+    if (!hasMounted) {
+      console.log('Component not mounted yet, skipping fetch');
+      return;
+    }
+
+    // Only fetch if we don't have stages or if they're stale
+    if (availableStages.length === 0 || (lastFetched && Date.now() - lastFetched > DATA_EXPIRY_TIME)) {
+      console.log('Fetching stages...');
+      fetchStages();
+    }
+  }, [hasMounted, availableStages.length, lastFetched, fetchStages, DATA_EXPIRY_TIME]);
+
+  // Add a safety timeout for stages loading
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    if (stagesLoading) {
+      timeoutId = setTimeout(() => {
+        console.log('Stages loading timeout triggered - resetting loading state');
+        updateState('dealsByStage.stagesLoading', false);
+        updateState('dealsByStage.error', 'Stages loading timed out. Please try refreshing.');
+      }, 10000); // 10 second timeout
+    }
+    
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [stagesLoading, updateState]);
+
+  // Add a debug effect to monitor state changes
+  useEffect(() => {
+    console.log('State changed:', {
+      stagesLoading,
+      availableStagesLength: availableStages.length,
+      error,
+      lastFetched
+    });
+  }, [stagesLoading, availableStages.length, error, lastFetched]);
+  
+  // Fetch deals for the selected stage - this is a stable function that won't change
+  const fetchDealsForStage = useCallback(async (stageName: string): Promise<void> => {
+    if (!stageName) return;
+    
+    // Skip if already loaded or previously failed
+    if ((dealsByStage[stageName] && dealsByStage[stageName].length >= 0) || 
+        failedStages.has(stageName) || 
+        loading) {
+      return;
+    }
+    
+    // Set loading state
+    updateState('dealsByStage.loading', true);
+    updateState('dealsByStage.error', null);
+    
+    try {
+      console.log(`Fetching deals for stage: ${stageName}`);
+      const response = await fetch(`/api/hubspot/deals?stage=${encodeURIComponent(stageName)}`);
+      
+      // Log the entire response for debugging
+      console.log(`Response status: ${response.status}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Error response: ${errorText}`);
+        throw new Error(`Failed to fetch deals: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log(`Received ${data.length} deals for stage: ${stageName}`);
+      
+      // Update the context with the new deals
+      updateState('dealsByStage.dealsByStage', {
+        ...dealsByStage,
+        [stageName]: data
+      });
+    } catch (error) {
+      console.error(`Error fetching deals for ${stageName}:`, error);
+      updateState('dealsByStage.error', `Failed to load deals for ${stageName}`);
+      
+      // Add this stage to the failed stages set to prevent infinite retries
+      setFailedStages(prev => new Set(prev).add(stageName));
+      
+      // Initialize this stage with an empty array to prevent repeated fetching
+      updateState('dealsByStage.dealsByStage', {
+        ...dealsByStage,
+        [stageName]: []
+      });
+    } finally {
+      updateState('dealsByStage.loading', false);
+    }
+  }, [dealsByStage, failedStages, loading, updateState]);
+  
+  // Handle stage selection after stages are available
+  useEffect(() => {
+    if (!hasMounted || stagesLoading || availableStages.length === 0) return;
+    
+    // Choose which stage to select
+    let stageToSelect = selectedStage;
+    
+    // If URL has a stage parameter and it exists in available stages, use that
+    if (urlStage && availableStages.some(s => s.stage_name === urlStage)) {
+      stageToSelect = urlStage;
+      
+      // If autoload is true, force refresh the data for this stage
+      if (urlAutoload) {
+        // Clear any cached data for this stage to force a fresh load
+        const updatedDealsByStage = {...dealsByStage};
+        if (updatedDealsByStage[urlStage]) {
+          delete updatedDealsByStage[urlStage];
+          updateState('dealsByStage.dealsByStage', updatedDealsByStage);
+        }
+        
+        // Remove from failed stages if needed
+        if (failedStages.has(urlStage)) {
+          setFailedStages(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(urlStage);
+            return newSet;
+          });
+        }
+      }
+    } 
+    // If no URL stage or no selected stage, use the first available stage
+    else if (!stageToSelect && availableStages.length > 0) {
+      stageToSelect = availableStages[0].stage_name;
+    }
+    
+    // Only update if different from current selection
+    if (stageToSelect && stageToSelect !== selectedStage) {
+      console.log(`Setting selected stage to: ${stageToSelect}`);
+      updateState('dealsByStage.selectedStage', stageToSelect);
+    }
+    
+    // Clear URL parameters after handling them
+    setUrlStage(null);
+    setUrlAutoload(false);
+    
+  }, [
+    hasMounted, 
+    stagesLoading, 
+    availableStages, 
+    selectedStage, 
+    urlStage, 
+    urlAutoload, 
+    dealsByStage, 
+    failedStages, 
+    updateState
+  ]);
+
+  // Handle fetching deals for selected stage
+  useEffect(() => {
+    if (!hasMounted || !selectedStage || stagesLoading) return;
+    
+    // Skip if we already have deals for this stage or if it failed before
+    if (dealsByStage[selectedStage] !== undefined || failedStages.has(selectedStage) || loading) {
+      return;
+    }
+    
+    // Fetch deals for this stage
+    fetchDealsForStage(selectedStage);
+  }, [hasMounted, selectedStage, stagesLoading, dealsByStage, failedStages, loading, fetchDealsForStage]);
+
+  // Add a debounce effect to delay filtering until typing stops
+  useEffect(() => {
+    // Set a timeout to update the debounced value
+    const timerId = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300); // 300ms delay
+    
+    // Cleanup function to clear the timeout if the search term changes again
+    return () => {
+      clearTimeout(timerId);
+    };
+  }, [searchTerm]);
+
+
+  // Handler for stage selection
+  const handleStageSelect = useCallback((stageName: string): void => {
+    // Prevent clicks while loading stages or if already selected
+    if (stagesLoading || stageName === selectedStage) return;
+    
+    // Clear any failed status for this stage when manually selected
+    if (failedStages.has(stageName)) {
+      setFailedStages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(stageName);
+        return newSet;
+      });
+    }
+    
+    // Update the selected stage
+    updateState('dealsByStage.selectedStage', stageName);
+    updateState('dealsByStage.error', null);
+    
+    // Update URL with selected stage
+    const newSearchParams = new URLSearchParams(getSearchParams());
+    newSearchParams.set('stage', stageName);
+    newSearchParams.set('autoload', 'true');
+    
+    // Use window.history to update URL without reloading
+    if (typeof window !== 'undefined') {
+      window.history.pushState(
+        {},
+        '',
+        `${window.location.pathname}?${newSearchParams.toString()}`
+      );
+    }
+  }, [stagesLoading, selectedStage, failedStages, updateState, getSearchParams]);
+
+  // Navigate to deal timeline
+  const navigateToDealTimeline = useCallback((dealName: string) => {
+    const encodedDealName = encodeURIComponent(dealName);
+    router.push(`/deal-timeline?dealName=${encodedDealName}&autoload=true`);
+  }, [router]);
+
+  // Format amount as currency
+  const formatAmount = (amount: string): string => {
+    if (!amount || amount === 'Not specified') return amount;
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(parseFloat(amount.replace(/[^0-9.-]+/g, '')));
+  };
+
+  // Get stage chip style based on stage name
+  const getStageChipStyle = (stageName: string) => {
+    const isActive = selectedStage === stageName;
+    
+    // Base classes
+    let classes = "py-2 px-4 rounded-full text-sm font-medium transition-colors duration-200 ";
+    
+    // Find matching stage to check if it's a closed stage
+    const stageInfo = availableStages.find(s => s.stage_name === stageName);
+    
+    if (isActive) {
+      classes += "bg-blue-600 text-white ";
+    } else if (stageInfo?.closed_won) {
+      classes += "bg-gray-200 text-gray-800 hover:bg-gray-300 ";
+    } else if (stageInfo?.closed_lost) {
+      classes += "bg-gray-200 text-gray-800 hover:bg-gray-300 ";
+    } else {
+      classes += "bg-gray-200 text-gray-800 hover:bg-gray-300 ";
+    }
+    
+    return classes;
+  };
+
+  // Get current deals based on selected stage
+  const getCurrentDeals = useCallback((): Deal[] => {
+    const dealsForStage = (selectedStage && dealsByStage[selectedStage]) || [];
+
+    if (!debouncedSearchTerm.trim()) {
+      return dealsForStage;
+    }
+
+    const lowerCaseSearch = debouncedSearchTerm.toLowerCase();
+    
+    return dealsForStage.filter(deal => {
+      if (deal.Deal_Name.toLowerCase().includes(lowerCaseSearch)) return true;
+      if (deal.Owner.toLowerCase().includes(lowerCaseSearch)) return true;
+      if (deal.Amount.toLowerCase().includes(lowerCaseSearch)) return true;
+      if (deal.Created_At.toLowerCase().includes(lowerCaseSearch)) return true;
+      if (deal.Last_Update.toLowerCase().includes(lowerCaseSearch)) return true;
+      if (deal.Expected_Close_Date.toLowerCase().includes(lowerCaseSearch)) return true;
+      return false;
+    });
+  }, [selectedStage, dealsByStage, debouncedSearchTerm]);
+
+  const filteredDeals = useMemo(() => {
+    const dealsForStage = (selectedStage && dealsByStage[selectedStage]) || [];
+    
+    // If search is empty, return all deals without filtering
+    if (!searchTerm.trim()) {
+      return dealsForStage;
+    }
+    
+    const lowerCaseSearch = searchTerm.toLowerCase();
+    
+    // Only filter when necessary
+    return dealsForStage.filter(deal => {
+      // Most common fields first for better performance (short-circuit evaluation)
+      return (
+        (deal.Deal_Name || '').toLowerCase().includes(lowerCaseSearch) ||
+        (deal.Owner || '').toLowerCase().includes(lowerCaseSearch) ||
+        (deal.Amount || '').toLowerCase().includes(lowerCaseSearch) ||
+        (deal.Created_At || '').toLowerCase().includes(lowerCaseSearch) ||
+        (deal.Last_Update || '').toLowerCase().includes(lowerCaseSearch) ||
+        (deal.Expected_Close_Date || '').toLowerCase().includes(lowerCaseSearch)
+      );
+    });
+  }, [selectedStage, dealsByStage, searchTerm]);
+  
+
+  // Update the handleRefresh function
+  const handleRefresh = useCallback(() => {
+    console.log('Manual refresh triggered');
+    
+    // Read URL parameters again in case they've changed
+    const searchParams = getSearchParams();
+    const stageFromUrl = searchParams.get('stage');
+    const autoload = searchParams.get('autoload') === 'true';
+    
+    // Store URL parameters in state for processing
+    setUrlStage(stageFromUrl);
+    setUrlAutoload(autoload);
+    
+    // Clear failed stages on manual refresh
+    setFailedStages(new Set());
+    
+    // Clear error state
+    updateState('dealsByStage.error', null);
+    
+    // Force reset loading states
+    updateState('dealsByStage.loading', false);
+    updateState('dealsByStage.stagesLoading', false);
+    
+    // Clear the stages to force a fresh fetch
+    updateState('dealsByStage.availableStages', []);
+    updateState('dealsByStage.lastFetched', null);
+    
+    // Fetch stages (which will trigger the rest of the initialization flow)
+    fetchStages();
+  }, [updateState, fetchStages, getSearchParams]);
+
+  // Function to render sort indicator
+  const renderSortIndicator = (column: any) => {
+    // Get current sort direction
+    const sortDirection = column.getIsSorted();
+    
+    if (sortDirection === 'asc') {
+      // Ascending sort
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-blue-600" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+        </svg>
+      );
+    } else if (sortDirection === 'desc') {
+      // Descending sort
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-blue-600" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      );
+    } else {
+      // Not sorted - show subtle indicator
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M10 3a1 1 0 01.707.293l3 3a1 1 0 01-1.414 1.414L10 5.414 7.707 7.707a1 1 0 01-1.414-1.414l3-3A1 1 0 0110 3zm-3.707 9.293a1 1 0 011.414 0L10 14.586l2.293-2.293a1 1 0 011.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      );
+    }
+  };
+
+  // Create column helper
+  const columnHelper = createColumnHelper<Deal>();
+
+  // Define columns
+  const columns = useMemo(() => [
+    columnHelper.accessor('Deal_Name', {
+      header: 'Deal Name',
+      cell: info => (
+        <button
+          onClick={() => navigateToDealTimeline(info.getValue())}
+          className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left"
+        >
+          {info.getValue()}
+        </button>
+      ),
+    }),
+    columnHelper.accessor('Owner', {
+      header: 'Owner',
+    }),
+    columnHelper.accessor('Amount', {
+      header: 'Amount',
+      cell: info => formatAmount(info.getValue()),
+      // Custom sorting for currency values
+      sortingFn: (rowA, rowB, columnId) => {
+        const valueA = parseFloat(rowA.original.Amount.replace(/[^0-9.-]+/g, '') || '0');
+        const valueB = parseFloat(rowB.original.Amount.replace(/[^0-9.-]+/g, '') || '0');
+        return valueA - valueB;
+      },
+    }),
+    columnHelper.accessor('Created_At', {
+      header: 'Created At',
+      // Custom sorting for dates
+      sortingFn: (rowA, rowB, columnId) => {
+        const dateA = new Date(rowA.original.Created_At);
+        const dateB = new Date(rowB.original.Created_At);
+        return dateA.getTime() - dateB.getTime();
+      },
+    }),
+    columnHelper.accessor('Last_Update', {
+      header: 'Last Update',
+      // Custom sorting for dates
+      sortingFn: (rowA, rowB, columnId) => {
+        const dateA = new Date(rowA.original.Last_Update);
+        const dateB = new Date(rowB.original.Last_Update);
+        return dateA.getTime() - dateB.getTime();
+      },
+    }),
+    columnHelper.accessor('Expected_Close_Date', {
+      header: 'Expected Close',
+      // Custom sorting for dates
+      sortingFn: (rowA, rowB, columnId) => {
+        const dateA = new Date(rowA.original.Expected_Close_Date);
+        const dateB = new Date(rowB.original.Expected_Close_Date);
+        return dateA.getTime() - dateB.getTime();
+      },
+    }),
+  ], [columnHelper, navigateToDealTimeline]);
+
+  // Create the table instance
+  const table = useReactTable({
+    data: filteredDeals,
+    columns,
+    state: {
+      sorting,
+    },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
+
+  return (
+    <div className="flex h-screen">
+      {/* Left Panel */}
+      <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
+        <div className="p-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold">Stages</h2>
+        </div>
+        
+        {/* Stages List */}
+        <div className="divide-y divide-gray-100">
+          {stagesLoading ? (
+            <div className="p-4 text-gray-500 flex items-center">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700 mr-2"></div>
+              Loading stages...
+            </div>
+          ) : availableStages.length > 0 ? (
+            availableStages.map((stage) => (
+              <div
+                key={stage.stage_id}
+                className={`p-4 cursor-pointer hover:bg-gray-50 ${
+                  selectedStage === stage.stage_name ? 'bg-blue-50' : ''
+                }`}
+                onClick={() => handleStageSelect(stage.stage_name)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-medium text-gray-600">
+                    {stage.display_order}
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-900">{stage.stage_name}</div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {stage.closed_won || stage.closed_lost ? '' : `${stage.probability}% Probability`}
+                    </div>
+                  </div>
+                  {selectedStage === stage.stage_name && (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="p-4 text-gray-500">No stages found</div>
+          )}
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-2xl font-bold">Deals Overview</h1>
+            
+            {/* Refresh button with last updated timestamp */}
+            <div className="flex items-center space-x-4">
+              {lastFetched && (
+                <span className="text-sm text-gray-500">
+                  Updated {new Date(lastFetched).toLocaleTimeString()}
+                </span>
+              )}
+              <button
+                onClick={handleRefresh}
+                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors text-sm flex items-center"
+                disabled={stagesLoading}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
+            </div>
+          </div>
+          
+          {error && (
+            <div className="text-red-500 mb-4 p-3 bg-red-50 rounded-md">
+              {error}
+              <button
+                className="ml-3 text-red-700 underline"
+                onClick={handleRefresh}
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {!loading && selectedStage && dealsByStage[selectedStage] && (
+            <div className="mb-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search deals..."
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    className="h-5 w-5 text-gray-400" 
+                    viewBox="0 0 20 20" 
+                    fill="currentColor"
+                  >
+                    <path 
+                      fillRule="evenodd" 
+                      d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" 
+                      clipRule="evenodd" 
+                    />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Search results count */}
+          {!loading && searchTerm.trim() !== '' && (
+            <div className="mb-4 text-sm text-gray-600">
+              Found {filteredDeals.length} {filteredDeals.length === 1 ? 'deal' : 'deals'} matching "{searchTerm}"
+            </div>
+          )}
+
+          {loading ? (
+            <div className="text-center py-10">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+              <p className="mt-3">Loading deals for {selectedStage}...</p>
+            </div>
+          ) : getCurrentDeals().length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <thead className="bg-gray-100">
+                  {table.getHeaderGroups().map(headerGroup => (
+                    <tr key={headerGroup.id}>
+                      {headerGroup.headers.map(header => (
+                        <th 
+                          key={header.id}
+                          className="py-3 px-4 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
+                          onClick={header.column.getToggleSortingHandler()}
+                        >
+                          <div className="flex items-center">
+                            {flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                            {renderSortIndicator(header.column)}
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  ))}
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {table.getRowModel().rows.map(row => (
+                    <tr key={row.id} className="hover:bg-gray-50">
+                      {row.getVisibleCells().map(cell => (
+                        <td key={cell.id} className="py-3 px-4">
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : selectedStage && !loading ? (
+            <div className="text-center py-10 text-gray-600">
+              {failedStages.has(selectedStage) ? 
+                "Failed to load deals for this stage." : 
+                "No deals found in this stage."}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default DealStageSelector;

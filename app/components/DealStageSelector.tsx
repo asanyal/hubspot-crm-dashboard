@@ -194,7 +194,7 @@ const DealStageSelector: React.FC = () => {
       console.log('Setting stagesLoading to false');
       updateState('dealsByStage.stagesLoading', false);
     }
-  }, [updateState, urlStage, availableStages.length, lastFetched, DATA_EXPIRY_TIME]);
+  }, [updateState, urlStage, lastFetched, DATA_EXPIRY_TIME]);
 
   // Simplify the initial fetch effect
   useEffect(() => {
@@ -215,7 +215,7 @@ const DealStageSelector: React.FC = () => {
       console.log('Fetching stages...');
       fetchStages();
     }
-  }, [hasMounted, availableStages.length, lastFetched, fetchStages, DATA_EXPIRY_TIME]);
+  }, [hasMounted, availableStages.length, lastFetched, DATA_EXPIRY_TIME, fetchStages]);
 
   // Add a safety timeout for stages loading
   useEffect(() => {

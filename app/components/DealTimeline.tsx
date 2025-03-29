@@ -481,69 +481,6 @@ const DealTimeline: React.FC = () => {
     }
   }, [updateState]);
 
-  // Handler for "Get Timeline" button - define this before using it
-  const handleGetTimeline = useCallback(async (deal: Deal | null = null, forceRefresh = false) => {
-    const dealToUse = deal || selectedDealRef.current;
-    if (!dealToUse) return;
-    
-    // Check if we need to refresh based on cache expiry or force refresh
-    const currentTime = Date.now();
-    const shouldRefresh = forceRefresh || 
-      !lastFetched || 
-      (currentTime - lastFetched >= DATA_EXPIRY_TIME) ||
-      (selectedDealRef.current && dealToUse.name !== selectedDealRef.current.name);
-
-    if (!shouldRefresh) {
-      console.log(`[Timeline] Using cached timeline for ${dealToUse.name}`);
-      return;
-    }
-    
-    // Clear previous meeting contacts when loading a new timeline
-    if (selectedDealRef.current && dealToUse.name !== selectedDealRef.current.name) {
-      setMeetingContacts({});
-    }
-    
-    updateState('dealTimeline.loading', true);
-    updateState('dealTimeline.error', null);
-    setLoadingStartTime(Date.now());
-    setLoadingStage(1);
-    setLoadingError(false);
-    
-    try {
-      console.log(`[Timeline] Getting timeline for deal: ${dealToUse.name}`);
-      
-      // First fetch activities count to inform the user
-      const count = await fetchActivitiesCount(dealToUse.name);
-      
-      // Then fetch deal info
-      await fetchDealInfo(dealToUse.name);
-      
-      // Finally fetch timeline data
-      const timelineResponse = await fetch(`http://localhost:8000/api/hubspot/deal-timeline?dealName=${encodeURIComponent(dealToUse.name)}`);
-      
-      if (timelineResponse.ok) {
-        const data = await timelineResponse.json();
-        
-        updateState('dealTimeline.activities', data);
-        updateState('dealTimeline.lastFetched', Date.now());
-        
-        // Note: We don't need to explicitly call fetchMeetingContacts here
-        // The useEffect that watches timelineData will handle that
-      } else {
-        const errorText = await timelineResponse.text();
-        console.error(`[Timeline] Error response: ${errorText}`);
-        throw new Error(`Failed to fetch timeline data: ${timelineResponse.status} - ${errorText}`);
-      }
-    } catch (error) {
-      console.error('[Timeline] Error fetching timeline:', error);
-      setLoadingError(true);
-      updateState('dealTimeline.error', 'Failed to load timeline data. Please try again.');
-    } finally {
-      updateState('dealTimeline.loading', false);
-      setLoadingStartTime(null);
-    }
-  }, [updateState, fetchDealInfo, fetchActivitiesCount, lastFetched]);
-
   // Function to load timeline directly from URL params - define after handleGetTimeline
   const loadTimelineDirectly = useCallback(async (dealName: string) => {
     if (isUnmounting) return;
@@ -1481,7 +1418,7 @@ const EventDrawer = () => {
                     {/* Champion Information for Meetings */}
                     {event.type === 'Meeting' && event.subject && event.date_str && (
                       <div className="mt-4">
-                        <h4 className="font-semibold mb-2">Meeting Participants</h4>
+                        <h4 className="font-semibold mb-2">Smart Insights</h4>
                         {meetingContacts[`${event.subject}_${event.date_str}`] ? (
                           <div className="space-y-2">
                             <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -1499,25 +1436,46 @@ const EventDrawer = () => {
                             <div className="mt-3 space-y-2">
                               {meetingContacts[`${event.subject}_${event.date_str}`].contacts.map((contact, idx) => (
                                 <div key={idx} className="p-2 bg-white rounded border border-gray-100">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium text-sm">{contact.email}</span>
-                                    {contact.champion && (
-                                      <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
-                                        Champion
-                                      </span>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium text-sm">{contact.email}</span>
+                                      {contact.champion && (
+                                        <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
+                                          Champion
+                                        </span>
+                                      )}
+                                    </div>
+                                    {contact.explanation && (
+                                      <div className="relative inline-block">
+                                        <div className="group">
+                                          <svg 
+                                            xmlns="http://www.w3.org/2000/svg" 
+                                            className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" 
+                                            fill="none" 
+                                            viewBox="0 0 24 24" 
+                                            stroke="currentColor"
+                                          >
+                                            <path 
+                                              strokeLinecap="round" 
+                                              strokeLinejoin="round" 
+                                              strokeWidth={2} 
+                                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+                                            />
+                                          </svg>
+                                          <div className="absolute right-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
+                                            {contact.explanation}
+                                            <div className="absolute right-0 top-full border-4 border-transparent border-t-gray-900"></div>
+                                          </div>
+                                        </div>
+                                      </div>
                                     )}
                                   </div>
-                                  {contact.champion && contact.explanation && (
-                                    <p className="mt-1 text-xs text-gray-600 italic">
-                                      {contact.explanation}
-                                    </p>
-                                  )}
                                 </div>
                               ))}
                             </div>
                           </div>
                         ) : (
-                          <p className="text-sm text-gray-500 italic">Loading participant information...</p>
+                          <p className="text-sm text-gray-500 italic">Analyzing champions...</p>
                         )}
                       </div>
                     )}
@@ -1931,6 +1889,93 @@ const fetchMeetingContacts = useCallback(async (meetingSubject: string, meetingD
     return null;
   }
 }, [selectedDeal]);
+
+
+  // Handler for "Get Timeline" button - define this before using it
+  const handleGetTimeline = useCallback(async (deal: Deal | null = null, forceRefresh = false) => {
+    const dealToUse = deal || selectedDealRef.current;
+    if (!dealToUse) return;
+    
+    // Check if we need to refresh based on cache expiry or force refresh
+    const currentTime = Date.now();
+    const shouldRefresh = forceRefresh || 
+      !lastFetched || 
+      (currentTime - lastFetched >= DATA_EXPIRY_TIME) ||
+      (selectedDealRef.current && dealToUse.name !== selectedDealRef.current.name);
+
+    if (!shouldRefresh) {
+      console.log(`[Timeline] Using cached timeline for ${dealToUse.name}`);
+      return;
+    }
+    
+    // Clear previous meeting contacts when loading a new timeline
+    if (selectedDealRef.current && dealToUse.name !== selectedDealRef.current.name) {
+      setMeetingContacts({});
+    }
+    
+    updateState('dealTimeline.loading', true);
+    updateState('dealTimeline.error', null);
+    setLoadingStartTime(Date.now());
+    setLoadingStage(1);
+    setLoadingError(false);
+    
+    try {
+      console.log(`[Timeline] Getting timeline for deal: ${dealToUse.name}`);
+      
+      // First fetch activities count to inform the user
+      const count = await fetchActivitiesCount(dealToUse.name);
+      
+      // Then fetch deal info
+      await fetchDealInfo(dealToUse.name);
+      
+      // Finally fetch timeline data
+      const timelineResponse = await fetch(`http://localhost:8000/api/hubspot/deal-timeline?dealName=${encodeURIComponent(dealToUse.name)}`);
+      
+      if (timelineResponse.ok) {
+        const data = await timelineResponse.json();
+        
+        // Update timeline data first
+        updateState('dealTimeline.activities', data);
+        updateState('dealTimeline.lastFetched', Date.now());
+        
+        // Then process meetings to fetch contacts asynchronously
+        const meetingEvents = data.events.filter((event: Event) => event.type === 'Meeting');
+        if (meetingEvents.length > 0) {
+          console.log(`[Timeline] Found ${meetingEvents.length} meetings, will fetch contacts...`);
+          setLoadingChampions(true);
+          
+          // Process meetings sequentially in the background
+          (async () => {
+            for (const event of meetingEvents) {
+              if (event.date_str) {
+                try {
+                  await fetchMeetingContacts(event.subject || '', event.date_str);
+                } catch (error) {
+                  console.error('[Timeline] Error fetching meeting contacts:', error);
+                }
+              }
+            }
+            setLoadingChampions(false);
+          })();
+        }
+      } else {
+        const errorText = await timelineResponse.text();
+        console.error(`[Timeline] Error response: ${errorText}`);
+        throw new Error(`Failed to fetch timeline data: ${timelineResponse.status} - ${errorText}`);
+      }
+    } catch (error) {
+      console.error('[Timeline] Error fetching timeline:', error);
+      setLoadingError(true);
+      updateState('dealTimeline.error', 'Failed to load timeline data. Please try again.');
+    } finally {
+      // Only set loading to false if we're not fetching champions
+      if (!loadingChampions) {
+        updateState('dealTimeline.loading', false);
+        setLoadingStartTime(null);
+      }
+    }
+  }, [updateState, fetchDealInfo, fetchActivitiesCount, lastFetched, fetchMeetingContacts, loadingChampions]);
+
 
 // Update handleDealChange to ensure champions are fetched for new deals
 const handleDealChange = useCallback(async (selectedOption: any) => {
@@ -2435,7 +2480,7 @@ return (
                         if (entry.hasLessLikelyToBuy) {
                           return (
                             <ReferenceArea
-                              key={`bg-red-${index}`}
+                              key={`bg-red-${entry.date}-${index}`}
                               x1={entry.date}
                               x2={entry.date}
                               y1={0}
@@ -2454,7 +2499,7 @@ return (
                         if (entry.hasVeryLikelyToBuy) {
                           return (
                             <ReferenceArea
-                              key={`bg-green-${index}`}
+                              key={`bg-green-${entry.date}-${index}`}
                               x1={entry.date}
                               x2={entry.date}
                               y1={0}

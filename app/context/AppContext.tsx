@@ -76,7 +76,6 @@ interface AppState {
     loading: boolean;
     error: string | null;
     lastFetched: number | null;
-    bookmarkedDeals: string[];
   };
   dealsByStage: {
     selectedStage: string | null;
@@ -105,8 +104,7 @@ const initialState: AppState = {
     activities: null,
     loading: false,
     error: null,
-    lastFetched: null,
-    bookmarkedDeals: []
+    lastFetched: null
   },
   dealsByStage: {
     selectedStage: null,
@@ -189,8 +187,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             activities: null, // Don't store timeline activities
             loading: false,
             error: null,
-            lastFetched: null,
-            bookmarkedDeals: []
+            lastFetched: null
           },
           dealsByStage: {
             selectedStage: state.dealsByStage.selectedStage,

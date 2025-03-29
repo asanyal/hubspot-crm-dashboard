@@ -136,9 +136,6 @@ const DealTimeline: React.FC = () => {
   // Add new state for storing deal info for all deals
   const [allDealsInfo, setAllDealsInfo] = useState<Record<string, DealInfo>>({});
 
-  // Load bookmarked deals from localStorage on mount
-  const [bookmarkedDeals, setBookmarkedDeals] = useState<Set<string>>(new Set());
-
   // Add this near the top of the component, after the state declarations
   const [isUnmounting, setIsUnmounting] = useState<boolean>(false);
 
@@ -292,19 +289,6 @@ const DealTimeline: React.FC = () => {
     setEndIndex(0);
     setCurrentDealId(null);
   }, []);
-
-  // Add useEffect for loading bookmarked deals from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('bookmarkedDeals');
-    if (saved) {
-      setBookmarkedDeals(new Set(JSON.parse(saved)));
-    }
-  }, []);
-
-  // Update the save bookmarked deals effect
-  useEffect(() => {
-    localStorage.setItem('bookmarkedDeals', JSON.stringify([...bookmarkedDeals]));
-  }, [bookmarkedDeals]);
 
   // Utility to check if a date is valid
   const isValidDate = (dateStr: string) => {
@@ -510,7 +494,13 @@ const DealTimeline: React.FC = () => {
       (selectedDealRef.current && dealToUse.name !== selectedDealRef.current.name);
 
     if (!shouldRefresh) {
+      console.log(`[Timeline] Using cached timeline for ${dealToUse.name}`);
       return;
+    }
+    
+    // Clear previous meeting contacts when loading a new timeline
+    if (selectedDealRef.current && dealToUse.name !== selectedDealRef.current.name) {
+      setMeetingContacts({});
     }
     
     updateState('dealTimeline.loading', true);
@@ -536,6 +526,9 @@ const DealTimeline: React.FC = () => {
         
         updateState('dealTimeline.activities', data);
         updateState('dealTimeline.lastFetched', Date.now());
+        
+        // Note: We don't need to explicitly call fetchMeetingContacts here
+        // The useEffect that watches timelineData will handle that
       } else {
         const errorText = await timelineResponse.text();
         console.error(`[Timeline] Error response: ${errorText}`);
@@ -1878,6 +1871,13 @@ const fetchMeetingContacts = useCallback(async (meetingSubject: string, meetingD
   }
   
   try {
+    // Check if we already have data for this meeting to avoid duplicate calls
+    const cacheKey = `${meetingSubject || selectedDeal.name}_${meetingDate}`;
+    if (meetingContacts[cacheKey] && meetingContacts[cacheKey].contacts?.length > 0) {
+      console.log(`[Contacts] Using cached data for ${cacheKey}`);
+      return meetingContacts[cacheKey];
+    }
+    
     // Always use the selected deal's name as the dealName parameter
     const apiUrl = `/api/hubspot/contacts-and-champion?dealName=${encodeURIComponent(selectedDeal.name)}&date=${meetingDate}&_t=${new Date().getTime()}`;
     console.log(`[Contacts] Making API call to: ${apiUrl}`);
@@ -1900,11 +1900,9 @@ const fetchMeetingContacts = useCallback(async (meetingSubject: string, meetingD
     
     // Only update state if we have valid data
     if (data && data.contacts) {
-      const key = `${meetingSubject || selectedDeal.name}_${meetingDate}`;
-      console.log(`[Contacts] Updating meeting contacts with key: ${key}`);
       setMeetingContacts(prev => ({
         ...prev,
-        [key]: data
+        [cacheKey]: data
       }));
       return data;
     } else {
@@ -1919,7 +1917,7 @@ const fetchMeetingContacts = useCallback(async (meetingSubject: string, meetingD
     }
     return null;
   }
-}, [selectedDeal]);
+}, [selectedDeal, meetingContacts]);
 
 // Update the refreshChampions function to be more robust
 const refreshChampions = useCallback(async () => {
@@ -1929,7 +1927,6 @@ const refreshChampions = useCallback(async () => {
 
   setLoadingChampions(true);
   try {
-    
     // If we don't have timeline data, fetch it first
     if (!timelineData?.events) {
       await handleGetTimeline(selectedDeal, true);
@@ -1939,11 +1936,16 @@ const refreshChampions = useCallback(async () => {
     const currentTimeline = timelineData?.events || [];
     const meetingEvents = currentTimeline.filter(event => event.type === 'Meeting');
     
-    // Clear existing meeting contacts
-    setMeetingContacts({});
+    if (meetingEvents.length === 0) {
+      console.log('[Refresh] No meeting events found to refresh');
+      setLoadingChampions(false);
+      return;
+    }
     
-    // Clear any cached data in localStorage
-    localStorage.removeItem('meetingContacts');
+    console.log(`[Refresh] Found ${meetingEvents.length} meeting events to process`);
+    
+    // Clear existing meeting contacts for a fresh start
+    setMeetingContacts({});
     
     let completedRequests = 0;
     let failedRequests = 0;
@@ -1952,14 +1954,11 @@ const refreshChampions = useCallback(async () => {
     for (const event of meetingEvents) {
       if (event.date_str) {
         try {
+          console.log(`[Refresh] Processing meeting: ${event.subject || 'Unnamed'} on ${event.date_str}`);
           const contacts = await fetchMeetingContacts(event.subject || '', event.date_str);
+          
           if (contacts) {
             completedRequests++;
-            // Update state after each successful request to show progress
-            setMeetingContacts(prev => ({
-              ...prev,
-              [`${event.subject || selectedDeal.name}_${event.date_str}`]: contacts
-            }));
           } else {
             failedRequests++;
           }
@@ -2075,80 +2074,89 @@ const handleRefresh = useCallback(() => {
     setChartData([]);
     
     // Force a fresh fetch of all data by passing true as second argument
-    handleGetTimeline(selectedDealRef.current, true);
+    handleGetTimeline(selectedDealRef.current, true).then(() => {
+      // After timeline loads, explicitly refresh champions
+      console.log('[Refresh] Timeline loaded, refreshing champions...');
+      refreshChampions();
+    }).catch(error => {
+      console.error('[Refresh] Error during refresh sequence:', error);
+    });
   } else {
     setIsInitialLoad(true);
   }
-}, [handleGetTimeline, cleanupState, updateState]);
+}, [handleGetTimeline, cleanupState, updateState, refreshChampions]);
 
 // Update the effect that fetches champions to be more robust
+// Effect to automatically fetch champions after timeline loads
 useEffect(() => {
-  console.log('[Champions] Effect triggered with:', {
-    hasTimelineData: !!timelineData,
-    hasEvents: !!timelineData?.events,
-    eventsLength: timelineData?.events?.length,
-    selectedDealName: selectedDeal?.name
-  });
+  if (!timelineData?.events || !selectedDeal?.name || isUnmounting) {
+    return;
+  }
   
-  if (timelineData?.events && selectedDeal?.name) {
-    console.log('[Champions] Starting champion refresh for deal:', selectedDeal.name);
-    setLoadingChampions(true);
-    
-    const meetingEvents = timelineData.events.filter(event => event.type === 'Meeting');
-    console.log('[Champions] Meeting events found:', {
-      totalEvents: timelineData.events.length,
-      meetingEvents: meetingEvents.length,
-      meetingTypes: [...new Set(meetingEvents.map(e => e.type))]
+  // Check if we need to fetch champions
+  const meetingEvents = timelineData.events.filter(event => event.type === 'Meeting');
+  
+  if (meetingEvents.length === 0) {
+    console.log('[Champions] No meeting events found in timeline data');
+    return;
+  }
+  
+  // Don't re-fetch if we already have contacts data for at least some meetings
+  const existingMeetingKeys = Object.keys(meetingContacts);
+  if (existingMeetingKeys.length > 0) {
+    // Check if these keys match our current meeting events
+    const anyMatchingKey = meetingEvents.some(event => {
+      const key = `${event.subject || selectedDeal.name}_${event.date_str}`;
+      return existingMeetingKeys.includes(key);
     });
     
-    // Clear existing meeting contacts before fetching new ones
-    setMeetingContacts({});
+    if (anyMatchingKey) {
+      console.log('[Champions] Using existing champion data');
+      return;
+    }
+  }
+  
+  console.log(`[Champions] Fetching champions for ${meetingEvents.length} meetings`);
+  setLoadingChampions(true);
+  
+  // Process meetings sequentially to avoid overwhelming the server
+  const processMeetings = async () => {
+    let completedRequests = 0;
+    let failedRequests = 0;
     
-    // Process meetings sequentially to avoid overwhelming the server
-    const processMeetings = async () => {
-      for (const event of meetingEvents) {
-        if (event.date_str) {
-          console.log('[Champions] Processing meeting:', {
-            subject: event.subject || selectedDeal.name,
-            date: event.date_str,
-            dealName: selectedDeal.name
-          });
+    for (const event of meetingEvents) {
+      if (event.date_str && !isUnmounting) {
+        try {
+          const result = await fetchMeetingContacts(event.subject || '', event.date_str);
           
-          try {
-            console.log('[Champions] Calling fetchMeetingContacts for:', {
-              subject: event.subject || selectedDeal.name,
-              date: event.date_str
-            });
-            
-            const result = await fetchMeetingContacts(event.subject || '', event.date_str);
-            console.log('[Champions] fetchMeetingContacts result:', result);
-            
-            if (!result) {
-              console.error('[Champions] Failed to fetch contacts for meeting:', {
-                subject: event.subject || selectedDeal.name,
-                date: event.date_str
-              });
-            }
-          } catch (error) {
-            console.error('[Champions] Error processing meeting:', error);
+          if (result) {
+            completedRequests++;
+          } else {
+            failedRequests++;
           }
+        } catch (error) {
+          console.error('[Champions] Error fetching meeting contacts:', error);
+          failedRequests++;
         }
       }
-      setLoadingChampions(false);
-    };
+    }
     
-    processMeetings().catch(error => {
-      console.error('[Champions] Error in processMeetings:', error);
+    console.log('[Champions] Completed fetching meeting contacts:', {
+      total: meetingEvents.length,
+      completed: completedRequests,
+      failed: failedRequests
+    });
+    
+    if (!isUnmounting) {
       setLoadingChampions(false);
-    });
-  } else {
-    console.log('[Champions] Skipping champion refresh because:', {
-      hasTimelineData: !!timelineData,
-      hasEvents: !!timelineData?.events,
-      selectedDealName: selectedDeal?.name
-    });
-  }
-}, [timelineData, fetchMeetingContacts, selectedDeal]);
+    }
+  };
+  
+  processMeetings();
+  
+  // We're deliberately not adding meetingContacts to the dependency array
+  // to prevent an infinite loop since we update it inside
+}, [timelineData, selectedDeal, fetchMeetingContacts, isUnmounting]);
 
 // Add cleanup effect when component unmounts
 useEffect(() => {
@@ -2210,81 +2218,6 @@ return (
         </div>
       </div>
 
-      {/* Bookmarked Deals Section - Fixed at top */}
-      {bookmarkedDeals.size > 0 && (
-        <div className="p-4 border-b border-gray-100 bg-gray-50">
-          <h3 className="text-sm font-medium text-gray-500 mb-3">Bookmarked Deals</h3>
-          <div className="space-y-2">
-            {[...filteredDeals]
-              .filter(deal => bookmarkedDeals.has(deal.id))
-              .map(deal => {
-                const daysPassed = getDaysPassed(deal);
-                return (
-                  <div
-                    key={deal.id}
-                    className="flex items-start justify-between p-3 bg-white rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                    onClick={() => {
-                      if (deal.name) {
-                        const url = new URL(window.location.href);
-                        url.searchParams.set('dealName', deal.name);
-                        url.searchParams.set('autoload', 'true');
-                        window.history.pushState({}, '', url.toString());
-                        
-                        // Update selected deal
-                        updateState('dealTimeline.selectedDeal', deal);
-                        setSelectedOption({ value: deal.id, label: deal.name });
-                        setCurrentDealId(deal.id);
-                        
-                        // Load timeline
-                        handleGetTimeline(deal);
-                      }
-                    }}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-900 truncate">
-                        {deal.name}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Stage: {deal.stage}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Created: {formatDate(deal.createdate)}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {deal.stage && (
-                        <div 
-                          className="w-2 h-2 rounded-full"
-                          style={{
-                            backgroundColor: getStageColor(deal.stage).text === 'text-emerald-700' ? '#047857' :
-                                          getStageColor(deal.stage).text === 'text-red-700' ? '#b91c1c' :
-                                          getStageColor(deal.stage).text === 'text-blue-700' ? '#1d4ed8' :
-                                          getStageColor(deal.stage).text === 'text-yellow-700' ? '#a16207' :
-                                          getStageColor(deal.stage).text === 'text-purple-700' ? '#6b21a8' :
-                                          getStageColor(deal.stage).text === 'text-indigo-700' ? '#3730a3' :
-                                          getStageColor(deal.stage).text === 'text-green-700' ? '#15803d' :
-                                          getStageColor(deal.stage).text === 'text-orange-700' ? '#c2410c' :
-                                          getStageColor(deal.stage).text === 'text-pink-700' ? '#be185d' : '#6b7280',
-                            border: '1px solid rgba(0, 0, 0, 0.1)'
-                          }}
-                        />
-                      )}
-                      <button
-                        onClick={(e) => handleBookmarkToggle(e, deal.id)}
-                        className="p-1 hover:bg-gray-200 rounded-full"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-500" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      )}
-
       {/* Regular Deals Section - Scrollable */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-4">
@@ -2342,14 +2275,6 @@ return (
                         }}
                       />
                     )}
-                    <button
-                      onClick={(e) => handleBookmarkToggle(e, deal.id)}
-                      className="p-1 hover:bg-gray-200 rounded-full"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-500" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z" />
-                      </svg>
-                    </button>
                   </div>
                 </div>
               );
@@ -2390,7 +2315,7 @@ return (
       </div>
     </div>
     
-        {/* Activity count message */}
+    {/* Activity count message */}
     {selectedDeal && (
       <div className="mb-6 bg-blue-50 p-3 rounded-md border border-blue-100">
         {fetchingActivities ? (
@@ -2444,12 +2369,12 @@ return (
               )}
               {loadingStage === 2 && (
                 <span className="text-orange-500">
-                  Hang on a minute. This seems like a hot deal! {activitiesCount !== null ? `${activitiesCount} activities` : ''}...
+                  Loading deal timeline for <b>{selectedDeal?.name}</b>...
                 </span>
               )}
               {loadingStage === 3 && (
                 <span className="text-red-500">
-                  Almost done loading {activitiesCount !== null ? `${activitiesCount} activities` : ''}...
+                  Loading deal timeline for <b>{selectedDeal?.name}</b>...
                 </span>
               )}
         </p>

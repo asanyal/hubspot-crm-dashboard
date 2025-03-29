@@ -1865,16 +1865,26 @@ useEffect(() => {
 
 // Add function to fetch contacts for a meeting
 const fetchMeetingContacts = useCallback(async (meetingSubject: string, meetingDate: string) => {
+  console.log('[Contacts] Called with:', { meetingSubject, meetingDate });
+  
   if (!selectedDeal?.name) {
     console.error('[Contacts] No selected deal available');
     return null;
   }
   
   try {
-    // Check if we already have data for this meeting to avoid duplicate calls
+    // Create a cache key
     const cacheKey = `${meetingSubject || selectedDeal.name}_${meetingDate}`;
-    if (meetingContacts[cacheKey] && meetingContacts[cacheKey].contacts?.length > 0) {
+    console.log('[Contacts] Cache key:', cacheKey);
+    
+    // Check if we already have data for this meeting using the ref
+    if (meetingContacts[cacheKey]?.contacts?.length > 0) {
       console.log(`[Contacts] Using cached data for ${cacheKey}`);
+      // Update state with cached data to ensure UI consistency
+      setMeetingContacts(prev => ({
+        ...prev,
+        [cacheKey]: meetingContacts[cacheKey]
+      }));
       return meetingContacts[cacheKey];
     }
     
@@ -1896,14 +1906,17 @@ const fetchMeetingContacts = useCallback(async (meetingSubject: string, meetingD
     }
     
     const data: ContactsData = await response.json();
-    console.log(`[Contacts] Received data for ${selectedDeal.name} on ${meetingDate}:`, data);
+    console.log(`[Contacts] Received data for ${cacheKey}:`, data);
     
-    // Only update state if we have valid data
+    // Only update state and ref if we have valid data
     if (data && data.contacts) {
+      // Update both the ref and state atomically
       setMeetingContacts(prev => ({
         ...prev,
         [cacheKey]: data
       }));
+      
+      console.log(`[Contacts] Successfully stored data for ${cacheKey}`);
       return data;
     } else {
       console.error('[Contacts] Invalid data received:', data);
@@ -1917,81 +1930,7 @@ const fetchMeetingContacts = useCallback(async (meetingSubject: string, meetingD
     }
     return null;
   }
-}, [selectedDeal, meetingContacts]);
-
-// Update the refreshChampions function to be more robust
-const refreshChampions = useCallback(async () => {
-  if (!selectedDeal) {
-    return;
-  }
-
-  setLoadingChampions(true);
-  try {
-    // If we don't have timeline data, fetch it first
-    if (!timelineData?.events) {
-      await handleGetTimeline(selectedDeal, true);
-    }
-    
-    // Get the latest timeline data after potential refresh
-    const currentTimeline = timelineData?.events || [];
-    const meetingEvents = currentTimeline.filter(event => event.type === 'Meeting');
-    
-    if (meetingEvents.length === 0) {
-      console.log('[Refresh] No meeting events found to refresh');
-      setLoadingChampions(false);
-      return;
-    }
-    
-    console.log(`[Refresh] Found ${meetingEvents.length} meeting events to process`);
-    
-    // Clear existing meeting contacts for a fresh start
-    setMeetingContacts({});
-    
-    let completedRequests = 0;
-    let failedRequests = 0;
-    
-    // Process meetings sequentially to avoid overwhelming the server
-    for (const event of meetingEvents) {
-      if (event.date_str) {
-        try {
-          console.log(`[Refresh] Processing meeting: ${event.subject || 'Unnamed'} on ${event.date_str}`);
-          const contacts = await fetchMeetingContacts(event.subject || '', event.date_str);
-          
-          if (contacts) {
-            completedRequests++;
-          } else {
-            failedRequests++;
-          }
-        } catch (error) {
-          console.error(`[Refresh] Error processing meeting ${event.subject}:`, error);
-          failedRequests++;
-        }
-      }
-    }
-    
-    // Log results
-    console.log('[Refresh] Champion refresh completed:', {
-      total: meetingEvents.length,
-      completed: completedRequests,
-      failed: failedRequests
-    });
-    
-    // Show error message if all requests failed
-    if (failedRequests === meetingEvents.length && meetingEvents.length > 0) {
-      console.error('[Refresh] All champion refresh requests failed');
-      updateState('dealTimeline.error', 'Failed to refresh champion data. Please try again.');
-    } else if (failedRequests > 0) {
-      console.warn(`[Refresh] ${failedRequests} requests failed out of ${meetingEvents.length}`);
-      updateState('dealTimeline.error', `Champion refresh completed with ${failedRequests} failed requests. Some data may be incomplete.`);
-    }
-    
-  } catch (error) {
-    console.error('[Refresh] Error refreshing champions:', error);
-    updateState('dealTimeline.error', 'Failed to refresh champion data. Please try again.');
-  } finally {
-    setLoadingChampions(false);
-  }
-}, [selectedDeal, timelineData, handleGetTimeline, fetchMeetingContacts, updateState]);
+}, [selectedDeal]);
 
 // Update handleDealChange to ensure champions are fetched for new deals
 const handleDealChange = useCallback(async (selectedOption: any) => {
@@ -2044,11 +1983,9 @@ const handleDealChange = useCallback(async (selectedOption: any) => {
   } else {
     if (currentTimeline) {
       fetchDealInfo(deal.name);
-      // Also refresh champions for the current timeline
-      refreshChampions();
     }
   }
-}, [updateState, fetchDealInfo, handleGetTimeline, cleanupState, currentDealId, refreshChampions]);
+}, [updateState, fetchDealInfo, handleGetTimeline, cleanupState, currentDealId]);
 
 // Update handleRefresh to refresh all data including champions
 const handleRefresh = useCallback(() => {
@@ -2077,46 +2014,31 @@ const handleRefresh = useCallback(() => {
     handleGetTimeline(selectedDealRef.current, true).then(() => {
       // After timeline loads, explicitly refresh champions
       console.log('[Refresh] Timeline loaded, refreshing champions...');
-      refreshChampions();
     }).catch(error => {
       console.error('[Refresh] Error during refresh sequence:', error);
     });
   } else {
     setIsInitialLoad(true);
   }
-}, [handleGetTimeline, cleanupState, updateState, refreshChampions]);
+}, [handleGetTimeline, cleanupState, updateState]);
 
 // Update the effect that fetches champions to be more robust
 // Effect to automatically fetch champions after timeline loads
 useEffect(() => {
   if (!timelineData?.events || !selectedDeal?.name || isUnmounting) {
+    console.log('[Timeline] No timeline data or selected deal available');
     return;
   }
   
-  // Check if we need to fetch champions
+  // Check if we need to fetch contacts for meetings
   const meetingEvents = timelineData.events.filter(event => event.type === 'Meeting');
   
   if (meetingEvents.length === 0) {
-    console.log('[Champions] No meeting events found in timeline data');
+    console.log('[Timeline] No meeting events found in timeline data');
     return;
   }
   
-  // Don't re-fetch if we already have contacts data for at least some meetings
-  const existingMeetingKeys = Object.keys(meetingContacts);
-  if (existingMeetingKeys.length > 0) {
-    // Check if these keys match our current meeting events
-    const anyMatchingKey = meetingEvents.some(event => {
-      const key = `${event.subject || selectedDeal.name}_${event.date_str}`;
-      return existingMeetingKeys.includes(key);
-    });
-    
-    if (anyMatchingKey) {
-      console.log('[Champions] Using existing champion data');
-      return;
-    }
-  }
-  
-  console.log(`[Champions] Fetching champions for ${meetingEvents.length} meetings`);
+  console.log(`[Timeline] Found ${meetingEvents.length} meetings, fetching contacts...`);
   setLoadingChampions(true);
   
   // Process meetings sequentially to avoid overwhelming the server
@@ -2127,21 +2049,24 @@ useEffect(() => {
     for (const event of meetingEvents) {
       if (event.date_str && !isUnmounting) {
         try {
+          console.log(`[Timeline] Processing meeting: ${event.subject} on ${event.date_str}`);
           const result = await fetchMeetingContacts(event.subject || '', event.date_str);
           
           if (result) {
             completedRequests++;
+            console.log(`[Timeline] Successfully fetched contacts for meeting ${completedRequests}/${meetingEvents.length}`);
           } else {
             failedRequests++;
+            console.log(`[Timeline] Failed to fetch contacts for meeting on ${event.date_str}`);
           }
         } catch (error) {
-          console.error('[Champions] Error fetching meeting contacts:', error);
+          console.error('[Timeline] Error fetching meeting contacts:', error);
           failedRequests++;
         }
       }
     }
     
-    console.log('[Champions] Completed fetching meeting contacts:', {
+    console.log('[Timeline] Completed fetching meeting contacts:', {
       total: meetingEvents.length,
       completed: completedRequests,
       failed: failedRequests
@@ -2154,8 +2079,6 @@ useEffect(() => {
   
   processMeetings();
   
-  // We're deliberately not adding meetingContacts to the dependency array
-  // to prevent an infinite loop since we update it inside
 }, [timelineData, selectedDeal, fetchMeetingContacts, isUnmounting]);
 
 // Add cleanup effect when component unmounts
@@ -2422,139 +2345,6 @@ return (
           </div>
         )}
 
-        {/* Key Insights Section */}
-        {timelineData?.events && meetingContacts && !loading && (
-          <div className="mb-6">
-            <h3 className="text-lg font-bold mb-3">Smart Insights</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Champion Summary */}
-              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
-                <div className="flex items-center mb-3">
-                  <div className="flex items-center">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
-                    </div>
-                    <div className="ml-4">
-                      <h4 className="text-sm font-medium text-gray-600">Champions</h4>
-                      {loadingChampions ? (
-                        <div className="flex items-center">
-                          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-green-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          <span className="text-gray-500">Analyzing champions...</span>
-                        </div>
-                      ) : (
-                        <div className="text-2xl font-bold text-green-600">
-                          {(() => {
-                            const allContacts = Object.values(meetingContacts).flatMap(data => data.contacts);
-                            const championContacts = allContacts.filter(c => c.champion);
-                            const uniqueChampions = new Set(championContacts.map(c => c.email));
-                            return uniqueChampions.size;
-                          })()}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-3 space-y-2">
-                  {!loadingChampions && (() => {
-                    const allContacts = Object.values(meetingContacts).flatMap(data => data.contacts);
-                    const championContacts = allContacts.filter(c => c.champion);
-                    const uniqueChampions = Array.from(new Set(championContacts.map(c => c.email)));
-                    return uniqueChampions.map((email, idx) => {
-                      const contact = allContacts.find(c => c.email === email);
-                      return (
-                        <div key={idx} className="text-sm">
-                          <span className="font-medium"><b>{email}</b></span>
-                          {contact?.explanation && (
-                            <p className="text-gray-600 italic mt-1">{contact.explanation}</p>
-                          )}
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-
-              {/* Meeting Summary */}
-              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-blue-500">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <div className="ml-4">
-                      <h4 className="text-sm font-medium text-gray-600">Meeting Summary</h4>
-                      <div className="text-2xl font-bold text-blue-600">
-                        {timelineData.events.filter(e => e.type === 'Meeting').length} Total Meetings
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <h5 className="text-sm font-medium text-gray-600 mb-2">Other Meeting Participants:</h5>
-                  {(() => {
-                    const allContacts = Object.values(meetingContacts).flatMap(data => data.contacts);
-                    const nonChampions = allContacts.filter(c => !c.champion);
-                    const uniqueNonChampions = Array.from(new Set(nonChampions.map(c => c.email)));
-                    
-                    if (uniqueNonChampions.length === 0) {
-                      return <p className="text-sm text-gray-500 italic">No other participants found</p>;
-                    }
-                    
-                    return (
-                      <div className="space-y-2">
-                        {uniqueNonChampions.map((email, idx) => {
-                          const contact = allContacts.find(c => c.email === email);
-                          return (
-                            <div key={idx} className="group relative">
-                              <div className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-colors">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                                    <span className="text-sm font-medium text-blue-600">
-                                      {email.charAt(0).toUpperCase()}
-                                    </span>
-                                  </div>
-                                  <span className="text-sm text-gray-700">{email}</span>
-                                </div>
-                                {contact?.explanation && (
-                                  <div className="flex items-center">
-                                    <div className="relative">
-                                      <button 
-                                        className="p-1.5 rounded-full hover:bg-blue-50 transition-colors"
-                                        aria-label="View participant details"
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                      </button>
-                                      <div className="absolute right-0 bottom-full mb-2 w-64 p-3 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
-                                        <div className="text-sm text-gray-700">
-                                          {contact.explanation}
-                                        </div>
-                                        <div className="absolute bottom-0 right-4 transform translate-y-1/2 rotate-45 w-2 h-2 bg-white border-r border-b border-gray-200"></div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Sentiment and Intent Summary Boxes */}
         {timelineData && timelineData.events && (
           <div className="mb-6 grid grid-cols-3 gap-4">
@@ -2793,3 +2583,4 @@ return (
 };
 
 export default DealTimeline;
+

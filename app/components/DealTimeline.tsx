@@ -200,9 +200,18 @@ const DealTimeline: React.FC = () => {
 
   // Add debounce effect for search with increased delay
   useEffect(() => {
+    // Skip debounce for empty input
+    if (dealSearchTerm === '') {
+      setDebouncedDealSearchTerm('');
+      return;
+    }
+    
+    // Determine delay - longer for first few characters
+    const delay = dealSearchTerm.length <= 5 ? 800 : 300;
+    
     const timerId = setTimeout(() => {
       setDebouncedDealSearchTerm(dealSearchTerm);
-    }, 800); // Increased to 800ms for better performance
+    }, delay);
     
     return () => {
       clearTimeout(timerId);
@@ -2145,7 +2154,10 @@ return (
             type="text"
             placeholder="Search deals..."
             value={dealSearchTerm}
-            onChange={(e) => setDealSearchTerm(e.target.value)}
+            onChange={(e) => {
+              // Update the input value immediately for smooth typing
+              setDealSearchTerm(e.target.value);
+            }}
             className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           <svg

@@ -1549,7 +1549,7 @@ const EventDrawer = () => {
                                 <div key={idx} className="p-2 bg-white rounded border border-gray-100">
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                      <span className="font-medium text-sm">{contact.email}</span>
+                                      <span className="font-medium text-sm">{contact.speakerName} ({contact.email})</span>
                                       {contact.champion && (
                                         <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
                                           Champion
@@ -2811,7 +2811,7 @@ return (
         {timelineData && timelineData.events && (
           <div className="mt-8 bg-white rounded-lg shadow">
             <div className="p-4 border-b border-gray-200">
-              <h3 className="text-xl font-semibold">Business Pain</h3>
+              <h3 className="text-xl font-semibold">Business Pain (Use Case)</h3>
             </div>
             <div className="min-h-[200px] max-h-[400px] overflow-y-auto">
               <div className="p-4">
@@ -2879,7 +2879,7 @@ return (
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                           </div>
-                          <p className="text-gray-500">No business pain detected from transcripts</p>
+                          <p className="text-gray-500">No use case detected from transcripts</p>
                         </div>
                       </div>
                     );

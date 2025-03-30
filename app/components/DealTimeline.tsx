@@ -1970,10 +1970,15 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
       
       // Only update state if we're still working with the same deal
       if (selectedDealRef.current?.name) {
-        setMeetingContacts(prev => ({
-          ...prev,
-          [key]: data
-        }));
+        // Use functional update to avoid stale state
+        setMeetingContacts(prev => {
+          // Don't update if we already have this data
+          if (prev[key]) return prev;
+          return {
+            ...prev,
+            [key]: data
+          };
+        });
         return data;
       }
     }
@@ -1994,7 +1999,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
     }
     return null;
   }
-}, [makeApiCall, meetingContacts]);
+}, [makeApiCall]); // Remove meetingContacts from dependencies
 
   // Update handleGetTimeline to use makeApiCall
   const handleGetTimeline = useCallback(async (deal: Deal | null = null, forceRefresh = false) => {
@@ -2253,7 +2258,7 @@ useEffect(() => {
   
   processMeetings();
   
-}, [timelineData, selectedDeal, fetchMeetingContacts, isUnmounting, meetingContacts]);
+}, [timelineData, selectedDeal, fetchMeetingContacts, isUnmounting]); // Remove meetingContacts from dependencies
 
 // Add cleanup effect when component unmounts
 useEffect(() => {

@@ -28,6 +28,7 @@ interface TimelineEvent {
   sentiment?: string;
   buyer_intent?: string;
   buyer_intent_explanation?: string;
+  business_pain?: string;
 }
 
 interface TimelineData {

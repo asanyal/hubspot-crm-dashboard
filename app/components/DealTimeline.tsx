@@ -13,6 +13,8 @@ interface Contact {
   champion: boolean;
   explanation: string;
   email: string;
+  business_pain?: string;
+  speakerName?: string;
 }
 
 interface ContactsData {
@@ -32,6 +34,7 @@ interface Event {
   sentiment?: string;
   buyer_intent?: string;
   buyer_intent_explanation?: string;
+  business_pain?: string;
 }
 
 interface TimelineData {
@@ -1563,6 +1566,11 @@ const EventDrawer = () => {
                                       </div>
                                     )}
                                   </div>
+                                  {contact.business_pain && (
+                                    <div className="mt-2 pl-4 border-l-2 border-gray-200">
+                                      <p className="text-sm text-gray-700">{contact.business_pain}</p>
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -1916,57 +1924,63 @@ useEffect(() => {
 
 // Update fetchMeetingContacts to use makeApiCall
 const fetchMeetingContacts = useCallback(async (subject: string, date: string) => {
-  if (!subject || !date) {
-    console.warn('[Timeline] Missing subject or date for meeting contacts fetch');
+  if (!date) {
+    console.log('[ATIN] Skipping champion call - missing date');
+    return null;
+  }
+
+  // Skip future meetings
+  const meetingDate = new Date(date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  if (meetingDate > today) {
+    console.log(`[ATIN] Skipping champion call for future meeting on ${date}`);
     return null;
   }
   
-  const key = `${subject}_${date}`;
+  // Use deal name if subject is missing
+  const key = subject ? `${subject}_${date}` : `${selectedDealRef.current?.name}_${date}`;
   
   // Check if we already have the contacts for this meeting
   if (meetingContacts[key]) {
-    console.log(`[Timeline] Using cached contacts for meeting: ${key}`);
+    console.log(`[ATIN] Using cached contacts for meeting: ${key}`);
     return meetingContacts[key];
   }
   
   try {
-    console.log(`[Timeline] Fetching contacts for meeting: ${key}`);
+    console.log(`[ATIN] MAKING CHAMPION CALL for meeting: ${key}`);
     
     // Ensure we have a valid deal name
     if (!selectedDealRef.current?.name) {
-      console.error('[Timeline] No selected deal name available for contacts fetch');
+      console.error('[ATIN] No selected deal name available for contacts fetch');
       return null;
     }
 
     const url = `/api/hubspot/contacts-and-champion?dealName=${encodeURIComponent(selectedDealRef.current.name)}&date=${encodeURIComponent(date)}`;
-    console.log('[Timeline] Making API call to:', url);
+    console.log('[ATIN] Champion API URL:', url);
     
     const response = await makeApiCall(url);
     
     if (response) {
       const data = await response.json();
+      console.log(`[ATIN] Champion API Response for date: ${date}`, {
+        totalContacts: data.total_contacts,
+        championsCount: data.champions_count,
+        contactsWithPain: data.contacts.filter((c: any) => c.business_pain).length
+      });
       
       // Validate the response data
       if (!data || typeof data !== 'object') {
-        console.error('[Timeline] Invalid response format for contacts:', data);
+        console.error('[ATIN] Invalid response format for contacts:', data);
         return null;
       }
       
       // Validate required fields
       if (!Array.isArray(data.contacts)) {
-        console.error('[Timeline] Missing or invalid contacts array in response:', data);
+        console.error('[ATIN] Missing or invalid contacts array in response:', data);
         return null;
       }
-      
-      console.log(`[Timeline] Received contacts data for meeting ${key}:`, {
-        totalContacts: data.total_contacts,
-        championsCount: data.champions_count,
-        contactsCount: data.contacts.length,
-        contacts: data.contacts.map((c: any) => ({
-          email: c.email,
-          isChampion: c.champion
-        }))
-      });
       
       // Only update state if we're still working with the same deal
       if (selectedDealRef.current?.name) {
@@ -1986,9 +2000,9 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes('409')) {
-        console.log('[Timeline] Request was cancelled, skipping...');
+        console.log('[ATIN] Request was cancelled, skipping...');
       } else {
-        console.error('[Timeline] Error fetching meeting contacts:', {
+        console.error('[ATIN] Error fetching meeting contacts:', {
           error: error.message,
           subject,
           date,
@@ -1999,7 +2013,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
     }
     return null;
   }
-}, [makeApiCall]); // Remove meetingContacts from dependencies
+}, [makeApiCall]);
 
   // Update handleGetTimeline to use makeApiCall
   const handleGetTimeline = useCallback(async (deal: Deal | null = null, forceRefresh = false) => {
@@ -2184,14 +2198,21 @@ useEffect(() => {
   }
   
   // Check if we need to fetch contacts for meetings
-  const meetingEvents = timelineData.events.filter(event => event.type === 'Meeting');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const meetingEvents = timelineData.events.filter(event => {
+    if (event.type !== 'Meeting') return false;
+    const meetingDate = new Date(event.date_str);
+    return meetingDate <= today;
+  });
   
   if (meetingEvents.length === 0) {
-    console.log('[Timeline] No meeting events found in timeline data');
+    console.log('[Timeline] No past meeting events found in timeline data');
     return;
   }
   
-  console.log(`[Timeline] Found ${meetingEvents.length} meetings, fetching contacts...`);
+  console.log(`[Timeline] Found ${meetingEvents.length} past meetings, fetching contacts...`);
   setLoadingChampions(true);
   
   // Process meetings sequentially to avoid overwhelming the server
@@ -2199,6 +2220,7 @@ useEffect(() => {
     let completedRequests = 0;
     let failedRequests = 0;
     let cancelledRequests = 0;
+    let skippedFutureMeetings = 0;
     
     for (const event of meetingEvents) {
       if (event.date_str && !isUnmounting) {
@@ -2248,7 +2270,8 @@ useEffect(() => {
       total: meetingEvents.length,
       completed: completedRequests,
       failed: failedRequests,
-      cancelled: cancelledRequests
+      cancelled: cancelledRequests,
+      skippedFuture: skippedFutureMeetings
     });
     
     if (!isUnmounting) {
@@ -2605,13 +2628,13 @@ return (
         )}
 
         <div className="mt-4">
-              <h3 className="text-xl font-semibold mb-2">Deal Timeline: {selectedDeal?.name}</h3>
+          <h3 className="text-xl font-semibold mb-2">Deal Timeline: {selectedDeal?.name}</h3>
           {chartData.length > 0 ? (
             <div className="h-[500px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={chartData}
-                      margin={{ top: 20, right: 30, left: 30, bottom: 20 }}
+                  margin={{ top: 20, right: 30, left: 30, bottom: 20 }}
                   barSize={20}
                   maxBarSize={20}
                   ref={chartRef}
@@ -2743,12 +2766,114 @@ return (
           )}
         </div>
 
-            {/* Add DealLogs component */}
-            {timelineData.events && timelineData.events.length > 0 && (
-              <div className="mt-4">
-                <DealLogs events={timelineData.events} />
+        {/* Add Business Pain section */}
+        {timelineData && timelineData.events && (
+          <div className="mt-8 bg-white rounded-lg shadow">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-xl font-semibold">Business Pain</h3>
+            </div>
+            <div className="min-h-[200px] max-h-[400px] overflow-y-auto">
+              <div className="p-4">
+                {/* Aggregate business pain by person */}
+                {(() => {
+                  // Create a map to store unique contacts and their business pains
+                  const contactPains = new Map<string, {
+                    email: string;
+                    speakerName?: string;
+                    champion: boolean;
+                    pains: string[];
+                  }>();
+
+                  // Loop through all meetings to collect business pains
+                  timelineData.events
+                    .filter(event => event.type === 'Meeting')
+                    .forEach(event => {
+                      const meetingKey = `${event.subject}_${event.date_str}`;
+                      const contactsData = meetingContacts[meetingKey];
+                      
+                      if (contactsData) {
+                        contactsData.contacts
+                          .filter(contact => contact.business_pain)
+                          .forEach(contact => {
+                            const key = contact.speakerName || contact.email;
+                            if (!contactPains.has(key)) {
+                              contactPains.set(key, {
+                                email: contact.email,
+                                speakerName: contact.speakerName,
+                                champion: contact.champion,
+                                pains: []
+                              });
+                            }
+                            contactPains.get(key)?.pains.push(contact.business_pain || '');
+                          });
+                      }
+                    });
+
+                  // Convert map to array and sort by champion status
+                  const sortedContacts = Array.from(contactPains.values())
+                    .sort((a, b) => {
+                      if (a.champion && !b.champion) return -1;
+                      if (!a.champion && b.champion) return 1;
+                      return 0;
+                    });
+
+                  if (sortedContacts.length === 0) {
+                    return (
+                      <div className="h-[120px] flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="text-gray-400 mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <p className="text-gray-500">No business pain detected from transcripts</p>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      {sortedContacts.map((contact, index) => (
+                        <div key={index} className="bg-gray-50 rounded-lg p-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-gray-900">{contact.speakerName || contact.email}</span>
+                                {contact.champion && (
+                                  <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
+                                    Champion
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="pl-10">
+                            <div className="text-gray-700 text-sm">
+                              {contact.pains.join('. ')}.
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
-            )}
+            </div>
+          </div>
+        )}
+
+        {/* Add DealLogs component */}
+        {timelineData.events && timelineData.events.length > 0 && (
+          <div className="mt-4">
+            <DealLogs events={timelineData.events} />
+          </div>
+        )}
       </div>
     ) : selectedDeal ? (
       <div className="text-center py-10 text-gray-600">

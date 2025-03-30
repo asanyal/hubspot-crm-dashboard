@@ -38,7 +38,7 @@ const Header: React.FC = () => {
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
             <Link href="/" className="flex-shrink-0 font-bold text-xl text-indigo-600 dark:text-indigo-400 font-serif hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors">
-              Klose AI
+              Spotlight
             </Link>
             <nav className="ml-10 flex space-x-2">
               <Link href="/" 

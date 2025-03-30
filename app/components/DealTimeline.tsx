@@ -1947,7 +1947,7 @@ useEffect(() => {
 // Update fetchMeetingContacts to use localStorage
 const fetchMeetingContacts = useCallback(async (subject: string, date: string) => {
   if (!date) {
-    console.log('[ATIN] Skipping champion call - missing date');
+    console.log('Skipping champion call - missing date');
     return null;
   }
 
@@ -1957,7 +1957,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
   today.setHours(0, 0, 0, 0);
   
   if (meetingDate > today) {
-    console.log(`[ATIN] Skipping champion call for future meeting on ${date}`);
+    console.log(`Skipping champion call for future meeting on ${date}`);
     return null;
   }
   
@@ -1966,7 +1966,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
   
   // Check if we already have the contacts for this meeting in state
   if (meetingContacts[key]) {
-    console.log(`[ATIN] Using cached contacts for meeting: ${key}`);
+    console.log(`Using cached contacts for meeting: ${key}`);
     return meetingContacts[key];
   }
 
@@ -1977,7 +1977,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
       try {
         const savedContacts = JSON.parse(saved);
         if (savedContacts[key]) {
-          console.log(`[ATIN] Using localStorage contacts for meeting: ${key}`);
+          console.log(`Using localStorage contacts for meeting: ${key}`);
           // Update state with saved data
           setMeetingContacts(prev => ({
             ...prev,
@@ -1992,22 +1992,22 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
   }
   
   try {
-    console.log(`[ATIN] MAKING CHAMPION CALL for meeting: ${key}`);
+    console.log(`MAKING CHAMPION CALL for meeting: ${key}`);
     
     // Ensure we have a valid deal name
     if (!selectedDealRef.current?.name) {
-      console.error('[ATIN] No selected deal name available for contacts fetch');
+      console.error('No selected deal name available for contacts fetch');
       return null;
     }
 
     const url = `/api/hubspot/contacts-and-champion?dealName=${encodeURIComponent(selectedDealRef.current.name)}&date=${encodeURIComponent(date)}`;
-    console.log('[ATIN] Champion API URL:', url);
+    console.log('Champion API URL:', url);
     
     const response = await makeApiCall(url);
     
     if (response) {
       const data = await response.json();
-      console.log(`[ATIN] Champion API Response for date: ${date}`, {
+      console.log(`Champion API Response for date: ${date}`, {
         totalContacts: data.total_contacts,
         championsCount: data.champions_count,
         contactsWithPain: data.contacts.filter((c: any) => c.business_pain).length
@@ -2015,13 +2015,13 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
       
       // Validate the response data
       if (!data || typeof data !== 'object') {
-        console.error('[ATIN] Invalid response format for contacts:', data);
+        console.error('Invalid response format for contacts:', data);
         return null;
       }
       
       // Validate required fields
       if (!Array.isArray(data.contacts)) {
-        console.error('[ATIN] Missing or invalid contacts array in response:', data);
+        console.error('Missing or invalid contacts array in response:', data);
         return null;
       }
       
@@ -2043,9 +2043,9 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes('409')) {
-        console.log('[ATIN] Request was cancelled, skipping...');
+        console.log('Request was cancelled, skipping...');
       } else {
-        console.error('[ATIN] Error fetching meeting contacts:', {
+        console.error('Error fetching meeting contacts:', {
           error: error.message,
           subject,
           date,

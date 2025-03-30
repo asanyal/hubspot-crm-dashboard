@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Spotlight Customer Intelligence",
-  description: "Spotlight Customer Intelligence",
+  title: "Spotlight Revenue Intelligence",
+  description: "Spotlight Revenue Intelligence",
 };
 
 export default function RootLayout({

@@ -100,7 +100,20 @@ const DealTimeline: React.FC = () => {
   const [activitiesCount, setActivitiesCount] = useState<number | null>(null);
   const [hasMounted, setHasMounted] = useState<boolean>(false);
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
-  const [meetingContacts, setMeetingContacts] = useState<Record<string, ContactsData>>({});
+  const [meetingContacts, setMeetingContacts] = useState<Record<string, ContactsData>>(() => {
+    // Try to load from localStorage on initial render
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('meetingContacts');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error('Error loading meeting contacts from localStorage:', e);
+        }
+      }
+    }
+    return {};
+  });
   const [loadingChampions, setLoadingChampions] = useState<boolean>(false);
 
   // Add state for search term
@@ -792,27 +805,29 @@ const DealTimeline: React.FC = () => {
       if (dealName) {
         const decodedDealName = decodeURIComponent(dealName);
         console.log(`Found deal name in URL: ${decodedDealName}, autoload: ${autoload}`);
+        // store the deal name in local storage
+        localStorage.setItem('dealName', decodedDealName);
         
-      // Only proceed if this is a different deal than what's currently loaded
+        // Only proceed if this is a different deal than what's currently loaded
         if (!selectedDeal || selectedDeal.name !== decodedDealName) {
           
         // First, try to find the deal in allDeals
         const matchingDeal = allDeals.find(d => d.name === decodedDealName);
         
-        if (matchingDeal) {
-          console.log(`Found matching deal in loaded deals: ${matchingDeal.name}`);
-          updateState('dealTimeline.selectedDeal', matchingDeal);
-          setSelectedOption({ value: matchingDeal.id, label: matchingDeal.name });
-          setCurrentDealId(matchingDeal.id);
-        } else {
-          // If not found, create a temporary deal object
-          const tempDeal = {
-                name: decodedDealName,
-            id: 'pending'
-          };
-          updateState('dealTimeline.selectedDeal', tempDeal);
-          setSelectedOption({ value: 'pending', label: decodedDealName });
-        }
+          if (matchingDeal) {
+            console.log(`Found matching deal in loaded deals: ${matchingDeal.name}`);
+            updateState('dealTimeline.selectedDeal', matchingDeal);
+            setSelectedOption({ value: matchingDeal.id, label: matchingDeal.name });
+            setCurrentDealId(matchingDeal.id);
+          } else {
+            // If not found, create a temporary deal object
+            const tempDeal = {
+                  name: decodedDealName,
+              id: 'pending'
+            };
+            updateState('dealTimeline.selectedDeal', tempDeal);
+            setSelectedOption({ value: 'pending', label: decodedDealName });
+          }
         
           if (autoload) {
             console.log(`Autoloading timeline for: ${decodedDealName}`);
@@ -1922,7 +1937,14 @@ useEffect(() => {
   html.removeAttribute('data-darkreader-proxy-injected');
 }, []);
 
-// Update fetchMeetingContacts to use makeApiCall
+// Save meeting contacts to localStorage whenever they change
+useEffect(() => {
+  if (typeof window !== 'undefined' && Object.keys(meetingContacts).length > 0) {
+    localStorage.setItem('meetingContacts', JSON.stringify(meetingContacts));
+  }
+}, [meetingContacts]);
+
+// Update fetchMeetingContacts to use localStorage
 const fetchMeetingContacts = useCallback(async (subject: string, date: string) => {
   if (!date) {
     console.log('[ATIN] Skipping champion call - missing date');
@@ -1942,10 +1964,31 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
   // Use deal name if subject is missing
   const key = subject ? `${subject}_${date}` : `${selectedDealRef.current?.name}_${date}`;
   
-  // Check if we already have the contacts for this meeting
+  // Check if we already have the contacts for this meeting in state
   if (meetingContacts[key]) {
     console.log(`[ATIN] Using cached contacts for meeting: ${key}`);
     return meetingContacts[key];
+  }
+
+  // Check localStorage
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('meetingContacts');
+    if (saved) {
+      try {
+        const savedContacts = JSON.parse(saved);
+        if (savedContacts[key]) {
+          console.log(`[ATIN] Using localStorage contacts for meeting: ${key}`);
+          // Update state with saved data
+          setMeetingContacts(prev => ({
+            ...prev,
+            [key]: savedContacts[key]
+          }));
+          return savedContacts[key];
+        }
+      } catch (e) {
+        console.error('Error loading meeting contacts from localStorage:', e);
+      }
+    }
   }
   
   try {
@@ -2013,7 +2056,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
     }
     return null;
   }
-}, [makeApiCall]);
+}, [makeApiCall, meetingContacts]);
 
   // Update handleGetTimeline to use makeApiCall
   const handleGetTimeline = useCallback(async (deal: Deal | null = null, forceRefresh = false) => {
@@ -2228,16 +2271,14 @@ useEffect(() => {
           console.log(`[Timeline] Processing meeting: ${event.subject} on ${event.date_str}`);
           
           // Skip if we already have the contacts for this meeting
-          const key = `${event.subject}_${event.date_str}`;
-          if (meetingContacts[key]) {
-            console.log(`[Timeline] Using cached contacts for meeting: ${key}`);
-            completedRequests++;
-            continue;
-          }
+          const url = new URL(window.location.href);
+          const dealName = url.searchParams.get('dealName') || '';
+          const meetingKey = event.subject ? `${event.subject}_${event.date_str}` : `${dealName}_${event.date_str}`;
+          const contactsData = meetingContacts[meetingKey];
           
-          const data = await fetchMeetingContacts(event.subject || '', event.date_str);
+          console.log(`[Business Pain] Processing meeting: ${meetingKey}`, contactsData);
           
-          if (data && data.contacts) {
+          if (contactsData && contactsData.contacts) {
             completedRequests++;
             console.log(`[Timeline] Successfully fetched contacts for meeting ${completedRequests}/${meetingEvents.length}`);
           } else {
@@ -2788,14 +2829,21 @@ return (
                   timelineData.events
                     .filter(event => event.type === 'Meeting')
                     .forEach(event => {
-                      const meetingKey = `${event.subject}_${event.date_str}`;
+                      // Get deal name from URL query parameters
+                      const url = new URL(window.location.href);
+                      // the URL search params could be empty, so in that case load the deal name from local storage
+                      const dealName = url.searchParams.get('dealName') || localStorage.getItem('dealName');
+                      const meetingKey = event.subject ? `${event.subject}_${event.date_str}` : `${dealName}_${event.date_str}`;
                       const contactsData = meetingContacts[meetingKey];
                       
-                      if (contactsData) {
-                        contactsData.contacts
-                          .filter(contact => contact.business_pain)
-                          .forEach(contact => {
+                      console.log(`[Business Pain] Processing meeting: ${meetingKey}`, contactsData);
+                      
+                      if (contactsData && contactsData.contacts) {
+                        contactsData.contacts.forEach(contact => {
+                          console.log(`[Business Pain] Processing contact:`, contact);
+                          if (contact.business_pain) {
                             const key = contact.speakerName || contact.email;
+                            console.log(`[Business Pain] Found business pain for ${key}:`, contact.business_pain);
                             if (!contactPains.has(key)) {
                               contactPains.set(key, {
                                 email: contact.email,
@@ -2804,10 +2852,15 @@ return (
                                 pains: []
                               });
                             }
-                            contactPains.get(key)?.pains.push(contact.business_pain || '');
-                          });
+                            const existingContact = contactPains.get(key);
+                            if (existingContact && !existingContact.pains.includes(contact.business_pain)) {
+                              existingContact.pains.push(contact.business_pain);
+                            }
+                          }
+                        });
                       }
                     });
+
 
                   // Convert map to array and sort by champion status
                   const sortedContacts = Array.from(contactPains.values())

@@ -130,7 +130,71 @@ const DealStageSelector: React.FC = () => {
     };
   }, [loading, updateState]);
   
-  // Update the fetchStages function to be more robust
+  // Add session management state
+  const [browserId] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('browserId') || crypto.randomUUID();
+    }
+    return crypto.randomUUID();
+  });
+
+  // Utility function for making API calls with session management
+  const makeApiCall = useCallback(async (url: string, options: RequestInit = {}) => {
+    const sessionId = localStorage.getItem('sessionId') || '';
+    
+    const headers = {
+      'X-Browser-ID': browserId,
+      'X-Session-ID': sessionId,
+      ...options.headers,
+    };
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      });
+
+      // Store session ID from response headers if present
+      const newSessionId = response.headers.get('X-Session-ID');
+      if (newSessionId) {
+        localStorage.setItem('sessionId', newSessionId);
+      }
+
+      // Handle different status codes
+      if (response.status === 400) {
+        const errorText = await response.text();
+        if (errorText.includes('Browser ID is required')) {
+          console.error('Browser ID is missing or invalid:', {
+            browserId,
+            url,
+            headers
+          });
+        }
+        throw new Error(`Bad request: ${errorText}`);
+      } else if (response.status === 409) {
+        console.warn('Request was cancelled by a new request');
+        return null;
+      } else if (response.status === 504) {
+        console.error('Request timed out');
+        throw new Error('Request timed out. Please try again.');
+      } else if (response.status === 500) {
+        console.error('Server error');
+        throw new Error('Server error. Please try again later.');
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API call failed: ${response.status} - ${errorText}`);
+      }
+
+      return response;
+    } catch (error) {
+      console.error('API call error:', error);
+      throw error;
+    }
+  }, [browserId]);
+
+  // Update fetchStages to use makeApiCall
   const fetchStages = useCallback(async (): Promise<void> => {
     console.log('fetchStages called, current state:', {
       stagesLoading,
@@ -152,39 +216,35 @@ const DealStageSelector: React.FC = () => {
     
     try {
       console.log('Fetching pipeline stages...');
-      const response = await fetch('/api/hubspot/stages');
+      const response = await makeApiCall('/api/hubspot/stages');
       
-      console.log(`Stages response status: ${response.status}`);
+      console.log(`Stages response status: ${response?.status}`);
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Stages error response: ${errorText}`);
-        throw new Error(`Failed to fetch stages: ${response.status} - ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log(`Received ${data.length} pipeline stages:`, data);
-      
-      if (!Array.isArray(data) || data.length === 0) {
-        throw new Error('No valid stages received from the API');
-      }
-      
-      // Sort stages by display order
-      const sortedStages = [...data].sort((a, b) => a.display_order - b.display_order);
-      
-      // Update the context
-      updateState('dealsByStage.availableStages', sortedStages);
-      updateState('dealsByStage.lastFetched', Date.now());
-      
-      console.log('Successfully updated stages in state:', {
-        stagesCount: sortedStages.length,
-        stages: sortedStages
-      });
-      
-      // If we have a URL stage parameter, ensure it exists in the fetched stages
-      if (urlStage && !sortedStages.some((s: Stage) => s.stage_name === urlStage)) {
-        console.warn(`URL stage "${urlStage}" not found in available stages`);
-        setUrlStage(null);
+      if (response) {
+        const data = await response.json();
+        console.log(`Received ${data.length} pipeline stages:`, data);
+        
+        if (!Array.isArray(data) || data.length === 0) {
+          throw new Error('No valid stages received from the API');
+        }
+        
+        // Sort stages by display order
+        const sortedStages = [...data].sort((a, b) => a.display_order - b.display_order);
+        
+        // Update the context
+        updateState('dealsByStage.availableStages', sortedStages);
+        updateState('dealsByStage.lastFetched', Date.now());
+        
+        console.log('Successfully updated stages in state:', {
+          stagesCount: sortedStages.length,
+          stages: sortedStages
+        });
+        
+        // If we have a URL stage parameter, ensure it exists in the fetched stages
+        if (urlStage && !sortedStages.some((s: Stage) => s.stage_name === urlStage)) {
+          console.warn(`URL stage "${urlStage}" not found in available stages`);
+          setUrlStage(null);
+        }
       }
     } catch (error) {
       console.error('Error fetching stages:', error);
@@ -194,7 +254,7 @@ const DealStageSelector: React.FC = () => {
       console.log('Setting stagesLoading to false');
       updateState('dealsByStage.stagesLoading', false);
     }
-  }, [updateState, urlStage, lastFetched, DATA_EXPIRY_TIME]);
+  }, [updateState, urlStage, lastFetched, DATA_EXPIRY_TIME, makeApiCall]);
 
   // Simplify the initial fetch effect
   useEffect(() => {
@@ -215,7 +275,7 @@ const DealStageSelector: React.FC = () => {
       console.log('Fetching stages...');
       fetchStages();
     }
-  }, [hasMounted, availableStages.length, lastFetched, DATA_EXPIRY_TIME, fetchStages]);
+  }, [hasMounted, availableStages.length, lastFetched, DATA_EXPIRY_TIME]);
 
   // Add a safety timeout for stages loading
   useEffect(() => {
@@ -246,7 +306,7 @@ const DealStageSelector: React.FC = () => {
     });
   }, [stagesLoading, availableStages.length, error, lastFetched]);
   
-  // Fetch deals for the selected stage - this is a stable function that won't change
+  // Update fetchDealsForStage to use makeApiCall
   const fetchDealsForStage = useCallback(async (stageName: string): Promise<void> => {
     if (!stageName) return;
     
@@ -263,25 +323,21 @@ const DealStageSelector: React.FC = () => {
     
     try {
       console.log(`Fetching deals for stage: ${stageName}`);
-      const response = await fetch(`/api/hubspot/deals?stage=${encodeURIComponent(stageName)}`);
+      const response = await makeApiCall(`/api/hubspot/deals?stage=${encodeURIComponent(stageName)}`);
       
       // Log the entire response for debugging
-      console.log(`Response status: ${response.status}`);
+      console.log(`Response status: ${response?.status}`);
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Error response: ${errorText}`);
-        throw new Error(`Failed to fetch deals: ${response.status} - ${errorText}`);
+      if (response) {
+        const data = await response.json();
+        console.log(`Received ${data.length} deals for stage: ${stageName}`);
+        
+        // Update the context with the new deals
+        updateState('dealsByStage.dealsByStage', {
+          ...dealsByStage,
+          [stageName]: data
+        });
       }
-      
-      const data = await response.json();
-      console.log(`Received ${data.length} deals for stage: ${stageName}`);
-      
-      // Update the context with the new deals
-      updateState('dealsByStage.dealsByStage', {
-        ...dealsByStage,
-        [stageName]: data
-      });
     } catch (error) {
       console.error(`Error fetching deals for ${stageName}:`, error);
       updateState('dealsByStage.error', `Failed to load deals for ${stageName}`);
@@ -297,7 +353,7 @@ const DealStageSelector: React.FC = () => {
     } finally {
       updateState('dealsByStage.loading', false);
     }
-  }, [dealsByStage, failedStages, loading, updateState]);
+  }, [dealsByStage, failedStages, loading, updateState, makeApiCall]);
   
   // Handle stage selection after stages are available
   useEffect(() => {

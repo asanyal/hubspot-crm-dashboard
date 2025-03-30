@@ -145,6 +145,24 @@ const DealTimeline: React.FC = () => {
   // Add state for stage filter
   const [selectedStages, setSelectedStages] = useState<Set<string>>(new Set());
 
+  // Add session management state
+  const [browserId, setBrowserId] = useState<string>('');
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Initialize browser ID on component mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      let id = localStorage.getItem('browserId');
+      if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem('browserId', id);
+      }
+      console.log('Initializing browser ID:', id); // Debug log
+      setBrowserId(id);
+      setIsInitialized(true);
+    }
+  }, []);
+
   // Get unique stages from all deals
   const uniqueStages = useMemo(() => {
     const stages = new Set<string>();
@@ -419,38 +437,134 @@ const DealTimeline: React.FC = () => {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  // Fetch deal information - wrapped in useCallback
+  // Utility function for making API calls with session management
+  const makeApiCall = useCallback(async (url: string, options: RequestInit = {}) => {
+    if (!isInitialized) {
+      console.log('Waiting for browser ID initialization...');
+      return null;
+    }
+
+    if (!browserId) {
+      console.error('Browser ID not initialized yet');
+      throw new Error('Browser ID not initialized');
+    }
+
+    const sessionId = localStorage.getItem('sessionId') || '';
+    
+    const headers = {
+      'X-Browser-ID': browserId,
+      'X-Session-ID': sessionId,
+      ...options.headers,
+    };
+
+    try {
+      console.log('Making API call:', {
+        url,
+        method: options.method || 'GET',
+        headers,
+        browserId,
+        localStorage: {
+          browserId: localStorage.getItem('browserId'),
+          sessionId: localStorage.getItem('sessionId')
+        }
+      });
+      
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      });
+
+      // Store session ID from response headers if present
+      const newSessionId = response.headers.get('X-Session-ID');
+      if (newSessionId) {
+        localStorage.setItem('sessionId', newSessionId);
+      }
+
+      // Handle different status codes
+      if (response.status === 400) {
+        const errorText = await response.text();
+        if (errorText.includes('Browser ID is required')) {
+          console.error('Browser ID is missing or invalid:', {
+            browserId,
+            url,
+            headers,
+            localStorage: {
+              browserId: localStorage.getItem('browserId'),
+              sessionId: localStorage.getItem('sessionId')
+            }
+          });
+        }
+        throw new Error(`Bad request: ${errorText}`);
+      } else if (response.status === 409) {
+        console.warn('Request was cancelled by a new request');
+        return null;
+      } else if (response.status === 504) {
+        console.error('Request timed out');
+        throw new Error('Request timed out. Please try again.');
+      } else if (response.status === 500) {
+        let errorText;
+        try {
+          const errorData = await response.json();
+          errorText = JSON.stringify(errorData);
+        } catch (e) {
+          errorText = await response.text();
+        }
+        
+        console.error('Server error details:', {
+          url,
+          status: response.status,
+          error: errorText,
+          headers: Object.fromEntries(response.headers.entries()),
+          requestHeaders: headers
+        });
+        
+        throw new Error(`Server error: ${errorText || 'Unknown server error'}`);
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API call failed: ${response.status} - ${errorText}`);
+      }
+
+      return response;
+    } catch (error) {
+      console.error('API call error:', {
+        url,
+        error,
+        browserId,
+        sessionId,
+        headers
+      });
+      throw error;
+    }
+  }, [browserId, isInitialized]);
+
+  // Update fetchDealInfo to use makeApiCall
   const fetchDealInfo = useCallback(async (dealName: string) => {
     try {
       console.log(`Fetching deal info for: ${dealName}`);
-      const response = await fetch(`http://localhost:8000/api/hubspot/deal-info?dealName=${encodeURIComponent(dealName)}`);
+      const response = await makeApiCall(`/api/hubspot/deal-info?dealName=${encodeURIComponent(dealName)}`);
       
-      console.log(`Deal info response status: ${response.status}`);
-      
-      if (response.ok) {
+      if (response) {
         const info = await response.json();
         setDealInfo(info);
-        // Store the info in allDealsInfo
         setAllDealsInfo(prev => ({
           ...prev,
           [dealName]: info
         }));
-      } else {
-        const errorText = await response.text();
-        console.error(`Error response from deal-info: ${errorText}`);
       }
     } catch (error) {
       console.error('Error fetching deal info:', error);
     }
-  }, []);
+  }, [makeApiCall]);
 
-  // Function to fetch activities count - wrapped in useCallback
+  // Update fetchActivitiesCount to use makeApiCall
   const fetchActivitiesCount = useCallback(async (dealName: string) => {
     setFetchingActivities(true);
     try {
-      const response = await fetch(`http://localhost:8000/api/hubspot/deal-activities-count?dealName=${encodeURIComponent(dealName)}`);
+      const response = await makeApiCall(`/api/hubspot/deal-activities-count?dealName=${encodeURIComponent(dealName)}`);
       
-      if (response.ok) {
+      if (response) {
         const data = await response.json();
         setActivitiesCount(data.count);
         if (data.count === 0) {
@@ -460,35 +574,17 @@ const DealTimeline: React.FC = () => {
           setLoadingError(false);
         }
         return data.count;
-      } else if (response.status === 404) {
-        // For 404s, just log and return null without showing UI error
-        console.log(`No activities found for deal "${dealName}"`);
-        setActivitiesCount(null);
-        return null;
-      } else {
-        const errorText = await response.text();
-        console.error(`Error fetching activities count for deal "${dealName}":`, {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText
-        });
-        
-        // Update UI to show error state only for non-404 errors
-        setActivitiesCount(null);
-        updateState('dealTimeline.error', `Failed to fetch activities count for ${dealName}. Please try again.`);
-        return null;
       }
+      return null;
     } catch (error) {
       console.error(`Error fetching activities count for deal "${dealName}":`, error);
-      
-      // Update UI to show error state
       setActivitiesCount(null);
       updateState('dealTimeline.error', `Failed to fetch activities count for ${dealName}. Please try again.`);
       return null;
     } finally {
       setFetchingActivities(false);
     }
-  }, [updateState]);
+  }, [makeApiCall, updateState]);
 
   // Function to load timeline directly from URL params - define after handleGetTimeline
   const loadTimelineDirectly = useCallback(async (dealName: string) => {
@@ -522,24 +618,18 @@ const DealTimeline: React.FC = () => {
       
       // Then fetch timeline data
       console.log(`[Timeline] Fetching timeline data for: ${dealName} from URL`);
-      const timelineResponse = await fetch(`http://localhost:8000/api/hubspot/deal-timeline?dealName=${encodeURIComponent(dealName)}`);
+      const response = await makeApiCall(`/api/hubspot/deal-timeline?dealName=${encodeURIComponent(dealName)}`);
       
-      console.log(`[Timeline] Response status: ${timelineResponse.status}`);
-      
-      if (timelineResponse.ok) {
-        const data = await timelineResponse.json();
+      if (response) {
+        const data = await response.json();
         
         // Verify the deal name matches before updating state
         if (selectedDealRef.current?.name === dealName) {
-        updateState('dealTimeline.activities', data);
-        updateState('dealTimeline.lastFetched', Date.now());
+          updateState('dealTimeline.activities', data);
+          updateState('dealTimeline.lastFetched', Date.now());
         } else {
           console.warn(`Deal name mismatch: URL deal=${dealName}, current deal=${selectedDealRef.current?.name}`);
         }
-      } else {
-        const errorText = await timelineResponse.text();
-        console.error(`[Timeline] Error response: ${errorText}`);
-        throw new Error(`Failed to load timeline data: ${timelineResponse.status} - ${errorText}`);
       }
     } catch (error) {
       console.error('[Timeline] Error fetching timeline:', error);
@@ -554,9 +644,9 @@ const DealTimeline: React.FC = () => {
     updateState,
     fetchDealInfo,
     fetchActivitiesCount,
-    isUnmounting
+    isUnmounting,
+    makeApiCall
   ]);
-
 
   // Format dates for display
   const formatDate = (dateStr: string | null) => {
@@ -746,44 +836,38 @@ const DealTimeline: React.FC = () => {
           setDealsLoading(true);
         }
         
-        const response = await fetch('/api/hubspot/all-deals');
+        const response = await makeApiCall('/api/hubspot/all-deals');
         
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`All deals error response: ${errorText}`);
-          throw new Error(`Failed to fetch deals: ${response.status} - ${errorText}`);
-        }
-        
+        if (response) {
           const data: Deal[] = await response.json();
-        
-        if (isMounted) {
-          updateState('dealTimeline.deals', data);
           
-          // If we have a selected deal (from URL or elsewhere), find and update the dropdown
-          if (selectedDeal) {
+          if (isMounted) {
+            updateState('dealTimeline.deals', data);
+            
+            // If we have a selected deal (from URL or elsewhere), find and update the dropdown
+            if (selectedDeal) {
               const matchingDeal = data.find(d => d.name === selectedDeal.name);
             
-            if (matchingDeal) {
-              
-              // Update the dropdown selection to match the found deal
-              setSelectedOption({ 
-                value: matchingDeal.id, 
-                label: matchingDeal.name 
-              });
-              
-              // Update the selected deal in the state with the correct ID if it's different
-              if (selectedDeal.id !== matchingDeal.id) {
-                updateState('dealTimeline.selectedDeal', { 
-                  ...selectedDeal, 
-                  id: matchingDeal.id 
+              if (matchingDeal) {
+                // Update the dropdown selection to match the found deal
+                setSelectedOption({ 
+                  value: matchingDeal.id, 
+                  label: matchingDeal.name 
                 });
+                
+                // Update the selected deal in the state with the correct ID if it's different
+                if (selectedDeal.id !== matchingDeal.id) {
+                  updateState('dealTimeline.selectedDeal', { 
+                    ...selectedDeal, 
+                    id: matchingDeal.id 
+                  });
+                }
               }
             }
+            
+            // Clear any stale error state
+            updateState('dealTimeline.error', null);
           }
-          
-          // Clear any stale error state
-          updateState('dealTimeline.error', null);
         }
       } catch (error) {
         console.error('Error fetching deals:', error);
@@ -805,7 +889,7 @@ const DealTimeline: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [hasMounted, isInitialLoad]); // Remove allDeals and selectedDeal from dependencies
+  }, [hasMounted, isInitialLoad, makeApiCall, updateState, selectedDeal]);
 
   useEffect(() => {
     if (timelineData && timelineData.events && timelineData.start_date && timelineData.end_date) {
@@ -1830,82 +1914,93 @@ useEffect(() => {
   html.removeAttribute('data-darkreader-proxy-injected');
 }, []);
 
-// Add function to fetch contacts for a meeting
-const fetchMeetingContacts = useCallback(async (meetingSubject: string, meetingDate: string) => {
-  console.log('[Contacts] Called with:', { meetingSubject, meetingDate });
-  
-  if (!selectedDeal?.name) {
-    console.error('[Contacts] No selected deal available');
+// Update fetchMeetingContacts to use makeApiCall
+const fetchMeetingContacts = useCallback(async (subject: string, date: string) => {
+  if (!subject || !date) {
+    console.warn('[Timeline] Missing subject or date for meeting contacts fetch');
     return null;
+  }
+  
+  const key = `${subject}_${date}`;
+  
+  // Check if we already have the contacts for this meeting
+  if (meetingContacts[key]) {
+    console.log(`[Timeline] Using cached contacts for meeting: ${key}`);
+    return meetingContacts[key];
   }
   
   try {
-    // Create a cache key
-    const cacheKey = `${meetingSubject || selectedDeal.name}_${meetingDate}`;
-    console.log('[Contacts] Cache key:', cacheKey);
+    console.log(`[Timeline] Fetching contacts for meeting: ${key}`);
     
-    // Check if we already have data for this meeting using the ref
-    if (meetingContacts[cacheKey]?.contacts?.length > 0) {
-      console.log(`[Contacts] Using cached data for ${cacheKey}`);
-      // Update state with cached data to ensure UI consistency
-      setMeetingContacts(prev => ({
-        ...prev,
-        [cacheKey]: meetingContacts[cacheKey]
-      }));
-      return meetingContacts[cacheKey];
-    }
-    
-    // Always use the selected deal's name as the dealName parameter
-    const apiUrl = `/api/hubspot/contacts-and-champion?dealName=${encodeURIComponent(selectedDeal.name)}&date=${meetingDate}&_t=${new Date().getTime()}`;
-    console.log(`[Contacts] Making API call to: ${apiUrl}`);
-    
-    const response = await fetch(apiUrl);
-    console.log(`[Contacts] Response status: ${response.status}`);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[Contacts] Error response:', {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorText
-      });
+    // Ensure we have a valid deal name
+    if (!selectedDealRef.current?.name) {
+      console.error('[Timeline] No selected deal name available for contacts fetch');
       return null;
     }
+
+    const url = `/api/hubspot/contacts-and-champion?dealName=${encodeURIComponent(selectedDealRef.current.name)}&date=${encodeURIComponent(date)}`;
+    console.log('[Timeline] Making API call to:', url);
     
-    const data: ContactsData = await response.json();
-    console.log(`[Contacts] Received data for ${cacheKey}:`, data);
+    const response = await makeApiCall(url);
     
-    // Only update state and ref if we have valid data
-    if (data && data.contacts) {
-      // Update both the ref and state atomically
-      setMeetingContacts(prev => ({
-        ...prev,
-        [cacheKey]: data
-      }));
+    if (response) {
+      const data = await response.json();
       
-      console.log(`[Contacts] Successfully stored data for ${cacheKey}`);
-      return data;
-    } else {
-      console.error('[Contacts] Invalid data received:', data);
-      return null;
+      // Validate the response data
+      if (!data || typeof data !== 'object') {
+        console.error('[Timeline] Invalid response format for contacts:', data);
+        return null;
+      }
+      
+      // Validate required fields
+      if (!Array.isArray(data.contacts)) {
+        console.error('[Timeline] Missing or invalid contacts array in response:', data);
+        return null;
+      }
+      
+      console.log(`[Timeline] Received contacts data for meeting ${key}:`, {
+        totalContacts: data.total_contacts,
+        championsCount: data.champions_count,
+        contactsCount: data.contacts.length,
+        contacts: data.contacts.map((c: any) => ({
+          email: c.email,
+          isChampion: c.champion
+        }))
+      });
+      
+      // Only update state if we're still working with the same deal
+      if (selectedDealRef.current?.name) {
+        setMeetingContacts(prev => ({
+          ...prev,
+          [key]: data
+        }));
+        return data;
+      }
     }
+    return null;
   } catch (error) {
     if (error instanceof Error) {
-      console.error('[Contacts] Error fetching contacts:', error.message);
-    } else {
-      console.error('[Contacts] Unknown error:', error);
+      if (error.message.includes('409')) {
+        console.log('[Timeline] Request was cancelled, skipping...');
+      } else {
+        console.error('[Timeline] Error fetching meeting contacts:', {
+          error: error.message,
+          subject,
+          date,
+          dealName: selectedDealRef.current?.name,
+          stack: error.stack
+        });
+      }
     }
     return null;
   }
-}, [selectedDeal]);
+}, [makeApiCall, meetingContacts]);
 
-
-  // Handler for "Get Timeline" button - define this before using it
+  // Update handleGetTimeline to use makeApiCall
   const handleGetTimeline = useCallback(async (deal: Deal | null = null, forceRefresh = false) => {
     const dealToUse = deal || selectedDealRef.current;
     if (!dealToUse) return;
     
-    // Check if we need to refresh based on cache expiry or force refresh
     const currentTime = Date.now();
     const shouldRefresh = forceRefresh || 
       !lastFetched || 
@@ -1917,11 +2012,10 @@ const fetchMeetingContacts = useCallback(async (meetingSubject: string, meetingD
       return;
     }
     
-    // Clear previous meeting contacts when loading a new timeline
-    if (selectedDealRef.current && dealToUse.name !== selectedDealRef.current.name) {
-      setMeetingContacts({});
-    }
+    // Clear meeting contacts before fetching new data
+    setMeetingContacts({});
     
+    // Set loading state
     updateState('dealTimeline.loading', true);
     updateState('dealTimeline.error', null);
     setLoadingStartTime(Date.now());
@@ -1931,60 +2025,60 @@ const fetchMeetingContacts = useCallback(async (meetingSubject: string, meetingD
     try {
       console.log(`[Timeline] Getting timeline for deal: ${dealToUse.name}`);
       
-      // First fetch activities count to inform the user
-      const count = await fetchActivitiesCount(dealToUse.name);
+      // Fetch activities count and deal info in parallel
+      const [count, dealInfoResponse] = await Promise.all([
+        fetchActivitiesCount(dealToUse.name),
+        fetchDealInfo(dealToUse.name)
+      ]);
       
-      // Then fetch deal info
-      await fetchDealInfo(dealToUse.name);
+      // Fetch timeline data
+      const response = await makeApiCall(`/api/hubspot/deal-timeline?dealName=${encodeURIComponent(dealToUse.name)}`);
       
-      // Finally fetch timeline data
-      const timelineResponse = await fetch(`http://localhost:8000/api/hubspot/deal-timeline?dealName=${encodeURIComponent(dealToUse.name)}`);
-      
-      if (timelineResponse.ok) {
-        const data = await timelineResponse.json();
+      if (response) {
+        const data = await response.json();
         
-        // Update timeline data first
-        updateState('dealTimeline.activities', data);
-        updateState('dealTimeline.lastFetched', Date.now());
-        
-        // Then process meetings to fetch contacts asynchronously
-        const meetingEvents = data.events.filter((event: Event) => event.type === 'Meeting');
-        if (meetingEvents.length > 0) {
-          console.log(`[Timeline] Found ${meetingEvents.length} meetings, will fetch contacts...`);
-          setLoadingChampions(true);
+        // Only update state if we're still working with the same deal
+        if (selectedDealRef.current?.name === dealToUse.name) {
+          updateState('dealTimeline.activities', data);
+          updateState('dealTimeline.lastFetched', Date.now());
           
-          // Process meetings sequentially in the background
-          (async () => {
+          // Process meeting contacts sequentially
+          const meetingEvents = data.events.filter((event: Event) => event.type === 'Meeting');
+          if (meetingEvents.length > 0) {
+            console.log(`[Timeline] Found ${meetingEvents.length} meetings, will fetch contacts sequentially...`);
+            setLoadingChampions(true);
+            
+            // Process meetings sequentially with a delay between each
             for (const event of meetingEvents) {
-              if (event.date_str) {
+              if (event.date_str && selectedDealRef.current?.name === dealToUse.name) {
                 try {
+                  // Add a small delay between requests to prevent overwhelming the server
+                  await new Promise(resolve => setTimeout(resolve, 100));
                   await fetchMeetingContacts(event.subject || '', event.date_str);
                 } catch (error) {
-                  console.error('[Timeline] Error fetching meeting contacts:', error);
+                  if (error instanceof Error && error.message.includes('409')) {
+                    console.log('[Timeline] Request was cancelled, skipping...');
+                  } else {
+                    console.error('[Timeline] Error fetching meeting contacts:', error);
+                  }
                 }
               }
             }
             setLoadingChampions(false);
-          })();
+          }
         }
-      } else {
-        const errorText = await timelineResponse.text();
-        console.error(`[Timeline] Error response: ${errorText}`);
-        throw new Error(`Failed to fetch timeline data: ${timelineResponse.status} - ${errorText}`);
       }
     } catch (error) {
       console.error('[Timeline] Error fetching timeline:', error);
       setLoadingError(true);
       updateState('dealTimeline.error', 'Failed to load timeline data. Please try again.');
     } finally {
-      // Only set loading to false if we're not fetching champions
       if (!loadingChampions) {
         updateState('dealTimeline.loading', false);
         setLoadingStartTime(null);
       }
     }
-  }, [updateState, fetchDealInfo, fetchActivitiesCount, lastFetched, fetchMeetingContacts, loadingChampions]);
-
+  }, [updateState, fetchDealInfo, fetchActivitiesCount, lastFetched, fetchMeetingContacts, loadingChampions, makeApiCall, DATA_EXPIRY_TIME]);
 
 // Update handleDealChange to ensure champions are fetched for new deals
 const handleDealChange = useCallback(async (selectedOption: any) => {
@@ -2099,23 +2193,48 @@ useEffect(() => {
   const processMeetings = async () => {
     let completedRequests = 0;
     let failedRequests = 0;
+    let cancelledRequests = 0;
     
     for (const event of meetingEvents) {
       if (event.date_str && !isUnmounting) {
         try {
           console.log(`[Timeline] Processing meeting: ${event.subject} on ${event.date_str}`);
-          const result = await fetchMeetingContacts(event.subject || '', event.date_str);
           
-          if (result) {
+          // Skip if we already have the contacts for this meeting
+          const key = `${event.subject}_${event.date_str}`;
+          if (meetingContacts[key]) {
+            console.log(`[Timeline] Using cached contacts for meeting: ${key}`);
+            completedRequests++;
+            continue;
+          }
+          
+          const data = await fetchMeetingContacts(event.subject || '', event.date_str);
+          
+          if (data && data.contacts) {
             completedRequests++;
             console.log(`[Timeline] Successfully fetched contacts for meeting ${completedRequests}/${meetingEvents.length}`);
           } else {
             failedRequests++;
             console.log(`[Timeline] Failed to fetch contacts for meeting on ${event.date_str}`);
           }
+          
+          // Add a small delay between requests to prevent overwhelming the server
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
         } catch (error) {
-          console.error('[Timeline] Error fetching meeting contacts:', error);
-          failedRequests++;
+          if (error instanceof Error) {
+            if (error.message.includes('409')) {
+              cancelledRequests++;
+              console.log('[Timeline] Request was cancelled, skipping...');
+            } else {
+              failedRequests++;
+              console.error('[Timeline] Error processing meeting:', {
+                error: error.message,
+                subject: event.subject,
+                date: event.date_str
+              });
+            }
+          }
         }
       }
     }
@@ -2123,7 +2242,8 @@ useEffect(() => {
     console.log('[Timeline] Completed fetching meeting contacts:', {
       total: meetingEvents.length,
       completed: completedRequests,
-      failed: failedRequests
+      failed: failedRequests,
+      cancelled: cancelledRequests
     });
     
     if (!isUnmounting) {
@@ -2133,7 +2253,7 @@ useEffect(() => {
   
   processMeetings();
   
-}, [timelineData, selectedDeal, fetchMeetingContacts, isUnmounting]);
+}, [timelineData, selectedDeal, fetchMeetingContacts, isUnmounting, meetingContacts]);
 
 // Add cleanup effect when component unmounts
 useEffect(() => {
@@ -2142,6 +2262,13 @@ useEffect(() => {
     cleanupState();
   };
 }, [cleanupState]);
+
+// Store browser ID on mount
+useEffect(() => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('browserId', browserId);
+  }
+}, [browserId]);
 
 return (
   <div className="flex h-screen" suppressHydrationWarning>

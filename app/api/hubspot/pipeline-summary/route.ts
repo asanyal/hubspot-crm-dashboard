@@ -1,23 +1,35 @@
 // app/api/hubspot/pipeline-summary/route.ts
 import { NextResponse } from 'next/server';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // Get all deals to calculate the pipeline summary
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}/api/hubspot/pipeline-summary`, {
+    // Get the browser ID and session ID from the request headers
+    const browserId = request.headers.get('X-Browser-ID');
+    const sessionId = request.headers.get('X-Session-ID');
+
+    // Forward the request to the backend server
+    const response = await fetch('http://localhost:8000/api/hubspot/pipeline-summary', {
       headers: {
-        'Content-Type': 'application/json',
+        'X-Browser-ID': browserId || '',
+        'X-Session-ID': sessionId || '',
       },
     });
 
-    if (!response.ok) {
-      throw new Error(`Error: ${response.status}`);
+    // Get the response data
+    const data = await response.json();
+
+    // Create a new response with the data
+    const nextResponse = NextResponse.json(data);
+
+    // Forward any session ID from the backend response
+    const backendSessionId = response.headers.get('X-Session-ID');
+    if (backendSessionId) {
+      nextResponse.headers.set('X-Session-ID', backendSessionId);
     }
 
-    const data = await response.json();
-    return NextResponse.json(data);
+    return nextResponse;
   } catch (error) {
-    console.error('Error fetching pipeline summary:', error);
+    console.error('Error in pipeline-summary route:', error);
     return NextResponse.json(
       { error: 'Failed to fetch pipeline summary' },
       { status: 500 }

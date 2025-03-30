@@ -2,33 +2,42 @@ import { NextResponse } from 'next/server';
 
 export async function GET(request: Request) {
   try {
+    // Get the browser ID and session ID from the request headers
+    const browserId = request.headers.get('X-Browser-ID');
+    const sessionId = request.headers.get('X-Session-ID');
+
+    // Get the stage parameter from the URL
     const { searchParams } = new URL(request.url);
     const stage = searchParams.get('stage');
-    
-    if (!stage) {
-      return NextResponse.json(
-        { error: 'Stage parameter is required' },
-        { status: 400 }
-      );
-    }
 
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/api/hubspot/deals?stage=${encodeURIComponent(stage)}`,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    // Construct the URL with the stage parameter if it exists
+    const url = stage 
+      ? `http://localhost:8000/api/hubspot/deals?stage=${encodeURIComponent(stage)}`
+      : 'http://localhost:8000/api/hubspot/deals';
 
-    if (!response.ok) {
-      throw new Error(`Error: ${response.status}`);
-    }
+    // Forward the request to the backend server
+    const response = await fetch(url, {
+      headers: {
+        'X-Browser-ID': browserId || '',
+        'X-Session-ID': sessionId || '',
+      },
+    });
 
+    // Get the response data
     const data = await response.json();
-    return NextResponse.json(data);
+
+    // Create a new response with the data
+    const nextResponse = NextResponse.json(data);
+
+    // Forward any session ID from the backend response
+    const backendSessionId = response.headers.get('X-Session-ID');
+    if (backendSessionId) {
+      nextResponse.headers.set('X-Session-ID', backendSessionId);
+    }
+
+    return nextResponse;
   } catch (error) {
-    console.error('Error fetching deals:', error);
+    console.error('Error in deals route:', error);
     return NextResponse.json(
       { error: 'Failed to fetch deals' },
       { status: 500 }

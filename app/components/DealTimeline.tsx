@@ -784,7 +784,7 @@ const DealTimeline: React.FC = () => {
           updateState('dealTimeline.loading', false);
           updateState('dealTimeline.error', 'Request timed out. Please try again.');
         }
-      }, 300000);
+      }, 600000);
     }
     
     return () => {

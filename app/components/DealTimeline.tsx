@@ -2695,7 +2695,7 @@ return (
                         if (entry.hasLessLikelyToBuy) {
                           return (
                             <ReferenceArea
-                              key={`bg-red-${entry.date}-${index}`}
+                              key={`bg-red-${entry.date}-${index}-less-likely`}
                               x1={entry.date}
                               x2={entry.date}
                               y1={0}
@@ -2714,7 +2714,7 @@ return (
                         if (entry.hasVeryLikelyToBuy) {
                           return (
                             <ReferenceArea
-                              key={`bg-green-${entry.date}-${index}`}
+                              key={`bg-green-${entry.date}-${index}-very-likely`}
                               x1={entry.date}
                               x2={entry.date}
                               y1={0}

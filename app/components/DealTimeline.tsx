@@ -15,6 +15,13 @@ interface Contact {
   email: string;
   business_pain?: string;
   speakerName?: string;
+  parr_analysis?: {
+    pain: number;
+    authority: number;
+    preference: number;
+    role: number;
+    parr_explanation: string;
+  };
 }
 
 interface ContactsData {
@@ -2823,6 +2830,13 @@ return (
                     speakerName?: string;
                     champion: boolean;
                     pains: string[];
+                    parr_analysis?: {
+                      pain: number;
+                      authority: number;
+                      preference: number;
+                      role: number;
+                      parr_explanation: string;
+                    };
                   }>();
 
                   // Loop through all meetings to collect business pains
@@ -2849,12 +2863,18 @@ return (
                                 email: contact.email,
                                 speakerName: contact.speakerName,
                                 champion: contact.champion,
-                                pains: []
+                                pains: [],
+                                parr_analysis: contact.parr_analysis
                               });
                             }
                             const existingContact = contactPains.get(key);
-                            if (existingContact && !existingContact.pains.includes(contact.business_pain)) {
-                              existingContact.pains.push(contact.business_pain);
+                            if (existingContact) {
+                              if (!existingContact.pains.includes(contact.business_pain)) {
+                                existingContact.pains.push(contact.business_pain);
+                              }
+                              if (contact.parr_analysis && !existingContact.parr_analysis) {
+                                existingContact.parr_analysis = contact.parr_analysis;
+                              }
                             }
                           }
                         });
@@ -2910,6 +2930,87 @@ return (
                             <div className="text-gray-700 text-sm">
                               {contact.pains.join('. ')}.
                             </div>
+                            {contact.parr_analysis && (
+                              <div className="mt-3">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-600">Pain:</span>
+                                    <div className="group relative">
+                                      <div 
+                                        className="w-3 h-3 rounded-full"
+                                        style={{
+                                          backgroundColor: contact.parr_analysis.pain === 1 ? '#ffbfba' :
+                                                         contact.parr_analysis.pain === 2 ? '#ff978f' :
+                                                         contact.parr_analysis.pain === 3 ? '#e05f55' :
+                                                         contact.parr_analysis.pain === 4 ? '#b32c22' :
+                                                         '#630801'
+                                        }}
+                                      />
+                                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                        Pain: {contact.parr_analysis.pain}/5
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-600">Authority:</span>
+                                    <div className="group relative">
+                                      <div 
+                                        className="w-3 h-3 rounded-full"
+                                        style={{
+                                          backgroundColor: contact.parr_analysis.authority === 1 ? '#ffbfba' :
+                                                         contact.parr_analysis.authority === 2 ? '#ff978f' :
+                                                         contact.parr_analysis.authority === 3 ? '#e05f55' :
+                                                         contact.parr_analysis.authority === 4 ? '#b32c22' :
+                                                         '#630801'
+                                        }}
+                                      />
+                                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                        Authority: {contact.parr_analysis.authority}/5
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-600">Preference:</span>
+                                    <div className="group relative">
+                                      <div 
+                                        className="w-3 h-3 rounded-full"
+                                        style={{
+                                          backgroundColor: contact.parr_analysis.preference === 1 ? '#ffbfba' :
+                                                         contact.parr_analysis.preference === 2 ? '#ff978f' :
+                                                         contact.parr_analysis.preference === 3 ? '#e05f55' :
+                                                         contact.parr_analysis.preference === 4 ? '#b32c22' :
+                                                         '#630801'
+                                        }}
+                                      />
+                                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                        Preference: {contact.parr_analysis.preference}/5
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-600">Role:</span>
+                                    <div className="group relative">
+                                      <div 
+                                        className="w-3 h-3 rounded-full"
+                                        style={{
+                                          backgroundColor: contact.parr_analysis.role === 1 ? '#ffbfba' :
+                                                         contact.parr_analysis.role === 2 ? '#ff978f' :
+                                                         contact.parr_analysis.role === 3 ? '#e05f55' :
+                                                         contact.parr_analysis.role === 4 ? '#b32c22' :
+                                                         '#630801'
+                                        }}
+                                      />
+                                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                        Role: {contact.parr_analysis.role}/5
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-sm text-gray-600 italic">
+                                  {contact.parr_analysis.parr_explanation}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}

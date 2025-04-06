@@ -173,6 +173,9 @@ const DealTimeline: React.FC = () => {
   const [browserId, setBrowserId] = useState<string>('');
   const [isInitialized, setIsInitialized] = useState(false);
 
+  // Add new state for dynamic loading message
+  const [loadingMessage, setLoadingMessage] = useState<string>('');
+
   // Initialize browser ID on component mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -632,6 +635,7 @@ const DealTimeline: React.FC = () => {
       const currentTime = Date.now();
       if (currentTime - lastFetched < DATA_EXPIRY_TIME) {
         // If data is fresh and for the same deal, just use the cached data
+        setLoadingMessage(`Using cached data for ${dealName}...`);
         if (!dealInfoRef.current) {
           fetchDealInfo(dealName);
         }
@@ -645,32 +649,40 @@ const DealTimeline: React.FC = () => {
     setLoadingStartTime(Date.now());
     setLoadingStage(1);
     setLoadingError(false);
+    setLoadingMessage(`Initializing timeline data for ${dealName} from URL...`);
     
     try {
       // First fetch activities count to inform the user
+      setLoadingMessage(`Counting activities for ${dealName}...`);
       const count = await fetchActivitiesCount(dealName);
       
       // Fetch deal info
+      setLoadingMessage(`Fetching deal information for ${dealName}...`);
       await fetchDealInfo(dealName);
       
       // Then fetch timeline data
       console.log(`[Timeline] Fetching timeline data for: ${dealName} from URL`);
+      setLoadingMessage(`Fetching timeline data for ${dealName}...`);
       const response = await makeApiCall(`/api/hubspot/deal-timeline?dealName=${encodeURIComponent(dealName)}`);
       
       if (response) {
+        setLoadingMessage(`Processing timeline data for ${dealName}...`);
         const data = await response.json();
         
         // Verify the deal name matches before updating state
         if (selectedDealRef.current?.name === dealName) {
           updateState('dealTimeline.activities', data);
           updateState('dealTimeline.lastFetched', Date.now());
+          setLoadingMessage(`Timeline data loaded successfully for ${dealName}!`);
         } else {
           console.warn(`Deal name mismatch: URL deal=${dealName}, current deal=${selectedDealRef.current?.name}`);
+          setLoadingMessage(`Error: Deal name mismatch. Please refresh the page.`);
         }
       }
     } catch (error) {
       console.error('[Timeline] Error fetching timeline:', error);
       setLoadingError(true);
+      setLoadingMessage(`Error loading timeline data for ${dealName}.`);
       updateState('dealTimeline.error', 'Failed to load timeline data. Please try again.');
     } finally {
       updateState('dealTimeline.loading', false);
@@ -1988,6 +2000,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
   // Check if we already have the contacts for this meeting in state
   if (meetingContacts[key]) {
     console.log(`Using cached contacts for meeting: ${key}`);
+    setLoadingMessage(`Using cached contact data for "${subject || 'Meeting'}" on ${date}`);
     return meetingContacts[key];
   }
 
@@ -1999,6 +2012,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
         const savedContacts = JSON.parse(saved);
         if (savedContacts[key]) {
           console.log(`Using localStorage contacts for meeting: ${key}`);
+          setLoadingMessage(`Loading stored contact data for "${subject || 'Meeting'}" on ${date}`);
           // Update state with saved data
           setMeetingContacts(prev => ({
             ...prev,
@@ -2014,6 +2028,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
   
   try {
     console.log(`MAKING CHAMPION CALL for meeting: ${key}`);
+    setLoadingMessage(`Analyzing transcripts for "${subject || 'Meeting'}" on ${date}...`);
     
     // Ensure we have a valid deal name
     if (!selectedDealRef.current?.name) {
@@ -2027,6 +2042,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
     const response = await makeApiCall(url);
     
     if (response) {
+      setLoadingMessage(`Processing contact data for "${subject || 'Meeting'}" on ${date}...`);
       const data = await response.json();
       console.log(`Champion API Response for date: ${date}`, {
         totalContacts: data.total_contacts,
@@ -2037,17 +2053,20 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
       // Validate the response data
       if (!data || typeof data !== 'object') {
         console.error('Invalid response format for contacts:', data);
+        setLoadingMessage(`Error: Invalid contact data for "${subject || 'Meeting'}" on ${date}`);
         return null;
       }
       
       // Validate required fields
       if (!Array.isArray(data.contacts)) {
         console.error('Missing or invalid contacts array in response:', data);
+        setLoadingMessage(`Error: Missing contact data for "${subject || 'Meeting'}" on ${date}`);
         return null;
       }
       
       // Only update state if we're still working with the same deal
       if (selectedDealRef.current?.name) {
+        setLoadingMessage(`Found ${data.total_contacts} contacts with ${data.champions_count} champions for "${subject || 'Meeting'}" on ${date}`);
         // Use functional update to avoid stale state
         setMeetingContacts(prev => {
           // Don't update if we already have this data
@@ -2065,6 +2084,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
     if (error instanceof Error) {
       if (error.message.includes('409')) {
         console.log('Request was cancelled, skipping...');
+        setLoadingMessage('Request was cancelled, proceeding with next step...');
       } else {
         console.error('Error fetching meeting contacts:', {
           error: error.message,
@@ -2073,11 +2093,12 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
           dealName: selectedDealRef.current?.name,
           stack: error.stack
         });
+        setLoadingMessage(`Error analyzing contacts for "${subject || 'Meeting'}" on ${date}: ${error.message}`);
       }
     }
     return null;
   }
-}, [makeApiCall, meetingContacts]);
+}, [makeApiCall, meetingContacts, setLoadingMessage]);
 
   // Update handleGetTimeline to use makeApiCall
   const handleGetTimeline = useCallback(async (deal: Deal | null = null, forceRefresh = false) => {
@@ -2104,20 +2125,24 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
     setLoadingStartTime(Date.now());
     setLoadingStage(1);
     setLoadingError(false);
+    setLoadingMessage(`Initializing timeline data for ${dealToUse.name}...`);
     
     try {
       console.log(`[Timeline] Getting timeline for deal: ${dealToUse.name}`);
       
       // Fetch activities count and deal info in parallel
+      setLoadingMessage(`Fetching activities count and deal info for ${dealToUse.name}...`);
       const [count, dealInfoResponse] = await Promise.all([
         fetchActivitiesCount(dealToUse.name),
         fetchDealInfo(dealToUse.name)
       ]);
       
       // Fetch timeline data
+      setLoadingMessage(`Fetching timeline data for ${dealToUse.name}...`);
       const response = await makeApiCall(`/api/hubspot/deal-timeline?dealName=${encodeURIComponent(dealToUse.name)}`);
       
       if (response) {
+        setLoadingMessage(`Processing timeline data for ${dealToUse.name}...`);
         const data = await response.json();
         
         // Only update state if we're still working with the same deal
@@ -2130,30 +2155,39 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
           if (meetingEvents.length > 0) {
             console.log(`[Timeline] Found ${meetingEvents.length} meetings, will fetch contacts sequentially...`);
             setLoadingChampions(true);
+            setLoadingMessage(`Found ${meetingEvents.length} meetings. Fetching contact details...`);
             
             // Process meetings sequentially with a delay between each
+            let completedCount = 0;
             for (const event of meetingEvents) {
               if (event.date_str && selectedDealRef.current?.name === dealToUse.name) {
                 try {
                   // Add a small delay between requests to prevent overwhelming the server
                   await new Promise(resolve => setTimeout(resolve, 100));
+                  completedCount++;
+                  setLoadingMessage(`Fetching contacts for meeting ${completedCount}/${meetingEvents.length}: ${event.subject || 'Untitled Meeting'}...`);
                   await fetchMeetingContacts(event.subject || '', event.date_str);
                 } catch (error) {
                   if (error instanceof Error && error.message.includes('409')) {
                     console.log('[Timeline] Request was cancelled, skipping...');
                   } else {
                     console.error('[Timeline] Error fetching meeting contacts:', error);
+                    setLoadingMessage(`Error fetching contacts for meeting: ${event.subject || 'Untitled Meeting'}`);
                   }
                 }
               }
             }
+            setLoadingMessage(`Completing timeline data analysis for ${dealToUse.name}...`);
             setLoadingChampions(false);
+          } else {
+            setLoadingMessage(`No meetings found for ${dealToUse.name}. Finalizing timeline...`);
           }
         }
       }
     } catch (error) {
       console.error('[Timeline] Error fetching timeline:', error);
       setLoadingError(true);
+      setLoadingMessage(`Error loading timeline data for ${dealToUse.name}`);
       updateState('dealTimeline.error', 'Failed to load timeline data. Please try again.');
     } finally {
       if (!loadingChampions) {
@@ -2222,6 +2256,7 @@ const handleDealChange = useCallback(async (selectedOption: any) => {
 const handleRefresh = useCallback(() => {
   if (selectedDealRef.current) {
     console.log('Manual refresh triggered for:', selectedDealRef.current.name);
+    setLoadingMessage(`Starting refresh for ${selectedDealRef.current.name}...`);
     
     // Reset all state
     cleanupState();
@@ -2245,11 +2280,14 @@ const handleRefresh = useCallback(() => {
     handleGetTimeline(selectedDealRef.current, true).then(() => {
       // After timeline loads, explicitly refresh champions
       console.log('[Refresh] Timeline loaded, refreshing champions...');
+      setLoadingMessage(`Timeline data loaded for ${selectedDealRef.current?.name}, finalizing display...`);
     }).catch(error => {
       console.error('[Refresh] Error during refresh sequence:', error);
+      setLoadingMessage(`Error refreshing data for ${selectedDealRef.current?.name}: ${error.message}`);
     });
   } else {
     setIsInitialLoad(true);
+    setLoadingMessage('Initializing deal data...');
   }
 }, [handleGetTimeline, cleanupState, updateState]);
 
@@ -2555,25 +2593,15 @@ return (
       <div className="text-center py-10">
         <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
         <p className="mt-3 text-lg font-medium">
-          {loadingStage === 1 && (
-                fetchingActivities ? (
-                  <span className="text-blue-600">Counting activities for {selectedDeal?.name}...</span>
-                ) : activitiesCount !== null ? (
-                  `Loading ${activitiesCount} activities for ${selectedDeal?.name}...`
-                ) : (
-                  <span>Loading deal timeline for <b>{selectedDeal?.name}</b>...</span>
-                )
-              )}
-              {loadingStage === 2 && (
-                <span className="text-orange-500">
-                  Loading deal timeline for <b>{selectedDeal?.name}</b>...
-                </span>
-              )}
-              {loadingStage === 3 && (
-                <span className="text-red-500">
-                  Loading deal timeline for <b>{selectedDeal?.name}</b>...
-                </span>
-              )}
+          {loadingMessage ? (
+            <span className={`text-blue-600 ${elapsedTime > 15 ? 'text-orange-500' : ''} ${elapsedTime > 80 ? 'text-red-500' : ''}`}>
+              {loadingMessage}
+            </span>
+          ) : (
+            <span className={`${elapsedTime > 15 ? 'text-orange-500' : ''} ${elapsedTime > 80 ? 'text-red-500' : ''}`}>
+              Loading deal timeline for <b>{selectedDeal?.name}</b>...
+            </span>
+          )}
         </p>
 
         <div className="mt-2 text-gray-600 font-mono">

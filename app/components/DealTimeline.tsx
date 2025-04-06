@@ -167,6 +167,7 @@ const DealTimeline: React.FC = () => {
 
   // Add state for stage filter
   const [selectedStages, setSelectedStages] = useState<Set<string>>(new Set());
+  const [selectedStagesInitialized, setSelectedStagesInitialized] = useState<boolean>(false);
 
   // Add session management state
   const [browserId, setBrowserId] = useState<string>('');
@@ -188,6 +189,7 @@ const DealTimeline: React.FC = () => {
 
   // Get unique stages from all deals
   const uniqueStages = useMemo(() => {
+    console.log('Recalculating uniqueStages, allDeals length:', allDeals.length);
     const stages = new Set<string>();
     allDeals.forEach(deal => {
       if (deal.stage) {
@@ -198,12 +200,15 @@ const DealTimeline: React.FC = () => {
     return stagesArray;
   }, [allDeals]);
 
-  // Initialize selectedStages with all stages when uniqueStages changes
+  // Initialize selectedStages with all stages only on first mount
   useEffect(() => {
-    if (uniqueStages.length > 0) {
+    // Initialize only once when component first mounts and uniqueStages are loaded
+    if (uniqueStages.length > 0 && !selectedStagesInitialized) {
+      console.log('Initializing selectedStages with all stages:', uniqueStages);
       setSelectedStages(new Set(uniqueStages));
+      setSelectedStagesInitialized(true);
     }
-  }, [uniqueStages]);
+  }, [uniqueStages, selectedStagesInitialized]);
 
   // Filter deals based on selected stages and search term
   const stageFilteredDeals = useMemo(() => {
@@ -295,12 +300,14 @@ const DealTimeline: React.FC = () => {
 
   // Handle stage filter toggle with new behavior
   const toggleStageFilter = (stage: string) => {
+    console.log('Toggle stage filter:', stage, 'Current state:', Array.from(selectedStages));
     setSelectedStages(prev => {
       const newSet = new Set(prev);
       
       // If this is the only selected stage, deselect it to show all stages
       if (newSet.size === 1 && newSet.has(stage)) {
         newSet.clear();
+        console.log('Clearing all filters');
         return newSet;
       }
       
@@ -308,14 +315,17 @@ const DealTimeline: React.FC = () => {
       if (newSet.size === uniqueStages.length) {
         newSet.clear();
         newSet.add(stage);
+        console.log('Selecting only:', stage);
         return newSet;
       }
       
       // Otherwise, toggle this stage
       if (newSet.has(stage)) {
         newSet.delete(stage);
+        console.log('Removing stage:', stage);
       } else {
         newSet.add(stage);
+        console.log('Adding stage:', stage);
       }
       
       return newSet;
@@ -338,6 +348,8 @@ const DealTimeline: React.FC = () => {
     setStartIndex(0);
     setEndIndex(0);
     setCurrentDealId(null);
+    // Deliberately NOT resetting selectedStages and selectedStagesInitialized
+    // to preserve stage filter selections when changing deals
   }, []);
 
   // Utility to check if a date is valid
@@ -348,8 +360,10 @@ const DealTimeline: React.FC = () => {
 
   // Update refs when values change - this prevents infinite loops
   useEffect(() => {
+    console.log('Selected deal changed:', selectedDeal?.name, 
+                'Current stage filters:', Array.from(selectedStages));
     selectedDealRef.current = selectedDeal;
-  }, [selectedDeal]);
+  }, [selectedDeal, selectedStages]);
 
   useEffect(() => {
     timelineDataRef.current = timelineData;
@@ -2424,7 +2438,7 @@ return (
                       setSelectedOption({ value: deal.id, label: deal.name });
                       setCurrentDealId(deal.id);
                       
-                      // Load timeline
+                      // Load timeline without resetting selectedStages
                       handleGetTimeline(deal);
                     }
                   }}

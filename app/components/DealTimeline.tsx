@@ -528,7 +528,7 @@ const DealTimeline: React.FC = () => {
         let errorText;
         try {
           const errorData = await response.json();
-          errorText = JSON.stringify(errorData);
+          errorText = errorData.error || JSON.stringify(errorData);
         } catch (e) {
           errorText = await response.text();
         }

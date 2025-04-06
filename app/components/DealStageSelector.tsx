@@ -500,7 +500,7 @@ const DealStageSelector: React.FC = () => {
     const stageInfo = availableStages.find(s => s.stage_name === stageName);
     
     if (isActive) {
-      classes += "bg-blue-600 text-white ";
+      classes += "bg-sky-600 text-white ";
     } else if (stageInfo?.closed_won) {
       classes += "bg-gray-200 text-gray-800 hover:bg-gray-300 ";
     } else if (stageInfo?.closed_lost) {
@@ -597,14 +597,14 @@ const DealStageSelector: React.FC = () => {
     if (sortDirection === 'asc') {
       // Ascending sort
       return (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-blue-600" viewBox="0 0 20 20" fill="currentColor">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-sky-600" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
         </svg>
       );
     } else if (sortDirection === 'desc') {
       // Descending sort
       return (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-blue-600" viewBox="0 0 20 20" fill="currentColor">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1 text-sky-600" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
         </svg>
       );
@@ -628,7 +628,7 @@ const DealStageSelector: React.FC = () => {
       cell: info => (
         <button
           onClick={() => navigateToDealTimeline(info.getValue())}
-          className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left"
+          className="font-medium text-sky-600 hover:text-sky-800 hover:underline text-left"
         >
           {info.getValue()}
         </button>
@@ -709,7 +709,7 @@ const DealStageSelector: React.FC = () => {
               <div
                 key={stage.stage_id}
                 className={`p-4 cursor-pointer hover:bg-gray-50 ${
-                  selectedStage === stage.stage_name ? 'bg-blue-50' : ''
+                  selectedStage === stage.stage_name ? 'bg-sky-50' : ''
                 }`}
                 onClick={() => handleStageSelect(stage.stage_name)}
               >
@@ -724,7 +724,7 @@ const DealStageSelector: React.FC = () => {
                     </div>
                   </div>
                   {selectedStage === stage.stage_name && (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" viewBox="0 0 20 20" fill="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-sky-600" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
                   )}
@@ -752,7 +752,7 @@ const DealStageSelector: React.FC = () => {
               )}
               <button
                 onClick={handleRefresh}
-                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors text-sm flex items-center"
+                className="px-3 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded transition-colors text-sm flex items-center"
                 disabled={stagesLoading}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -783,7 +783,7 @@ const DealStageSelector: React.FC = () => {
                   placeholder="Search deals..."
                   value={searchTerm}
                   onChange={handleSearchChange}
-                  className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                 />
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                   <svg 

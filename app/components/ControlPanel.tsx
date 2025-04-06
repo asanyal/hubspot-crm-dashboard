@@ -1,7 +1,7 @@
 // app/components/ControlPanel.tsx
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { useRouter } from 'next/navigation';
 import { useAppState } from '../context/AppContext';
@@ -19,6 +19,12 @@ const ControlPanel: React.FC = () => {
   const { sortBy, pipelineData, loading, error, lastFetched } = state.controlPanel;
   const [isDark, setIsDark] = useState<boolean>(false);
   const router = useRouter();
+
+  console.log('ControlPanel rendered:', {
+    hasData: pipelineData.length > 0,
+    loading,
+    lastFetched
+  });
 
   // Define the funnel order for stages
   const funnelOrder = [
@@ -42,20 +48,6 @@ const ControlPanel: React.FC = () => {
   // Add session management state
   const [browserId, setBrowserId] = useState<string>('');
   const [isInitialized, setIsInitialized] = useState(false);
-
-  // Initialize browser ID on component mount
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      let id = localStorage.getItem('browserId');
-      if (!id) {
-        id = crypto.randomUUID();
-        localStorage.setItem('browserId', id);
-      }
-      console.log('Initializing browser ID:', id); // Debug log
-      setBrowserId(id);
-      setIsInitialized(true);
-    }
-  }, []);
 
   // Utility function for making API calls with session management
   const makeApiCall = useCallback(async (url: string, options: RequestInit = {}) => {
@@ -138,6 +130,70 @@ const ControlPanel: React.FC = () => {
     }
   }, [browserId, isInitialized]);
 
+  // Function to fetch data - declare BEFORE using in useEffect
+  const fetchPipelineData = useCallback(async () => {
+    try {
+      // Set loading state
+      updateState('controlPanel.loading', true);
+      updateState('controlPanel.error', null);
+      
+      console.log('Fetching pipeline data...');
+      
+      // Make the API call
+      const response = await makeApiCall('/api/hubspot/pipeline-summary');
+      
+      if (response) {
+        const data = await response.json();
+        console.log('Pipeline data fetched:', data ? `${data.length} items` : 'no data');
+        
+        // Update the state with the new data
+        updateState('controlPanel.pipelineData', data);
+        updateState('controlPanel.lastFetched', Date.now());
+      }
+      
+      // Always update loading state regardless of result
+      updateState('controlPanel.loading', false);
+    } catch (error) {
+      console.error('Error fetching pipeline data:', error);
+      updateState('controlPanel.loading', false);
+      updateState('controlPanel.error', 'Failed to load pipeline data');
+    }
+  }, [updateState, makeApiCall]);
+
+  // ULTRA SIMPLIFIED APPROACH
+  // Initialize browser ID only once on component mount
+  useEffect(() => {
+    // This effect runs once on mount and sets up browser ID
+    if (typeof window !== 'undefined') {
+      let id = localStorage.getItem('browserId');
+      if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem('browserId', id);
+      }
+      console.log('Initializing browser ID:', id);
+      setBrowserId(id);
+      setIsInitialized(true);
+    }
+    return () => {
+      console.log('Browser ID effect cleanup');
+    };
+  }, []); // Empty dependency array = run once
+
+  // ONE simple effect to fetch data when needed
+  useEffect(() => {
+    // Only proceed if initialized
+    if (!isInitialized) return;
+    
+    console.log('Main effect running, checking if we need to fetch data');
+    // Check if we need to load data
+    if (pipelineData.length === 0 && !loading) {
+      console.log('No data and not loading - fetching data');
+      // Wrap in function to avoid dependency
+      const loadData = () => fetchPipelineData();
+      loadData();
+    }
+  }, [isInitialized, pipelineData.length, loading]); // Removed fetchPipelineData
+
   // Check dark mode on component mount and when it changes
   useEffect(() => {
     // Check initial state
@@ -170,60 +226,6 @@ const ControlPanel: React.FC = () => {
       return () => observer.disconnect();
     }
   }, []);
-
-  // Fetch pipeline data if needed
-  useEffect(() => {
-    // Only run if component is mounted and initialized
-    const isComponentMounted = true;
-    
-    const currentTime = Date.now();
-    const shouldFetchData = 
-      pipelineData.length === 0 || 
-      !lastFetched || 
-      (currentTime - lastFetched > DATA_EXPIRY_TIME);
-    
-    // Only fetch if needed, not already loading, and initialized
-    if (shouldFetchData && !loading && isComponentMounted && isInitialized) {
-      fetchPipelineData();
-    }
-    
-    return () => {
-      // Cleanup function
-    };
-  }, [lastFetched, isInitialized]); // Add isInitialized to dependencies
-  
-  // Function to fetch data
-  const fetchPipelineData = async () => {
-    try {
-      // Only set loading if not already loading
-      if (!loading) {
-        updateState('controlPanel.loading', true);
-      }
-      updateState('controlPanel.error', null);
-      
-      console.log('Fetching pipeline data...');
-      const response = await makeApiCall('/api/hubspot/pipeline-summary');
-      if (response) {
-        const data = await response.json();
-        
-        // Check if the data is different from current data before updating
-        const dataChanged = JSON.stringify(data) !== JSON.stringify(pipelineData);
-        
-        if (dataChanged) {
-          // Update pipeline data only if changed
-          updateState('controlPanel.pipelineData', data);
-        }
-      }
-      
-      // Always update timestamp and loading state
-      updateState('controlPanel.loading', false);
-      updateState('controlPanel.lastFetched', Date.now());
-    } catch (error) {
-      console.error('Error fetching pipeline data:', error);
-      updateState('controlPanel.loading', false);
-      updateState('controlPanel.error', 'Failed to load pipeline data');
-    }
-  };
 
   // Format number as currency
   const formatCurrency = (amount: number): string => {
@@ -307,6 +309,9 @@ const ControlPanel: React.FC = () => {
 
   // Handle manual refresh
   const handleRefresh = () => {
+    console.log('Manual refresh triggered');
+    // Simplified approach - just reset loading and fetch
+    updateState('controlPanel.loading', false);
     fetchPipelineData();
   };
 
@@ -359,10 +364,33 @@ const ControlPanel: React.FC = () => {
     );
   };
 
+  // Add a safety timeout to reset loading state if it gets stuck
+  useEffect(() => {
+    // If loading is true, set a timeout to reset it after 10 seconds
+    if (loading) {
+      console.log('Loading timeout safety started');
+      const timeoutId = setTimeout(() => {
+        console.log('Loading timeout safety triggered - resetting loading state');
+        updateState('controlPanel.loading', false);
+      }, 10000); // 10 seconds timeout
+      
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    }
+  }, [loading, updateState]);
+
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div className="flex flex-col justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-indigo-400"></div>
+        <p className="mt-4 text-gray-600 dark:text-gray-300">Loading pipeline data...</p>
+        <button 
+          className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white rounded transition-colors"
+          onClick={handleRefresh}
+        >
+          Reset
+        </button>
       </div>
     );
   }

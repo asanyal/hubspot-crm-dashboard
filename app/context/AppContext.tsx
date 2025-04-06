@@ -88,7 +88,7 @@ interface AppState {
     lastFetched: number | null;
   };
   controlPanel: {
-    sortBy: 'count' | 'amount';
+    sortBy: 'count' | 'amount' | 'funnel';
     pipelineData: PipelineData[];
     loading: boolean;
     error: string | null;
@@ -148,11 +148,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const savedState = localStorage.getItem('appState');
       if (savedState) {
         const parsedState = JSON.parse(savedState);
+        
+        // Reset all loading states to prevent stuck UI
+        parsedState.dealTimeline.loading = false;
+        parsedState.dealsByStage.loading = false;
+        parsedState.dealsByStage.stagesLoading = false;
+        parsedState.controlPanel.loading = false;
+        
         setState(parsedState);
+        console.log('Restored state from localStorage with reset loading states');
       }
     } catch (error) {
       console.error('Error loading state from localStorage:', error);
     }
+    
+    // IIFE workaround to reset loading states after a small delay
+    (async () => {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setState(prevState => {
+        // Create a deep clone to ensure immutability
+        const newState = JSON.parse(JSON.stringify(prevState));
+        
+        // Reset all loading states
+        newState.dealTimeline.loading = false;
+        newState.dealsByStage.loading = false;
+        newState.dealsByStage.stagesLoading = false;
+        newState.controlPanel.loading = false;
+        
+        return newState;
+      });
+    })();
   }, []);
   
   // Save state to localStorage whenever it changes

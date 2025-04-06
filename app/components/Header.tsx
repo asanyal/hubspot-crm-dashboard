@@ -28,7 +28,7 @@ const Header: React.FC = () => {
   // Active link style
   const isActive = (path: string) => {
     return pathname === path ? 
-      'bg-indigo-50 text-indigo-700 dark:bg-slate-700 dark:text-indigo-300' : 
+      'bg-teal-50 text-teal-700 dark:bg-slate-700 dark:text-teal-300' : 
       'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700';
   };
 
@@ -37,8 +37,15 @@ const Header: React.FC = () => {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
-            <Link href="/" className="flex-shrink-0 font-bold text-xl text-indigo-600 dark:text-indigo-400 font-serif hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors">
-              Spotlight
+            <Link href="/" className="flex-shrink-0 font-bold text-xl text-teal-600 dark:text-teal-400 flex items-center group transition-all duration-300">
+              <span className="mr-1.5 text-teal-500 dark:text-teal-300">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 transform group-hover:rotate-12 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              </span>
+              <span className="font-extrabold tracking-tight font-sans">SPOT</span>
+              <span className="font-light tracking-wider font-sans">LIGHT</span>
+              <span className="ml-1 h-1.5 w-1.5 rounded-full bg-teal-500 dark:bg-teal-300 group-hover:bg-teal-400 transition-colors"></span>
             </Link>
             <nav className="ml-10 flex space-x-2">
               <Link href="/" 

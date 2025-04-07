@@ -176,6 +176,12 @@ const DealTimeline: React.FC = () => {
   // Add new state for dynamic loading message
   const [loadingMessage, setLoadingMessage] = useState<string>('');
 
+  // Add state for company overview
+  const [companyOverview, setCompanyOverview] = useState<string | null>(null);
+  const [loadingOverview, setLoadingOverview] = useState<boolean>(false);
+  
+
+
   // Initialize browser ID on component mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -578,6 +584,25 @@ const DealTimeline: React.FC = () => {
       throw error;
     }
   }, [browserId, isInitialized]);
+
+  // Function to fetch company overview
+  const fetchCompanyOverview = useCallback(async (dealName: string) => {
+    try {
+      console.log(`Fetching company overview for: ${dealName}`);
+      setLoadingOverview(true);
+      const response = await makeApiCall(`/api/hubspot/company-overview?dealName=${encodeURIComponent(dealName)}`);
+      
+      if (response) {
+        const data = await response.json();
+        setCompanyOverview(data.overview);
+      }
+    } catch (error) {
+      console.error('Error fetching company overview:', error);
+      setCompanyOverview(null);
+    } finally {
+      setLoadingOverview(false);
+    }
+  }, [makeApiCall]);
 
   // Update fetchDealInfo to use makeApiCall
   const fetchDealInfo = useCallback(async (dealName: string) => {
@@ -2398,6 +2423,15 @@ useEffect(() => {
   }
 }, [browserId]);
 
+// Fetch company overview when the selected deal changes
+useEffect(() => {
+  // Only fetch company overview after everything else has loaded
+  if (selectedDeal?.name && !loading && timelineData) {
+    console.log('Timeline loaded, now fetching company overview...');
+    fetchCompanyOverview(selectedDeal.name);
+  }
+}, [selectedDeal?.name, fetchCompanyOverview, loading, timelineData]);
+
 return (
   <div className="flex h-screen" suppressHydrationWarning>
     {/* Sidebar */}
@@ -2526,7 +2560,28 @@ return (
       <div className="flex items-center gap-4">
         {/* <h1 className="text-2xl font-bold">Deal Timeline</h1> */}
         {selectedDeal && (
-          <span className="text-2xl font-bold text-gray-600">{selectedDeal.name}</span>
+          <div className="flex items-center">
+            <span className="text-2xl font-bold text-gray-600">{selectedDeal.name}</span>
+            <div className="relative inline-block ml-2">
+              <div className="cursor-help group">
+                <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 text-sm hover:bg-gray-300 transition-colors">
+                  ?
+                </div>
+                <div className="absolute z-10 invisible group-hover:visible bg-white p-4 rounded-md shadow-lg border border-gray-200 w-72 sm:w-96 left-0 top-full mt-1">
+                  {loadingOverview ? (
+                    <div className="flex items-center justify-center py-2">
+                      <div className="animate-spin h-4 w-4 border-2 border-sky-500 rounded-full border-t-transparent mr-2"></div>
+                      <p className="text-sm text-gray-500">Loading company overview...</p>
+                    </div>
+                  ) : companyOverview ? (
+                    <p className="text-sm text-gray-700">{companyOverview}</p>
+                  ) : (
+                    <p className="text-sm text-gray-500">No company information available</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
       

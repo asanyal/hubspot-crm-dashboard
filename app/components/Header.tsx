@@ -60,6 +60,10 @@ const Header: React.FC = () => {
                     className={`px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${isActive('/deal-timeline')}`}>
                 Deal Timeline
               </Link>
+              <Link href="/ama" 
+                    className={`px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${isActive('/ama')}`}>
+                AMA
+              </Link>
             </nav>
           </div>
           

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppProvider } from './context/AppContext';
 import Header from './components/Header';
+import DynamicTitle from './components/DynamicTitle';
 import "./globals.css";
 
 const geistSans = Geist({
@@ -51,6 +52,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased bg-white dark:bg-gray-900">
         <AppProvider>
+          <DynamicTitle />
           <Header />
           <main>
             {children}

@@ -1,0 +1,45 @@
+import { NextResponse } from 'next/server';
+import { makeApiCall } from '@/app/utils/api';
+
+export async function POST(request: Request) {
+  try {
+    const { message } = await request.json();
+    const browserId = request.headers.get('X-Browser-ID');
+
+    if (!message) {
+      return NextResponse.json(
+        { error: 'Missing query parameter' },
+        { status: 400 }
+      );
+    }
+
+    // Make API call to the ask-customer endpoint
+    const response = await fetch('http://localhost:8000/api/hubspot/ask-customer', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Browser-ID': browserId || ''
+      },
+      body: JSON.stringify({
+        query: message
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      return NextResponse.json(
+        { error: errorData.detail || 'Failed to process chat message' },
+        { status: response.status }
+      );
+    }
+
+    const data = await response.json();
+    return NextResponse.json({ response: data.answer });
+  } catch (error) {
+    console.error('Error in chat endpoint:', error);
+    return NextResponse.json(
+      { error: 'Failed to process chat message' },
+      { status: 500 }
+    );
+  }
+} 

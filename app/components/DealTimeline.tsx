@@ -842,7 +842,7 @@ const DealTimeline: React.FC = () => {
           updateState('dealTimeline.loading', false);
           updateState('dealTimeline.error', 'Request timed out. Please try again.');
         }
-      }, 600000);
+      }, 1800000);
     }
     
     return () => {
@@ -899,23 +899,36 @@ const DealTimeline: React.FC = () => {
 
 // Fetch all deals after component mounts and when needed
   useEffect(() => {
-    if (!hasMounted) return;
+    if (!hasMounted || !isInitialized) return;
     
     // Track if component is mounted (for async operations)
     let isMounted = true;
     
     // Only fetch if we don't have any deals or if this is the initial load
     if (allDeals.length === 0 || isInitialLoad) {
-    const fetchAllDeals = async () => {
-      try {
-        if (isMounted) {
-          setDealsLoading(true);
-        }
-        
-        const response = await makeApiCall('/api/hubspot/all-deals');
-        
-        if (response) {
-          const data: Deal[] = await response.json();
+      const fetchAllDeals = async () => {
+        try {
+          if (isMounted) {
+            setDealsLoading(true);
+          }
+          
+          const response = await makeApiCall('/api/hubspot/all-deals');
+          
+          if (!response) {
+            throw new Error('No response from server');
+          }
+
+          if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+          }
+          
+          const data = await response.json();
+          
+          // Validate that data is an array
+          if (!Array.isArray(data)) {
+            console.error('Invalid response format: expected an array of deals');
+            throw new Error('Invalid response format from server');
+          }
           
           if (isMounted) {
             updateState('dealTimeline.deals', data);
@@ -944,28 +957,27 @@ const DealTimeline: React.FC = () => {
             // Clear any stale error state
             updateState('dealTimeline.error', null);
           }
+        } catch (error) {
+          console.error('Error fetching deals:', error);
+          if (isMounted) {
+            updateState('dealTimeline.error', 'Failed to load deals. Please try again.');
+          }
+        } finally {
+          if (isMounted) {
+            setDealsLoading(false);
+            setIsInitialLoad(false);
+          }
         }
-      } catch (error) {
-        console.error('Error fetching deals:', error);
-        if (isMounted) {
-          updateState('dealTimeline.error', 'Failed to load deals. Please try again.');
-        }
-      } finally {
-        if (isMounted) {
-          setDealsLoading(false);
-          setIsInitialLoad(false);
-        }
-      }
-    };
+      };
 
-    fetchAllDeals();
+      fetchAllDeals();
     }
     
     // Cleanup function
     return () => {
       isMounted = false;
     };
-  }, [hasMounted, isInitialLoad, makeApiCall, updateState, selectedDeal]);
+  }, [hasMounted, isInitialLoad, makeApiCall, updateState, selectedDeal, isInitialized]);
 
   useEffect(() => {
     if (timelineData && timelineData.events && timelineData.start_date && timelineData.end_date) {

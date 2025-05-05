@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { API_CONFIG } from '@/app/utils/config';
 
 export async function GET(request: Request) {
   try {
@@ -17,16 +18,16 @@ export async function GET(request: Request) {
       );
     }
 
+    const apiPath = API_CONFIG.getApiPath('/deal-timeline');
+    const backendUrl = `http://localhost:8000${apiPath}?dealName=${encodeURIComponent(dealName)}`;
+
     // Forward the request to the backend server
-    const response = await fetch(
-      `http://localhost:8000/api/hubspot/deal-timeline?dealName=${encodeURIComponent(dealName)}`,
-      {
-        headers: {
-          'X-Browser-ID': browserId || '',
-          'X-Session-ID': sessionId || '',
-        },
-      }
-    );
+    const response = await fetch(backendUrl, {
+      headers: {
+        'X-Browser-ID': browserId || '',
+        'X-Session-ID': sessionId || '',
+      },
+    });
 
     // Get the response data
     const data = await response.json();

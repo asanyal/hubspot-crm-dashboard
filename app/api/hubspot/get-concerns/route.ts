@@ -15,20 +15,23 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const dealName = searchParams.get('dealName');
-    const date = searchParams.get('date');
+    const callTitle = searchParams.get('call_title');
+    const callDate = searchParams.get('call_date');
     
-    if (!dealName || !date) {
+    if (!callTitle || !callDate) {
       return NextResponse.json(
-        { error: 'Deal name and date parameters are required' },
+        { error: 'Call title and date parameters are required' },
         { status: 400 }
       );
     }
 
-    console.log(`Fetching contacts and champions for deal: ${dealName} on date: ${date}`);
+    console.log(`Fetching concerns for call: ${callTitle} on date: ${callDate}`);
     
-    const apiPath = API_CONFIG.getApiPath('/contacts-and-champion');
-    const backendUrl = `http://localhost:8000${apiPath}?dealName=${encodeURIComponent(dealName)}&date=${encodeURIComponent(date)}`;
+    const apiPath = API_CONFIG.getApiPath('/get-concerns');
+    const backendUrl = `http://localhost:8000${apiPath}?call_title=${encodeURIComponent(callTitle)}&call_date=${encodeURIComponent(callDate)}`;
+    
+    // Log the actual URL being called
+    console.log('Making request to backend URL:', backendUrl);
     
     // Forward the request to the backend server
     const response = await fetch(backendUrl, {
@@ -62,9 +65,9 @@ export async function GET(request: Request) {
 
     return nextResponse;
   } catch (error) {
-    console.error('Error fetching contacts and champions:', error);
+    console.error('Error fetching concerns:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch contacts and champions' },
+      { error: 'Failed to fetch concerns' },
       { status: 500 }
     );
   }

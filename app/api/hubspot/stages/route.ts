@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { API_CONFIG } from '@/app/utils/config';
 
 export async function GET(request: Request) {
   try {
@@ -6,8 +7,11 @@ export async function GET(request: Request) {
     const browserId = request.headers.get('X-Browser-ID');
     const sessionId = request.headers.get('X-Session-ID');
 
+    const apiPath = API_CONFIG.getApiPath('/stages');
+    const backendUrl = `http://localhost:8000${apiPath}`;
+
     // Forward the request to the backend server
-    const response = await fetch('http://localhost:8000/api/hubspot/stages', {
+    const response = await fetch(backendUrl, {
       headers: {
         'X-Browser-ID': browserId || '',
         'X-Session-ID': sessionId || '',

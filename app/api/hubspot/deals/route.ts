@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { API_CONFIG } from '@/app/utils/config';
 
 export async function GET(request: Request) {
   try {
@@ -10,13 +11,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const stage = searchParams.get('stage');
 
-    // Construct the URL with the stage parameter if it exists
-    const url = stage 
-      ? `http://localhost:8000/api/hubspot/deals?stage=${encodeURIComponent(stage)}`
-      : 'http://localhost:8000/api/hubspot/deals';
+    const apiPath = API_CONFIG.getApiPath('/deals');
+    const backendUrl = stage 
+      ? `http://localhost:8000${apiPath}?stage=${encodeURIComponent(stage)}`
+      : `http://localhost:8000${apiPath}`;
 
     // Forward the request to the backend server
-    const response = await fetch(url, {
+    const response = await fetch(backendUrl, {
       headers: {
         'X-Browser-ID': browserId || '',
         'X-Session-ID': sessionId || '',

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { makeApiCall } from '@/app/utils/api';
+import { API_CONFIG } from '@/app/utils/config';
 
 export async function POST(request: Request) {
   try {
@@ -13,8 +13,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const apiPath = API_CONFIG.getApiPath('/ask-customer');
+    const backendUrl = `http://localhost:8000${apiPath}`;
+
     // Make API call to the ask-customer endpoint
-    const response = await fetch('http://localhost:8000/api/hubspot/ask-customer', {
+    const response = await fetch(backendUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

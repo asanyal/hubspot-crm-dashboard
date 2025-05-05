@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { API_CONFIG } from '@/app/utils/config';
 
 export async function GET(request: Request) {
   try {
@@ -13,9 +14,12 @@ export async function GET(request: Request) {
       );
     }
 
+    const apiPath = API_CONFIG.getApiPath('/all-deals');
+    const backendUrl = `http://localhost:8000${apiPath}`;
+
     // Forward the request to the backend server
     const response = await fetch(
-      'http://localhost:8000/api/hubspot/all-deals',
+      backendUrl,
       {
         headers: {
           'X-Browser-ID': browserId,

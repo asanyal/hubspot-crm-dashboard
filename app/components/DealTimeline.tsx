@@ -31,17 +31,24 @@ interface ContactsData {
 }
 
 interface Event {
-  id: string;
-  date_str: string;
-  time_str: string;
-  type: string;
-  subject: string;
-  content: string;
+  // V1 format fields
+  id?: string;
+  date_str?: string;
+  time_str?: string;
+  type?: string;
+  subject?: string;
+  content?: string;
   content_preview?: string;
   sentiment?: string;
   buyer_intent?: string;
   buyer_intent_explanation?: string;
   business_pain?: string;
+  
+  // V2 format fields
+  event_id?: string;
+  event_type?: string;
+  event_date?: string;
+  engagement_id?: string;
 }
 
 interface TimelineData {
@@ -82,6 +89,22 @@ interface BarProps {
     date: string;
     hasLessLikelyToBuy?: boolean;
     [key: string]: any;
+  };
+}
+
+// Add new interface for concerns
+interface Concerns {
+  pricing_concerns: {
+    has_concerns: boolean;
+    explanation: string;
+  };
+  no_decision_maker: {
+    is_issue: boolean;
+    explanation: string;
+  };
+  already_has_vendor: {
+    has_vendor: boolean;
+    explanation: string;
   };
 }
 
@@ -180,7 +203,9 @@ const DealTimeline: React.FC = () => {
   const [companyOverview, setCompanyOverview] = useState<string | null>(null);
   const [loadingOverview, setLoadingOverview] = useState<boolean>(false);
   
-
+  // Add new state for concerns
+  const [concerns, setConcerns] = useState<Concerns | null>(null);
+  const [loadingConcerns, setLoadingConcerns] = useState<boolean>(false);
 
   // Initialize browser ID on component mount
   useEffect(() => {
@@ -1679,7 +1704,8 @@ const EventDrawer = () => {
 };
 
 // Add this helper function before the DealLogs component
-const isFutureDate = (dateStr: string): boolean => {
+const isFutureDate = (dateStr: string | undefined): boolean => {
+  if (!dateStr) return false;
   const date = new Date(dateStr);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -1698,13 +1724,27 @@ const DealLogs: React.FC<{ events: Event[] }> = ({ events }) => {
 
   // Sort events by date and time in reverse chronological order
   const sortedEvents = [...events].sort((a, b) => {
-    const dateCompare = b.date_str.localeCompare(a.date_str);
-    if (dateCompare !== 0) return dateCompare;
-    return (b.time_str || '').localeCompare(a.time_str || '');
+    // Handle V2 format (event_date)
+    if (a.event_date && b.event_date) {
+      return b.event_date.localeCompare(a.event_date);
+    }
+    
+    // Handle V1 format (date_str + time_str)
+    if (a.date_str && b.date_str) {
+      const dateCompare = b.date_str.localeCompare(a.date_str);
+      if (dateCompare !== 0) return dateCompare;
+      return (b.time_str || '').localeCompare(a.time_str || '');
+    }
+    
+    // Fallback to comparing IDs if dates are not available
+    return (b.id || b.event_id || '').localeCompare(a.id || a.event_id || '');
   });
 
   // Filter events based on active filters
-  const filteredEvents = sortedEvents.filter(event => activeFilters[event.type] || false);
+  const filteredEvents = sortedEvents.filter(event => {
+    const eventType = event.type || event.event_type;
+    return eventType ? activeFilters[eventType] || false : false;
+  });
 
   // Function to toggle a filter
   const toggleFilter = (eventType: string) => {
@@ -1717,7 +1757,8 @@ const DealLogs: React.FC<{ events: Event[] }> = ({ events }) => {
   // Function to handle row click
   const handleRowClick = (event: Event, index: number) => {
     // Set the selected date to open the drawer
-    setSelectedDate(event.date_str);
+    const dateToUse = event.date_str || event.event_date?.split('T')[0] || null;
+    setSelectedDate(dateToUse);
     
     // Always open the drawer if it's closed
     setIsDrawerOpen(true);
@@ -1732,7 +1773,9 @@ const DealLogs: React.FC<{ events: Event[] }> = ({ events }) => {
   };
 
   // Function to get event type color
-  const getEventTypeColor = (type: string) => {
+  const getEventTypeColor = (type: string | undefined) => {
+    if (!type) return 'text-gray-600';
+    
     switch (type) {
       case 'Meeting':
         return 'text-red-600';
@@ -1746,7 +1789,9 @@ const DealLogs: React.FC<{ events: Event[] }> = ({ events }) => {
   };
 
   // Function to get event type background color for filter buttons
-  const getEventTypeBackgroundColor = (type: string) => {
+  const getEventTypeBackgroundColor = (type: string | undefined) => {
+    if (!type) return 'bg-gray-100';
+    
     switch (type) {
       case 'Meeting':
         return 'bg-red-100';
@@ -1761,23 +1806,27 @@ const DealLogs: React.FC<{ events: Event[] }> = ({ events }) => {
 
   // Function to get intent/sentiment color
   const getIntentSentimentColor = (event: Event) => {
-    if (event.type === 'Meeting' && event.buyer_intent) {
-      if (event.buyer_intent === 'Very likely to buy') {
+    const type = event.type || event.event_type;
+    const buyerIntent = event.buyer_intent;
+    const sentiment = event.sentiment;
+    
+    if (type === 'Meeting' && buyerIntent) {
+      if (buyerIntent === 'Very likely to buy') {
         return 'text-[#4bdb2e] font-bold';
-      } else if (event.buyer_intent === 'Likely to buy') {
+      } else if (buyerIntent === 'Likely to buy') {
         return 'text-green-700 font-medium';
-      } else if (event.buyer_intent === 'Less likely to buy') {
+      } else if (buyerIntent === 'Less likely to buy') {
         return 'text-red-600 font-medium';
       }
-    } else if (event.sentiment) {
-      if (event.sentiment === 'positive') {
+    } else if (sentiment) {
+      if (sentiment === 'positive') {
         return 'text-green-700 font-medium';
-      } else if (event.sentiment === 'negative') {
+      } else if (sentiment === 'negative') {
         return 'text-red-600 font-medium';
       }
     }
     return 'text-gray-600';
-};
+  };
 
 return (
     <div className="mt-8 bg-white rounded-lg shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-1px_rgba(0,0,0,0.06)]">
@@ -1819,99 +1868,92 @@ return (
         </div>
         <div className="divide-y divide-gray-100">
           {filteredEvents.length > 0 ? (
-            filteredEvents.map((event, index) => (
-              <div 
-                key={index} 
-                className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                onClick={() => handleRowClick(event, index)}
-                data-deal-log-row="true"
-              >
-                <div className="grid grid-cols-12 gap-4">
-                  {/* Date */}
-                  <div className="col-span-2">
-                    <span className={`text-gray-500 font-mono ${
-                      isFutureDate(event.date_str) ? 'text-blue-600 font-medium' : ''
-                    }`}>
-                      {(() => {
-                        const dateObj = new Date(event.date_str);
-                        
-                        // Check if time is 15:00 or later and add a day if needed
-                        if (event.time_str) {
-                          const timeParts = event.time_str.split(':');
-                          const hours = parseInt(timeParts[0], 10);
+            filteredEvents.map((event, index) => {
+              const eventDate = event.date_str || event.event_date?.split('T')[0];
+              const eventType = event.type || event.event_type;
+              const eventSubject = event.subject;
+              
+              return (
+                <div 
+                  key={index} 
+                  className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                  onClick={() => handleRowClick(event, index)}
+                  data-deal-log-row="true"
+                >
+                  <div className="grid grid-cols-12 gap-4">
+                    {/* Date */}
+                    <div className="col-span-2">
+                      <span className={`text-gray-500 font-mono ${
+                        eventDate && isFutureDate(eventDate) ? 'text-blue-600 font-medium' : ''
+                      }`}>
+                        {(() => {
+                          if (!eventDate) return 'No date';
                           
-                          if (hours >= 15) {
-                            dateObj.setDate(dateObj.getDate() + 1);
+                          const dateObj = new Date(eventDate);
+                          
+                          // Check if time is 15:00 or later and add a day if needed
+                          const timeStr = event.time_str || event.event_date?.split('T')[1];
+                          if (timeStr) {
+                            const timeParts = timeStr.split(':');
+                            const hours = parseInt(timeParts[0], 10);
+                            
+                            if (hours >= 15) {
+                              dateObj.setDate(dateObj.getDate() + 1);
+                            }
                           }
-                        }
-                        
-                        return (
-                          <span className="flex items-center gap-1">
-                            {dateObj.toLocaleDateString('en-US', { 
-                              day: '2-digit', 
-                              month: 'short',
-                              year: 'numeric'
-                            })}
-                            {isFutureDate(event.date_str) && (
-                              <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full">
-                                Upcoming
-                              </span>
-                            )}
-                          </span>
-                        );
-                      })()}
-                    </span>
-                  </div>
+                          
+                          return (
+                            <span className="flex items-center gap-1">
+                              {dateObj.toLocaleDateString('en-US', { 
+                                day: '2-digit', 
+                                month: 'short',
+                                year: 'numeric'
+                              })}
+                              {isFutureDate(eventDate) && (
+                                <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full">
+                                  Upcoming
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })()}
+                      </span>
+                    </div>
 
-                  {/* Event Type */}
-                  <div className="col-span-2">
-                    <span className={`font-medium ${getEventTypeColor(event.type)}`}>
-                      {event.type}
-                    </span>
-                  </div>
+                    {/* Event Type */}
+                    <div className="col-span-2">
+                      <span className={`font-medium ${getEventTypeColor(eventType)}`}>
+                        {eventType || 'Unknown'}
+                      </span>
+                    </div>
 
-                  {/* Intent/Sentiment */}
-                  <div className="col-span-2">
-                    {(event.type === 'Meeting' && event.buyer_intent) ? (
-                      <span className={getIntentSentimentColor(event)}>
-                        {event.buyer_intent}
-                      </span>
-                    ) : event.sentiment ? (
-                      <span className={getIntentSentimentColor(event)}>
-                        {event.sentiment}
-                      </span>
-                    ) : (
-                      <span className="text-gray-500">-</span>
-                    )}
-                  </div>
+                    {/* Intent/Sentiment */}
+                    <div className="col-span-2">
+                      {(eventType === 'Meeting' && event.buyer_intent) ? (
+                        <span className={getIntentSentimentColor(event)}>
+                          {event.buyer_intent}
+                        </span>
+                      ) : event.sentiment ? (
+                        <span className={getIntentSentimentColor(event)}>
+                          {event.sentiment}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </div>
 
-                  {/* Content */}
-                  <div className="col-span-6">
-                    {event.type === 'Meeting' && event.buyer_intent_explanation ? (
-                      <span className="text-gray-700">
-                        {event.buyer_intent_explanation}
+                    {/* Details */}
+                    <div className="col-span-6">
+                      <span className="text-gray-900">
+                        {eventSubject || 'No subject'}
                       </span>
-                    ) : event.content ? (
-                      <span className="text-gray-700">
-                        {event.content}
-                      </span>
-                    ) : event.subject ? (
-                      <span className="text-gray-700">
-                        {event.subject}
-                      </span>
-                    ) : (
-                      <span className="text-gray-700">
-                        {event.content_preview || 'No content available'}
-                      </span>
-                    )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
-            <div className="p-8 text-center text-gray-500">
-              No events match the selected filters. Try changing your filters.
-            </div>
+            <div className="p-4 text-gray-500 text-center">No events found</div>
           )}
         </div>
       </div>
@@ -2372,7 +2414,6 @@ useEffect(() => {
           const meetingKey = event.subject ? `${event.subject}_${event.date_str}` : `${dealName}_${event.date_str}`;
           const contactsData = meetingContacts[meetingKey];
           
-          console.log(`[Business Pain] Processing meeting: ${meetingKey}`, contactsData);
           
           if (contactsData && contactsData.contacts) {
             completedRequests++;
@@ -2443,6 +2484,41 @@ useEffect(() => {
     fetchCompanyOverview(selectedDeal.name);
   }
 }, [selectedDeal?.name, fetchCompanyOverview, loading, timelineData]);
+
+// Add new function to fetch concerns
+const fetchConcerns = useCallback(async (callTitle: string, callDate: string) => {
+  if (!callTitle || !callDate) return;
+  
+  setLoadingConcerns(true);
+  try {
+    const response = await makeApiCall(
+      `/api/hubspot/get-concerns?call_title=${encodeURIComponent(callTitle)}&call_date=${encodeURIComponent(callDate)}`
+    );
+    
+    if (response) {
+      const data = await response.json();
+      setConcerns(data);
+    }
+  } catch (error) {
+    console.error('Error fetching concerns:', error);
+  } finally {
+    setLoadingConcerns(false);
+  }
+}, [makeApiCall]);
+
+// Add effect to fetch concerns when timeline data changes
+useEffect(() => {
+  if (timelineData?.events) {
+    // Find the most recent meeting
+    const latestMeeting = timelineData.events
+      .filter(event => event.type === 'Meeting')
+      .sort((a, b) => new Date(b.date_str).getTime() - new Date(a.date_str).getTime())[0];
+
+    if (latestMeeting) {
+      fetchConcerns(latestMeeting.subject || '', latestMeeting.date_str);
+    }
+  }
+}, [timelineData, fetchConcerns]);
 
 return (
   <div className="flex h-screen" suppressHydrationWarning>
@@ -2747,7 +2823,7 @@ return (
                   </svg>
                 </div>
                 <div className="ml-4">
-                  <h4 className="text-sm font-medium text-gray-600">Likely/Very Likely to Buy</h4>
+                  <h4 className="text-sm font-medium text-gray-600">High-Intent Buying Signals</h4>
                   <button 
                     onClick={() => handleMetricClick('likely-buy')}
                     className="text-2xl font-bold text-green-600 hover:text-green-800 transition-colors cursor-pointer"
@@ -2779,6 +2855,155 @@ return (
                       e.type === 'Meeting' && e.buyer_intent === 'Less likely to buy'
                     ).length}
                   </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Challenges section */}
+        {timelineData && timelineData.events && (
+          <div className="mb-6 grid grid-cols-3 gap-4">
+            {/* Pricing Concerns */}
+            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+              <div className="flex items-center">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="ml-4">
+                  <h4 className="text-sm font-medium text-gray-600">Pricing Concerns</h4>
+                  {loadingConcerns ? (
+                    <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
+                  ) : concerns ? (
+                    <div className="group relative">
+                      <span className={`text-lg font-bold ${
+                        concerns.pricing_concerns.has_concerns ? 'text-red-600' : 'text-green-600'
+                      }`}>
+                        {concerns.pricing_concerns.has_concerns ? 'Yes' : 'No'}
+                      </span>
+                      <div className="absolute z-10 invisible group-hover:visible hover:visible left-0 top-full">
+                        {/* Invisible bridge */}
+                        <div className="h-2 w-full"></div>
+                        <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
+                          <div className="flex justify-between items-start">
+                            <p className="text-sm text-gray-700">{concerns.pricing_concerns.explanation}</p>
+                            <button 
+                              onClick={() => {
+                                navigator.clipboard.writeText(concerns.pricing_concerns.explanation);
+                              }}
+                              className="ml-2 p-1 hover:bg-gray-100 rounded transition-colors"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500 hover:text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-gray-400">-</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Decision Maker */}
+            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+              <div className="flex items-center">
+                <div className={`p-2 rounded-lg ${
+                  concerns?.no_decision_maker.is_issue ? 'bg-orange-100' : 'bg-green-100'
+                }`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
+                    concerns?.no_decision_maker.is_issue ? 'text-orange-600' : 'text-green-600'
+                  }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                  </svg>
+                </div>
+                <div className="ml-4">
+                  <h4 className="text-sm font-medium text-gray-600">Decision Maker</h4>
+                  {loadingConcerns ? (
+                    <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
+                  ) : concerns ? (
+                    <div className="group relative">
+                      <span className={`text-lg font-bold ${
+                        concerns.no_decision_maker.is_issue ? 'text-red-600' : 'text-green-600'
+                      }`}>
+                        {concerns.no_decision_maker.is_issue ? 'No' : 'Yes'}
+                      </span>
+                      <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
+                        {/* Invisible bridge */}
+                        <div className="h-2 w-full"></div>
+                        <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
+                          <div className="flex justify-between items-start">
+                            <p className="text-sm text-gray-700">{concerns.no_decision_maker.explanation}</p>
+                            <button 
+                              onClick={() => {
+                                navigator.clipboard.writeText(concerns.no_decision_maker.explanation);
+                              }}
+                              className="ml-2 p-1 hover:bg-gray-100 rounded transition-colors"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500 hover:text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="absolute right-0 top-0 -mt-2 border-4 border-transparent border-b-white"></div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-gray-400">-</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Existing Vendor */}
+            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+              <div className="flex items-center">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                </div>
+                <div className="ml-4">
+                  <h4 className="text-sm font-medium text-gray-600">Existing Vendor</h4>
+                  {loadingConcerns ? (
+                    <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
+                  ) : concerns ? (
+                    <div className="group relative">
+                      <span className={`text-lg font-bold ${
+                        concerns.already_has_vendor.has_vendor ? 'text-red-600' : 'text-green-600'
+                      }`}>
+                        {concerns.already_has_vendor.has_vendor ? 'Yes' : 'No'}
+                      </span>
+                      <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
+                        {/* Invisible bridge */}
+                        <div className="h-2 w-full"></div>
+                        <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
+                          <div className="flex justify-between items-start">
+                            <p className="text-sm text-gray-700">{concerns.already_has_vendor.explanation}</p>
+                            <button 
+                              onClick={() => {
+                                navigator.clipboard.writeText(concerns.already_has_vendor.explanation);
+                              }}
+                              className="ml-2 p-1 hover:bg-gray-100 rounded transition-colors"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500 hover:text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="absolute right-0 top-0 -mt-2 border-4 border-transparent border-b-white"></div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-gray-400">-</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -2923,214 +3148,6 @@ return (
             </div>
           )}
         </div>
-
-        {/* Add Business Pain section */}
-        {timelineData && timelineData.events && (
-          <div className="mt-8 bg-white rounded-lg shadow">
-            <div className="p-4 border-b border-gray-200">
-              <h3 className="text-xl font-semibold">Business Pain (Use Case)</h3>
-            </div>
-            <div className="min-h-[200px] max-h-[400px] overflow-y-auto">
-              <div className="p-4">
-                {/* Aggregate business pain by person */}
-                {(() => {
-                  // Create a map to store unique contacts and their business pains
-                  const contactPains = new Map<string, {
-                    email: string;
-                    speakerName?: string;
-                    champion: boolean;
-                    pains: string[];
-                    parr_analysis?: {
-                      pain: number;
-                      authority: number;
-                      preference: number;
-                      role: number;
-                      parr_explanation: string;
-                    };
-                  }>();
-
-                  // Loop through all meetings to collect business pains
-                  timelineData.events
-                    .filter(event => event.type === 'Meeting')
-                    .forEach(event => {
-                      // Get deal name from URL query parameters
-                      const url = new URL(window.location.href);
-                      // the URL search params could be empty, so in that case load the deal name from local storage
-                      const dealName = url.searchParams.get('dealName') || localStorage.getItem('dealName');
-                      const meetingKey = event.subject ? `${event.subject}_${event.date_str}` : `${dealName}_${event.date_str}`;
-                      const contactsData = meetingContacts[meetingKey];
-                      
-                      console.log(`[Business Pain] Processing meeting: ${meetingKey}`, contactsData);
-                      
-                      if (contactsData && contactsData.contacts) {
-                        contactsData.contacts.forEach(contact => {
-                          console.log(`[Business Pain] Processing contact:`, contact);
-                          if (contact.business_pain) {
-                            const key = contact.speakerName || contact.email;
-                            console.log(`[Business Pain] Found business pain for ${key}:`, contact.business_pain);
-                            if (!contactPains.has(key)) {
-                              contactPains.set(key, {
-                                email: contact.email,
-                                speakerName: contact.speakerName,
-                                champion: contact.champion,
-                                pains: [],
-                                parr_analysis: contact.parr_analysis
-                              });
-                            }
-                            const existingContact = contactPains.get(key);
-                            if (existingContact) {
-                              if (!existingContact.pains.includes(contact.business_pain)) {
-                                existingContact.pains.push(contact.business_pain);
-                              }
-                              if (contact.parr_analysis && !existingContact.parr_analysis) {
-                                existingContact.parr_analysis = contact.parr_analysis;
-                              }
-                            }
-                          }
-                        });
-                      }
-                    });
-
-
-                  // Convert map to array and sort by champion status
-                  const sortedContacts = Array.from(contactPains.values())
-                    .sort((a, b) => {
-                      if (a.champion && !b.champion) return -1;
-                      if (!a.champion && b.champion) return 1;
-                      return 0;
-                    });
-
-                  if (sortedContacts.length === 0) {
-                    return (
-                      <div className="h-[120px] flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="text-gray-400 mb-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          </div>
-                          <p className="text-gray-500">No use case detected from transcripts</p>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div className="space-y-4">
-                      {sortedContacts.map((contact, index) => (
-                        <div key={index} className="bg-gray-50 rounded-lg p-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                              </svg>
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-gray-900">{contact.speakerName || contact.email}</span>
-                                {contact.champion && (
-                                  <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
-                                    Champion
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="pl-10">
-                            <div className="text-gray-700 text-sm">
-                              {contact.pains.join('. ')}.
-                            </div>
-                            {contact.parr_analysis && (
-                              <div className="mt-3">
-                                <div className="flex items-center gap-3 mb-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs text-gray-600">Pain:</span>
-                                    <div className="group relative">
-                                      <div 
-                                        className="w-3 h-3 rounded-full"
-                                        style={{
-                                          backgroundColor: contact.parr_analysis.pain === 1 ? '#ffbfba' :
-                                                         contact.parr_analysis.pain === 2 ? '#ff978f' :
-                                                         contact.parr_analysis.pain === 3 ? '#e05f55' :
-                                                         contact.parr_analysis.pain === 4 ? '#b32c22' :
-                                                         '#630801'
-                                        }}
-                                      />
-                                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                                        Pain: {contact.parr_analysis.pain}/5
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs text-gray-600">Authority:</span>
-                                    <div className="group relative">
-                                      <div 
-                                        className="w-3 h-3 rounded-full"
-                                        style={{
-                                          backgroundColor: contact.parr_analysis.authority === 1 ? '#ffbfba' :
-                                                         contact.parr_analysis.authority === 2 ? '#ff978f' :
-                                                         contact.parr_analysis.authority === 3 ? '#e05f55' :
-                                                         contact.parr_analysis.authority === 4 ? '#b32c22' :
-                                                         '#630801'
-                                        }}
-                                      />
-                                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                                        Authority: {contact.parr_analysis.authority}/5
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs text-gray-600">Preference:</span>
-                                    <div className="group relative">
-                                      <div 
-                                        className="w-3 h-3 rounded-full"
-                                        style={{
-                                          backgroundColor: contact.parr_analysis.preference === 1 ? '#ffbfba' :
-                                                         contact.parr_analysis.preference === 2 ? '#ff978f' :
-                                                         contact.parr_analysis.preference === 3 ? '#e05f55' :
-                                                         contact.parr_analysis.preference === 4 ? '#b32c22' :
-                                                         '#630801'
-                                        }}
-                                      />
-                                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                                        Preference: {contact.parr_analysis.preference}/5
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs text-gray-600">Role:</span>
-                                    <div className="group relative">
-                                      <div 
-                                        className="w-3 h-3 rounded-full"
-                                        style={{
-                                          backgroundColor: contact.parr_analysis.role === 1 ? '#ffbfba' :
-                                                         contact.parr_analysis.role === 2 ? '#ff978f' :
-                                                         contact.parr_analysis.role === 3 ? '#e05f55' :
-                                                         contact.parr_analysis.role === 4 ? '#b32c22' :
-                                                         '#630801'
-                                        }}
-                                      />
-                                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                                        Role: {contact.parr_analysis.role}/5
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="text-sm text-gray-600 italic">
-                                  {contact.parr_analysis.parr_explanation}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Add DealLogs component */}
         {timelineData.events && timelineData.events.length > 0 && (

@@ -1,5 +1,6 @@
 // app/api/hubspot/pipeline-summary/route.ts
 import { NextResponse } from 'next/server';
+import { API_CONFIG } from '@/app/utils/config';
 
 export async function GET(request: Request) {
   try {
@@ -16,8 +17,11 @@ export async function GET(request: Request) {
 
     console.log(`Fetching pipeline summary with browser ID: ${browserId}`);
 
+    const apiPath = API_CONFIG.getApiPath('/pipeline-summary');
+    const backendUrl = `http://localhost:8000${apiPath}`;
+
     // Forward the request to the backend server
-    const response = await fetch('http://localhost:8000/api/hubspot/pipeline-summary', {
+    const response = await fetch(backendUrl, {
       headers: {
         'X-Browser-ID': browserId,
         'X-Session-ID': sessionId || '',

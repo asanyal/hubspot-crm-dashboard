@@ -2077,13 +2077,6 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
   
   // Use deal name if subject is missing
   const key = subject ? `${subject}_${date}` : `${selectedDealRef.current?.name}_${date}`;
-  
-  // Check if we already have the contacts for this meeting in state
-  if (meetingContacts[key]) {
-    console.log(`Using cached contacts for meeting: ${key}`);
-    setLoadingMessage(`Using cached contact data for "${subject || 'Meeting'}" on ${date}`);
-    return meetingContacts[key];
-  }
 
   // Check localStorage
   if (typeof window !== 'undefined') {
@@ -2117,7 +2110,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
       return null;
     }
 
-    const url = `/api/hubspot/contacts-and-champion?dealName=${encodeURIComponent(selectedDealRef.current.name)}&date=${encodeURIComponent(date)}`;
+    const url = `/api/hubspot/v2/contacts-and-champion?dealName=${encodeURIComponent(selectedDealRef.current.name)}&date=${encodeURIComponent(date)}`;
     console.log('Champion API URL:', url);
     
     const response = await makeApiCall(url);

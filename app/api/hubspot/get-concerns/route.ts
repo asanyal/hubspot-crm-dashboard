@@ -15,20 +15,19 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const callTitle = searchParams.get('call_title');
-    const callDate = searchParams.get('call_date');
+    const dealName = searchParams.get('dealName');
     
-    if (!callTitle || !callDate) {
+    if (!dealName) {
       return NextResponse.json(
-        { error: 'Call title and date parameters are required' },
+        { error: 'Deal name parameter is required' },
         { status: 400 }
       );
     }
 
-    console.log(`Fetching concerns for call: ${callTitle} on date: ${callDate}`);
+    console.log(`Fetching concerns for deal: ${dealName}`);
     
     const apiPath = API_CONFIG.getApiPath('/get-concerns');
-    const backendUrl = `http://localhost:8000${apiPath}?call_title=${encodeURIComponent(callTitle)}&call_date=${encodeURIComponent(callDate)}`;
+    const backendUrl = `http://localhost:8000${apiPath}?dealName=${encodeURIComponent(dealName)}`;
     
     // Log the actual URL being called
     console.log('Making request to backend URL:', backendUrl);

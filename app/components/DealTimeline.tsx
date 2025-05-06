@@ -8,6 +8,7 @@ import {
   ResponsiveContainer, Legend, Brush, ReferenceArea
 } from 'recharts';
 import { Deal } from '../context/AppContext';
+import { API_CONFIG } from '../utils/config';
 
 interface Contact {
   champion: boolean;
@@ -615,7 +616,8 @@ const DealTimeline: React.FC = () => {
     try {
       console.log(`Fetching company overview for: ${dealName}`);
       setLoadingOverview(true);
-      const response = await makeApiCall(`/api/hubspot/company-overview?dealName=${encodeURIComponent(dealName)}`);
+      const apiPath = API_CONFIG.getApiPath('/company-overview');
+      const response = await makeApiCall(`${apiPath}?dealName=${encodeURIComponent(dealName)}`);
       
       if (response) {
         const data = await response.json();
@@ -2486,13 +2488,13 @@ useEffect(() => {
 }, [selectedDeal?.name, fetchCompanyOverview, loading, timelineData]);
 
 // Add new function to fetch concerns
-const fetchConcerns = useCallback(async (callTitle: string, callDate: string) => {
-  if (!callTitle || !callDate) return;
+const fetchConcerns = useCallback(async (dealName: string) => {
+  if (!dealName) return;
   
   setLoadingConcerns(true);
   try {
     const response = await makeApiCall(
-      `/api/hubspot/get-concerns?call_title=${encodeURIComponent(callTitle)}&call_date=${encodeURIComponent(callDate)}`
+      `/api/hubspot/get-concerns?dealName=${encodeURIComponent(dealName)}`
     );
     
     if (response) {
@@ -2508,17 +2510,10 @@ const fetchConcerns = useCallback(async (callTitle: string, callDate: string) =>
 
 // Add effect to fetch concerns when timeline data changes
 useEffect(() => {
-  if (timelineData?.events) {
-    // Find the most recent meeting
-    const latestMeeting = timelineData.events
-      .filter(event => event.type === 'Meeting')
-      .sort((a, b) => new Date(b.date_str).getTime() - new Date(a.date_str).getTime())[0];
-
-    if (latestMeeting) {
-      fetchConcerns(latestMeeting.subject || '', latestMeeting.date_str);
-    }
+  if (selectedDeal?.name) {
+    fetchConcerns(selectedDeal.name);
   }
-}, [timelineData, fetchConcerns]);
+}, [selectedDeal?.name, fetchConcerns]);
 
 return (
   <div className="flex h-screen" suppressHydrationWarning>

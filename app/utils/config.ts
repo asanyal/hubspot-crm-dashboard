@@ -28,9 +28,8 @@ export const API_VERSION_CONFIG = {
   [API_ENDPOINTS.CONTACTS_AND_CHAMPION]: { useV2: true },
   [API_ENDPOINTS.EVENT_CONTENT]: { useV2: true },
   [API_ENDPOINTS.GET_CONCERNS]: { useV2: true },
-
+  [API_ENDPOINTS.COMPANY_OVERVIEW]: { useV2: true },
   // V1 Endpoints
-  [API_ENDPOINTS.COMPANY_OVERVIEW]: { useV2: false },
   [API_ENDPOINTS.CHAT]: { useV2: false },
   [API_ENDPOINTS.LOAD_CUSTOMER_TRANSCRIPTS]: { useV2: false },
   [API_ENDPOINTS.ASK_CUSTOMER]: { useV2: false }
@@ -39,13 +38,15 @@ export const API_VERSION_CONFIG = {
 export const API_CONFIG = {
   getApiPath: (endpoint: string) => {
     const basePath = '/api/hubspot';
+    // Strip /api/hubspot prefix if present to match against endpoint constants
+    const endpointPath = endpoint.startsWith(basePath) ? endpoint.slice(basePath.length) : endpoint;
     // Find the matching endpoint constant
-    const matchingEndpoint = Object.entries(API_ENDPOINTS).find(([_, path]) => path === endpoint)?.[1];
+    const matchingEndpoint = Object.entries(API_ENDPOINTS).find(([_, path]) => path === endpointPath)?.[1];
     const useV2 = matchingEndpoint ? API_VERSION_CONFIG[matchingEndpoint]?.useV2 : false;
-    const finalPath = useV2 ? `${basePath}/v2${endpoint}` : `${basePath}${endpoint}`;
+    const finalPath = useV2 ? `${basePath}/v2${endpointPath}` : `${basePath}${endpointPath}`;
     
-    console.log(`[API Version] Endpoint: ${endpoint}, Using V2: ${useV2}, Final Path: ${finalPath}`);
+    console.log(`[API Version] Endpoint: ${endpointPath}, Using V2: ${useV2}, Final Path: ${finalPath}`);
     
     return finalPath;
   }
-}; 
+};

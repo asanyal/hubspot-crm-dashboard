@@ -36,10 +36,23 @@ export const API_VERSION_CONFIG = {
 } as const;
 
 export const API_CONFIG = {
-  getApiPath: (path: string) => {
+  getApiPath: (endpoint: string) => {
     const rootUrl = process.env.NEXT_PUBLIC_API_ROOT_URL || 'http://localhost:8000';
+    
+    // If the endpoint starts with /api/hubspot, remove it to avoid duplication
+    const cleanEndpoint = endpoint.replace(/^\/api\/hubspot\//, '');
+    
+    // If the endpoint starts with hubspot/, remove it to avoid duplication
+    const finalEndpoint = cleanEndpoint.replace(/^hubspot\//, '');
+    
     // Remove any leading slashes from the path to avoid double slashes
-    const cleanPath = path.replace(/^\/+/, '');
-    return `${rootUrl}/${cleanPath}`;
+    const cleanPath = finalEndpoint.replace(/^\/+/, '');
+    
+    // Construct the full URL
+    const fullUrl = `${rootUrl}/api/hubspot/${cleanPath}`;
+    
+    console.log(`[API Config] Converting endpoint: ${endpoint} to URL: ${fullUrl}`);
+    
+    return fullUrl;
   }
 };

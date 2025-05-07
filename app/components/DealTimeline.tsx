@@ -616,7 +616,7 @@ const DealTimeline: React.FC = () => {
     try {
       console.log(`Fetching company overview for: ${dealName}`);
       setLoadingOverview(true);
-      const apiPath = API_CONFIG.getApiPath('company-overview');
+      const apiPath = API_CONFIG.getApiPath('/company-overview');
       const response = await makeApiCall(`${apiPath}?dealName=${encodeURIComponent(dealName)}`);
       
       if (response) {
@@ -635,7 +635,7 @@ const DealTimeline: React.FC = () => {
   const fetchDealInfo = useCallback(async (dealName: string) => {
     try {
       console.log(`Fetching deal info for: ${dealName}`);
-      const response = await makeApiCall(`${API_CONFIG.getApiPath('hubspot/deal-info')}?dealName=${encodeURIComponent(dealName)}`);
+      const response = await makeApiCall(`${API_CONFIG.getApiPath('/deal-info')}?dealName=${encodeURIComponent(dealName)}`);
       
       if (response) {
         const info = await response.json();
@@ -654,7 +654,7 @@ const DealTimeline: React.FC = () => {
   const fetchActivitiesCount = useCallback(async (dealName: string) => {
     setFetchingActivities(true);
     try {
-      const response = await makeApiCall(`${API_CONFIG.getApiPath('hubspot/deal-activities-count')}?dealName=${encodeURIComponent(dealName)}`);
+      const response = await makeApiCall(`${API_CONFIG.getApiPath('/deal-activities-count')}?dealName=${encodeURIComponent(dealName)}`);
       
       if (response) {
         const data = await response.json();
@@ -2110,7 +2110,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
       return null;
     }
 
-    const url = `${API_CONFIG.getApiPath('hubspot/v2/contacts-and-champion')}?dealName=${encodeURIComponent(selectedDealRef.current.name)}&date=${encodeURIComponent(date)}`;
+    const url = `${API_CONFIG.getApiPath('/contacts-and-champion')}?dealName=${encodeURIComponent(selectedDealRef.current.name)}&date=${encodeURIComponent(date)}`;
     console.log('Champion API URL:', url);
     
     const response = await makeApiCall(url);
@@ -2213,7 +2213,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
       
       // Fetch timeline data
       setLoadingMessage(`Fetching timeline data for ${dealToUse.name}...`);
-      const response = await makeApiCall(`${API_CONFIG.getApiPath('hubspot/deal-timeline')}?dealName=${encodeURIComponent(dealToUse.name)}`);
+      const response = await makeApiCall(`${API_CONFIG.getApiPath('/deal-timeline')}?dealName=${encodeURIComponent(dealToUse.name)}`);
       
       if (response) {
         setLoadingMessage(`Processing timeline data for ${dealToUse.name}...`);
@@ -2487,7 +2487,7 @@ const fetchConcerns = useCallback(async (dealName: string) => {
   setLoadingConcerns(true);
   try {
     const response = await makeApiCall(
-      `${API_CONFIG.getApiPath('hubspot/get-concerns')}?dealName=${encodeURIComponent(dealName)}`
+      `${API_CONFIG.getApiPath('/get-concerns')}?dealName=${encodeURIComponent(dealName)}`
     );
     
     if (response) {

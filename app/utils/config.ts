@@ -43,17 +43,19 @@ export const API_CONFIG = {
     console.log('[API Config] Environment:', {
       NEXT_PUBLIC_API_ROOT_URL: process.env.NEXT_PUBLIC_API_ROOT_URL,
       NODE_ENV: process.env.NODE_ENV,
-      rootUrl
+      rootUrl,
+      originalEndpoint: endpoint
     });
-    
-    // If the endpoint starts with /api/hubspot, remove it to avoid duplication
-    const cleanEndpoint = endpoint.replace(/^\/api\/hubspot\//, '');
-    
-    // If the endpoint starts with hubspot/, remove it to avoid duplication
-    const finalEndpoint = cleanEndpoint.replace(/^hubspot\//, '');
+
+    // If the endpoint already starts with /api/hubspot, just append it to the root URL
+    if (endpoint.startsWith('/api/hubspot/')) {
+      const fullUrl = `${rootUrl}${endpoint}`;
+      console.log(`[API Config] Direct endpoint: ${endpoint} to URL: ${fullUrl}`);
+      return fullUrl;
+    }
     
     // Remove any leading slashes from the path to avoid double slashes
-    const cleanPath = finalEndpoint.replace(/^\/+/, '');
+    const cleanPath = endpoint.replace(/^\/+/, '');
     
     // Construct the full URL
     const fullUrl = `${rootUrl}/api/hubspot/${cleanPath}`;

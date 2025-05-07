@@ -2867,9 +2867,11 @@ return (
                   ) : concerns ? (
                     <div className="group relative">
                       <span className={`text-lg font-bold ${
+                        concerns.pricing_concerns.explanation === "No data available" ? 'text-gray-400' :
                         concerns.pricing_concerns.has_concerns ? 'text-red-600' : 'text-green-600'
                       }`}>
-                        {concerns.pricing_concerns.has_concerns ? 'Yes' : 'No'}
+                        {concerns.pricing_concerns.explanation === "No data available" ? 'N/A' :
+                        concerns.pricing_concerns.has_concerns ? 'Yes' : 'No'}
                       </span>
                       <div className="absolute z-10 invisible group-hover:visible hover:visible left-0 top-full">
                         {/* Invisible bridge */}
@@ -2892,7 +2894,7 @@ return (
                       </div>
                     </div>
                   ) : (
-                    <span className="text-gray-400">-</span>
+                    <span className="text-gray-400">N/A</span>
                   )}
                 </div>
               </div>
@@ -2917,9 +2919,11 @@ return (
                   ) : concerns ? (
                     <div className="group relative">
                       <span className={`text-lg font-bold ${
+                        concerns.no_decision_maker.explanation === "No data available" ? 'text-gray-400' :
                         concerns.no_decision_maker.is_issue ? 'text-red-600' : 'text-green-600'
                       }`}>
-                        {concerns.no_decision_maker.is_issue ? 'No' : 'Yes'}
+                        {concerns.no_decision_maker.explanation === "No data available" ? 'N/A' :
+                        concerns.no_decision_maker.is_issue ? 'No' : 'Yes'}
                       </span>
                       <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
                         {/* Invisible bridge */}
@@ -2943,7 +2947,7 @@ return (
                       </div>
                     </div>
                   ) : (
-                    <span className="text-gray-400">-</span>
+                    <span className="text-gray-400">N/A</span>
                   )}
                 </div>
               </div>
@@ -2964,9 +2968,11 @@ return (
                   ) : concerns ? (
                     <div className="group relative">
                       <span className={`text-lg font-bold ${
+                        concerns.already_has_vendor.explanation === "No data available" ? 'text-gray-400' :
                         concerns.already_has_vendor.has_vendor ? 'text-red-600' : 'text-green-600'
                       }`}>
-                        {concerns.already_has_vendor.has_vendor ? 'Yes' : 'No'}
+                        {concerns.already_has_vendor.explanation === "No data available" ? 'N/A' :
+                        concerns.already_has_vendor.has_vendor ? 'Yes' : 'No'}
                       </span>
                       <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
                         {/* Invisible bridge */}
@@ -2990,7 +2996,7 @@ return (
                       </div>
                     </div>
                   ) : (
-                    <span className="text-gray-400">-</span>
+                    <span className="text-gray-400">N/A</span>
                   )}
                 </div>
               </div>

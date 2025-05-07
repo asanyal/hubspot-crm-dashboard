@@ -1,9 +1,10 @@
 import { API_CONFIG } from './config';
 
 export async function makeApiCall(endpoint: string, options: RequestInit = {}) {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://midnight-snack-a7X9bQ.replit.app';
   const apiPath = API_CONFIG.getApiPath(endpoint);
   const url = `${baseUrl}${apiPath}`;
+  console.log('ATIN SANYAL url', url);
 
   try {
     // Get existing headers or create empty object

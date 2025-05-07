@@ -36,17 +36,10 @@ export const API_VERSION_CONFIG = {
 } as const;
 
 export const API_CONFIG = {
-  getApiPath: (endpoint: string) => {
-    const basePath = '/api/hubspot';
-    // Strip /api/hubspot prefix if present to match against endpoint constants
-    const endpointPath = endpoint.startsWith(basePath) ? endpoint.slice(basePath.length) : endpoint;
-    // Find the matching endpoint constant
-    const matchingEndpoint = Object.entries(API_ENDPOINTS).find(([_, path]) => path === endpointPath)?.[1];
-    const useV2 = matchingEndpoint ? API_VERSION_CONFIG[matchingEndpoint]?.useV2 : false;
-    const finalPath = useV2 ? `${basePath}/v2${endpointPath}` : `${basePath}${endpointPath}`;
-    
-    console.log(`[API Version] Endpoint: ${endpointPath}, Using V2: ${useV2}, Final Path: ${finalPath}`);
-    
-    return finalPath;
+  getApiPath: (path: string) => {
+    const rootUrl = process.env.NEXT_PUBLIC_API_ROOT_URL || 'http://localhost:8000';
+    // Remove any leading slashes from the path to avoid double slashes
+    const cleanPath = path.replace(/^\/+/, '');
+    return `${rootUrl}/${cleanPath}`;
   }
 };

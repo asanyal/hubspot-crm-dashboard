@@ -37,30 +37,50 @@ export const API_VERSION_CONFIG = {
 
 export const API_CONFIG = {
   getApiPath: (endpoint: string) => {
+    // Add immediate logging of environment variables
+    console.log('[API Config] Raw Environment Variables:', {
+      'process.env.NEXT_PUBLIC_API_ROOT_URL': process.env.NEXT_PUBLIC_API_ROOT_URL,
+      'process.env.NODE_ENV': process.env.NODE_ENV,
+      'typeof NEXT_PUBLIC_API_ROOT_URL': typeof process.env.NEXT_PUBLIC_API_ROOT_URL,
+      'window.env (if available)': typeof window !== 'undefined' ? (window as any).env : 'not available'
+    });
+
     const rootUrl = process.env.NEXT_PUBLIC_API_ROOT_URL || 'http://localhost:8000';
     
     // Debug log to verify environment variable
-    console.log('[API Config] Environment:', {
+    console.log('[API Config] Resolved Configuration:', {
       NEXT_PUBLIC_API_ROOT_URL: process.env.NEXT_PUBLIC_API_ROOT_URL,
       NODE_ENV: process.env.NODE_ENV,
       rootUrl,
-      originalEndpoint: endpoint
+      originalEndpoint: endpoint,
+      'Using fallback?': !process.env.NEXT_PUBLIC_API_ROOT_URL
     });
 
-    // If the endpoint already starts with /api/hubspot, just append it to the root URL
-    if (endpoint.startsWith('/api/hubspot/')) {
-      const fullUrl = `${rootUrl}${endpoint}`;
-      console.log(`[API Config] Direct endpoint: ${endpoint} to URL: ${fullUrl}`);
-      return fullUrl;
-    }
+    // Remove any leading slashes and 'api/hubspot' if present
+    const cleanEndpoint = endpoint
+      .replace(/^\/+/, '')
+      .replace(/^api\/hubspot\//, '')
+      .replace(/^hubspot\//, '');
+
+    // Check if this endpoint should use v2
+    const endpointKey = Object.entries(API_ENDPOINTS)
+      .find(([_, path]) => cleanEndpoint.startsWith(path.replace(/^\//, '')))
+      ?.[1];
     
-    // Remove any leading slashes from the path to avoid double slashes
-    const cleanPath = endpoint.replace(/^\/+/, '');
+    const useV2 = endpointKey ? API_VERSION_CONFIG[endpointKey]?.useV2 : false;
     
-    // Construct the full URL
-    const fullUrl = `${rootUrl}/api/hubspot/${cleanPath}`;
+    // Construct the full URL with version if needed
+    const versionPath = useV2 ? 'v2/' : '';
+    const fullUrl = `${rootUrl}/api/hubspot/${versionPath}${cleanEndpoint}`;
     
-    console.log(`[API Config] Converting endpoint: ${endpoint} to URL: ${fullUrl}`);
+    console.log(`[API Config] Final URL Construction:`, {
+      rootUrl,
+      cleanEndpoint,
+      endpointKey,
+      useV2,
+      versionPath,
+      fullUrl
+    });
     
     return fullUrl;
   }

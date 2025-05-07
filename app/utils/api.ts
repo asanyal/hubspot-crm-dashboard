@@ -6,12 +6,29 @@ export async function makeApiCall(endpoint: string, options: RequestInit = {}) {
   const url = `${baseUrl}${apiPath}`;
 
   try {
+    // Get existing headers or create empty object
+    const existingHeaders: Record<string, string> = options.headers ? 
+      Object.fromEntries(Object.entries(options.headers)) : {};
+
+    // Check if browser ID and session ID are missing
+    if (!existingHeaders['X-Browser-ID']) {
+      console.log('X-Browser-ID header missing, adding default value');
+      existingHeaders['X-Browser-ID'] = 'default';
+    }
+    if (!existingHeaders['X-Session-ID']) {
+      console.log('X-Session-ID header missing, adding default value');
+      existingHeaders['X-Session-ID'] = 'default';
+    }
+
+    // Create final headers object
+    const headers = {
+      'Content-Type': 'application/json',
+      ...existingHeaders,
+    };
+
     const response = await fetch(url, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
 
     if (!response.ok) {
@@ -26,6 +43,5 @@ export async function makeApiCall(endpoint: string, options: RequestInit = {}) {
 }
 
 export const getBackendUrl = (path: string) => {
-  const backendUrl = process.env.NEXT_PUBLIC_API_ROOT_URL || 'http://localhost:8000';
-  return `${backendUrl}${path}`;
+  return `${path}`;
 }; 

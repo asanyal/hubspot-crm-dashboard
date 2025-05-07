@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { API_CONFIG } from '@/app/utils/config';
+import { getBackendUrl } from '@/app/utils/api';
 
 export async function GET(request: Request) {
   try {
@@ -13,8 +14,8 @@ export async function GET(request: Request) {
 
     const apiPath = API_CONFIG.getApiPath('/deals');
     const backendUrl = stage 
-      ? `http://localhost:8000${apiPath}?stage=${encodeURIComponent(stage)}`
-      : `http://localhost:8000${apiPath}`;
+      ? getBackendUrl(`${apiPath}?stage=${encodeURIComponent(stage)}`)
+      : getBackendUrl(apiPath);
 
     // Forward the request to the backend server
     const response = await fetch(backendUrl, {

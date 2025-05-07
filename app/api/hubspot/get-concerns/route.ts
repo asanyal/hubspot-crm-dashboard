@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { API_CONFIG } from '@/app/utils/config';
+import { getBackendUrl } from '@/app/utils/api';
 
 export async function GET(request: Request) {
   try {
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
     console.log(`Fetching concerns for deal: ${dealName}`);
     
     const apiPath = API_CONFIG.getApiPath('/get-concerns');
-    const backendUrl = `http://localhost:8000${apiPath}?dealName=${encodeURIComponent(dealName)}`;
+    const backendUrl = getBackendUrl(`${apiPath}?dealName=${encodeURIComponent(dealName)}`);
     
     // Log the actual URL being called
     console.log('Making request to backend URL:', backendUrl);

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { API_CONFIG } from '@/app/utils/config';
+import { getBackendUrl } from '@/app/utils/api';
 
 export async function GET(request: Request) {
   try {
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
     }
 
     const apiPath = API_CONFIG.getApiPath('/deal-timeline');
-    const backendUrl = `http://localhost:8000${apiPath}?dealName=${encodeURIComponent(dealName)}`;
+    const backendUrl = getBackendUrl(`${apiPath}?dealName=${encodeURIComponent(dealName)}`);
 
     // Forward the request to the backend server
     const response = await fetch(backendUrl, {

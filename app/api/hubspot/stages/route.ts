@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { API_CONFIG } from '@/app/utils/config';
+import { getBackendUrl } from '@/app/utils/api';
 
 export async function GET(request: Request) {
   try {
@@ -7,16 +8,32 @@ export async function GET(request: Request) {
     const browserId = request.headers.get('X-Browser-ID');
     const sessionId = request.headers.get('X-Session-ID');
 
+    if (!browserId) {
+      return NextResponse.json(
+        { error: 'Browser ID is required' },
+        { status: 400 }
+      );
+    }
+
     const apiPath = API_CONFIG.getApiPath('/stages');
-    const backendUrl = `http://localhost:8000${apiPath}`;
+    const backendUrl = getBackendUrl(apiPath);
 
     // Forward the request to the backend server
     const response = await fetch(backendUrl, {
       headers: {
-        'X-Browser-ID': browserId || '',
+        'X-Browser-ID': browserId,
         'X-Session-ID': sessionId || '',
       },
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Backend error response:', errorText);
+      return NextResponse.json(
+        { error: `Backend error: ${response.status}` },
+        { status: response.status }
+      );
+    }
 
     // Get the response data
     const data = await response.json();

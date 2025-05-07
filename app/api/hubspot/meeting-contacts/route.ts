@@ -1,4 +1,3 @@
-// app/api/hubspot/deal-info/route.ts
 import { NextResponse } from 'next/server';
 import { API_CONFIG } from '@/app/utils/config';
 import { getBackendUrl } from '@/app/utils/api';
@@ -12,7 +11,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Deal name is required' }, { status: 400 });
     }
 
-    const apiPath = API_CONFIG.getApiPath('/deal-info');
+    const apiPath = API_CONFIG.getApiPath('/meeting-contacts');
     const backendUrl = getBackendUrl(`${apiPath}?dealName=${encodeURIComponent(dealName)}`);
 
     // Forward the request to the backend server
@@ -21,7 +20,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching deal info:', error);
-    return NextResponse.json({ error: 'Failed to fetch deal info' }, { status: 500 });
+    console.error('Error fetching meeting contacts:', error);
+    return NextResponse.json({ error: 'Failed to fetch meeting contacts' }, { status: 500 });
   }
-}
+} 

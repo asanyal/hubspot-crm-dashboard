@@ -23,4 +23,9 @@ export async function makeApiCall(endpoint: string, options: RequestInit = {}) {
     console.error('API call error:', error);
     throw error;
   }
-} 
+}
+
+export const getBackendUrl = (path: string) => {
+  const backendUrl = process.env.NEXT_PUBLIC_API_ROOT_URL || 'http://localhost:8000';
+  return `${backendUrl}${path}`;
+}; 

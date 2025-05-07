@@ -32,14 +32,6 @@ export async function GET(request: Request) {
     // Get the response data
     const data = await response.json();
     
-    // Log the response for debugging
-    console.log('Backend response status:', response.status);
-    console.log('Backend response data:', data);
-    console.log('Response type:', typeof data);
-    if (Array.isArray(data)) {
-      console.log('Response is an array with length:', data.length);
-    }
-
     // Create a new response with the data
     const nextResponse = NextResponse.json(data);
 

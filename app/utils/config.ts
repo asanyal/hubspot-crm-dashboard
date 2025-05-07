@@ -39,6 +39,13 @@ export const API_CONFIG = {
   getApiPath: (endpoint: string) => {
     const rootUrl = process.env.NEXT_PUBLIC_API_ROOT_URL || 'http://localhost:8000';
     
+    // Debug log to verify environment variable
+    console.log('[API Config] Environment:', {
+      NEXT_PUBLIC_API_ROOT_URL: process.env.NEXT_PUBLIC_API_ROOT_URL,
+      NODE_ENV: process.env.NODE_ENV,
+      rootUrl
+    });
+    
     // If the endpoint starts with /api/hubspot, remove it to avoid duplication
     const cleanEndpoint = endpoint.replace(/^\/api\/hubspot\//, '');
     

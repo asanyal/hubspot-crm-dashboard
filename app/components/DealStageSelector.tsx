@@ -823,7 +823,7 @@ const DealStageSelector: React.FC = () => {
                     <tr key={headerGroup.id}>
                       {headerGroup.headers.map(header => (
                         <th 
-                          key={header.id}
+                          key={`${headerGroup.id}-${header.id}`}
                           className="py-3 px-4 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
                           onClick={header.column.getToggleSortingHandler()}
                         >

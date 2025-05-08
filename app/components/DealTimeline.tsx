@@ -2878,10 +2878,10 @@ return (
                         <div className="h-2 w-full"></div>
                         <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
                           <div className="flex justify-between items-start">
-                            <p className="text-sm text-gray-700">{concerns.pricing_concerns.explanation}</p>
+                            <p className="text-sm text-gray-700">{String(concerns.pricing_concerns.explanation || '')}</p>
                             <button 
                               onClick={() => {
-                                navigator.clipboard.writeText(concerns.pricing_concerns.explanation);
+                                navigator.clipboard.writeText(String(concerns.pricing_concerns.explanation || ''));
                               }}
                               className="ml-2 p-1 hover:bg-gray-100 rounded transition-colors"
                             >
@@ -2930,10 +2930,10 @@ return (
                         <div className="h-2 w-full"></div>
                         <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
                           <div className="flex justify-between items-start">
-                            <p className="text-sm text-gray-700">{concerns.no_decision_maker.explanation}</p>
+                            <p className="text-sm text-gray-700">{String(concerns.no_decision_maker.explanation || '')}</p>
                             <button 
                               onClick={() => {
-                                navigator.clipboard.writeText(concerns.no_decision_maker.explanation);
+                                navigator.clipboard.writeText(String(concerns.no_decision_maker.explanation || ''));
                               }}
                               className="ml-2 p-1 hover:bg-gray-100 rounded transition-colors"
                             >
@@ -2979,10 +2979,10 @@ return (
                         <div className="h-2 w-full"></div>
                         <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
                           <div className="flex justify-between items-start">
-                            <p className="text-sm text-gray-700">{concerns.already_has_vendor.explanation}</p>
+                            <p className="text-sm text-gray-700">{String(concerns.already_has_vendor.explanation || '')}</p>
                             <button 
                               onClick={() => {
-                                navigator.clipboard.writeText(concerns.already_has_vendor.explanation);
+                                navigator.clipboard.writeText(String(concerns.already_has_vendor.explanation || ''));
                               }}
                               className="ml-2 p-1 hover:bg-gray-100 rounded transition-colors"
                             >

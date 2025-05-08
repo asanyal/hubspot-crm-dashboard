@@ -208,6 +208,9 @@ const DealTimeline: React.FC = () => {
   const [concerns, setConcerns] = useState<Concerns | null>(null);
   const [loadingConcerns, setLoadingConcerns] = useState<boolean>(false);
 
+  // Add this near the top of the component with other state declarations
+  const [bookmarkedDeals, setBookmarkedDeals] = useState<Set<string>>(new Set());
+
   // Initialize browser ID on component mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -2864,34 +2867,21 @@ return (
                   <h4 className="text-sm font-medium text-gray-600">Pricing Concerns</h4>
                   {loadingConcerns ? (
                     <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                  ) : concerns ? (
+                  ) : concerns?.pricing_concerns ? (
                     <div className="group relative">
                       <span className={`text-lg font-bold ${
-                        concerns.pricing_concerns.explanation === "No data available" ? 'text-gray-400' :
                         concerns.pricing_concerns.has_concerns ? 'text-red-600' : 'text-green-600'
                       }`}>
-                        {concerns.pricing_concerns.explanation === "No data available" ? 'N/A' :
-                        concerns.pricing_concerns.has_concerns ? 'Yes' : 'No'}
+                        {concerns.pricing_concerns.has_concerns ? 'Yes' : 'No'}
                       </span>
-                      <div className="absolute z-10 invisible group-hover:visible hover:visible left-0 top-full">
-                        {/* Invisible bridge */}
-                        <div className="h-2 w-full"></div>
-                        <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
-                          <div className="flex justify-between items-start">
-                            <p className="text-sm text-gray-700">{String(concerns.pricing_concerns.explanation || '')}</p>
-                            <button 
-                              onClick={() => {
-                                navigator.clipboard.writeText(String(concerns.pricing_concerns.explanation || ''));
-                              }}
-                              className="ml-2 p-1 hover:bg-gray-100 rounded transition-colors"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500 hover:text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                              </svg>
-                            </button>
+                      {concerns.pricing_concerns.explanation && concerns.pricing_concerns.explanation !== "No data available" && (
+                        <div className="absolute z-10 invisible group-hover:visible hover:visible left-0 top-full">
+                          <div className="h-2 w-full"></div>
+                          <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
+                            <p className="text-sm text-gray-700">{concerns.pricing_concerns.explanation}</p>
                           </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   ) : (
                     <span className="text-gray-400">N/A</span>
@@ -2904,10 +2894,10 @@ return (
             <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
               <div className="flex items-center">
                 <div className={`p-2 rounded-lg ${
-                  concerns?.no_decision_maker.is_issue ? 'bg-orange-100' : 'bg-green-100'
+                  concerns?.no_decision_maker?.is_issue ? 'bg-orange-100' : 'bg-green-100'
                 }`}>
                   <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                    concerns?.no_decision_maker.is_issue ? 'text-orange-600' : 'text-green-600'
+                    concerns?.no_decision_maker?.is_issue ? 'text-orange-600' : 'text-green-600'
                   }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                   </svg>
@@ -2916,35 +2906,21 @@ return (
                   <h4 className="text-sm font-medium text-gray-600">Decision Maker</h4>
                   {loadingConcerns ? (
                     <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                  ) : concerns ? (
+                  ) : concerns?.no_decision_maker ? (
                     <div className="group relative">
                       <span className={`text-lg font-bold ${
-                        concerns.no_decision_maker.explanation === "No data available" ? 'text-gray-400' :
                         concerns.no_decision_maker.is_issue ? 'text-red-600' : 'text-green-600'
                       }`}>
-                        {concerns.no_decision_maker.explanation === "No data available" ? 'N/A' :
-                        concerns.no_decision_maker.is_issue ? 'No' : 'Yes'}
+                        {concerns.no_decision_maker.is_issue ? 'No' : 'Yes'}
                       </span>
-                      <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
-                        {/* Invisible bridge */}
-                        <div className="h-2 w-full"></div>
-                        <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
-                          <div className="flex justify-between items-start">
-                            <p className="text-sm text-gray-700">{String(concerns.no_decision_maker.explanation || '')}</p>
-                            <button 
-                              onClick={() => {
-                                navigator.clipboard.writeText(String(concerns.no_decision_maker.explanation || ''));
-                              }}
-                              className="ml-2 p-1 hover:bg-gray-100 rounded transition-colors"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500 hover:text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                              </svg>
-                            </button>
+                      {concerns.no_decision_maker.explanation && concerns.no_decision_maker.explanation !== "No data available" && (
+                        <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
+                          <div className="h-2 w-full"></div>
+                          <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
+                            <p className="text-sm text-gray-700">{concerns.no_decision_maker.explanation}</p>
                           </div>
-                          <div className="absolute right-0 top-0 -mt-2 border-4 border-transparent border-b-white"></div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   ) : (
                     <span className="text-gray-400">N/A</span>
@@ -2965,35 +2941,21 @@ return (
                   <h4 className="text-sm font-medium text-gray-600">Existing Vendor</h4>
                   {loadingConcerns ? (
                     <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                  ) : concerns ? (
+                  ) : concerns?.already_has_vendor ? (
                     <div className="group relative">
                       <span className={`text-lg font-bold ${
-                        concerns.already_has_vendor.explanation === "No data available" ? 'text-gray-400' :
                         concerns.already_has_vendor.has_vendor ? 'text-red-600' : 'text-green-600'
                       }`}>
-                        {concerns.already_has_vendor.explanation === "No data available" ? 'N/A' :
-                        concerns.already_has_vendor.has_vendor ? 'Yes' : 'No'}
+                        {concerns.already_has_vendor.has_vendor ? 'Yes' : 'No'}
                       </span>
-                      <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
-                        {/* Invisible bridge */}
-                        <div className="h-2 w-full"></div>
-                        <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
-                          <div className="flex justify-between items-start">
-                            <p className="text-sm text-gray-700">{String(concerns.already_has_vendor.explanation || '')}</p>
-                            <button 
-                              onClick={() => {
-                                navigator.clipboard.writeText(String(concerns.already_has_vendor.explanation || ''));
-                              }}
-                              className="ml-2 p-1 hover:bg-gray-100 rounded transition-colors"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500 hover:text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                              </svg>
-                            </button>
+                      {concerns.already_has_vendor.explanation && concerns.already_has_vendor.explanation !== "No data available" && (
+                        <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
+                          <div className="h-2 w-full"></div>
+                          <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
+                            <p className="text-sm text-gray-700">{concerns.already_has_vendor.explanation}</p>
                           </div>
-                          <div className="absolute right-0 top-0 -mt-2 border-4 border-transparent border-b-white"></div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   ) : (
                     <span className="text-gray-400">N/A</span>

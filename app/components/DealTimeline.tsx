@@ -2872,13 +2872,15 @@ return (
                       <span className={`text-lg font-bold ${
                         concerns.pricing_concerns.has_concerns ? 'text-red-600' : 'text-green-600'
                       }`}>
-                        {concerns.pricing_concerns.has_concerns ? 'Yes' : 'No'}
+                        {String(concerns.pricing_concerns.has_concerns ? 'Yes' : 'No')}
                       </span>
-                      {concerns.pricing_concerns.explanation && concerns.pricing_concerns.explanation !== "No data available" && (
+                      {concerns.pricing_concerns.explanation && 
+                       concerns.pricing_concerns.explanation !== "No data available" && 
+                       typeof concerns.pricing_concerns.explanation === 'string' && (
                         <div className="absolute z-10 invisible group-hover:visible hover:visible left-0 top-full">
                           <div className="h-2 w-full"></div>
                           <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
-                            <p className="text-sm text-gray-700">{concerns.pricing_concerns.explanation}</p>
+                            <p className="text-sm text-gray-700">{String(concerns.pricing_concerns.explanation)}</p>
                           </div>
                         </div>
                       )}
@@ -2911,13 +2913,15 @@ return (
                       <span className={`text-lg font-bold ${
                         concerns.no_decision_maker.is_issue ? 'text-red-600' : 'text-green-600'
                       }`}>
-                        {concerns.no_decision_maker.is_issue ? 'No' : 'Yes'}
+                        {String(concerns.no_decision_maker.is_issue ? 'No' : 'Yes')}
                       </span>
-                      {concerns.no_decision_maker.explanation && concerns.no_decision_maker.explanation !== "No data available" && (
+                      {concerns.no_decision_maker.explanation && 
+                       concerns.no_decision_maker.explanation !== "No data available" && 
+                       typeof concerns.no_decision_maker.explanation === 'string' && (
                         <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
                           <div className="h-2 w-full"></div>
                           <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
-                            <p className="text-sm text-gray-700">{concerns.no_decision_maker.explanation}</p>
+                            <p className="text-sm text-gray-700">{String(concerns.no_decision_maker.explanation)}</p>
                           </div>
                         </div>
                       )}
@@ -2946,13 +2950,15 @@ return (
                       <span className={`text-lg font-bold ${
                         concerns.already_has_vendor.has_vendor ? 'text-red-600' : 'text-green-600'
                       }`}>
-                        {concerns.already_has_vendor.has_vendor ? 'Yes' : 'No'}
+                        {String(concerns.already_has_vendor.has_vendor ? 'Yes' : 'No')}
                       </span>
-                      {concerns.already_has_vendor.explanation && concerns.already_has_vendor.explanation !== "No data available" && (
+                      {concerns.already_has_vendor.explanation && 
+                       concerns.already_has_vendor.explanation !== "No data available" && 
+                       typeof concerns.already_has_vendor.explanation === 'string' && (
                         <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
                           <div className="h-2 w-full"></div>
                           <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
-                            <p className="text-sm text-gray-700">{concerns.already_has_vendor.explanation}</p>
+                            <p className="text-sm text-gray-700">{String(concerns.already_has_vendor.explanation)}</p>
                           </div>
                         </div>
                       )}

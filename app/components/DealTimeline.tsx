@@ -1592,7 +1592,7 @@ const EventDrawer = () => {
                                 ? 'bg-red-100 text-red-800'
                                 : 'bg-gray-100 text-gray-800'
                         }`}>
-                          {event.buyer_intent}
+                          {event.buyer_intent === 'Likely to buy' ? 'Positive Buying Signal' : event.buyer_intent}
                             </span>
                       </div>
                     )}
@@ -2814,7 +2814,7 @@ return (
                   </svg>
                 </div>
                 <div className="ml-4">
-                  <h4 className="text-sm font-medium text-gray-600">High-Intent Buying Signals</h4>
+                  <h4 className="text-sm font-medium text-gray-600">Positive Buying Signals</h4>
                   <button 
                     onClick={() => handleMetricClick('likely-buy')}
                     className="text-2xl font-bold text-green-600 hover:text-green-800 transition-colors cursor-pointer"

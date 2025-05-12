@@ -1936,7 +1936,7 @@ return (
                     <div className="col-span-2">
                       {(eventType === 'Meeting' && event.buyer_intent) ? (
                         <span className={getIntentSentimentColor(event)}>
-                          {event.buyer_intent}
+                          {event.buyer_intent === 'Likely to buy' ? 'Positive buying signal' : event.buyer_intent}
                         </span>
                       ) : event.sentiment ? (
                         <span className={getIntentSentimentColor(event)}>

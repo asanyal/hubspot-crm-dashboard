@@ -109,6 +109,21 @@ interface Concerns {
   };
 }
 
+interface ChartDataPoint {
+  date: string;
+  Meeting: number;
+  'Outgoing Email': number;
+  'Incoming Email': number;
+  'Note': number;
+  totalEvents: number;
+  hasNegativeSentimentIncoming: boolean;
+  hasNegativeSentimentOutgoing: boolean;
+  hasLessLikelyToBuy: boolean;
+  hasVeryLikelyToBuy: boolean;
+  events: Event[];
+  [key: string]: any; // Add index signature to allow string indexing
+}
+
 const DealTimeline: React.FC = () => {
   // Get state from context
   const { state, updateState } = useAppState();
@@ -1048,7 +1063,7 @@ const DealTimeline: React.FC = () => {
         }
         
         // Create a map of events by date
-        const eventsByDate: Record<string, any> = {};
+        const eventsByDate: Record<string, ChartDataPoint> = {};
         
         // Initialize all dates in the range with zero counts
         dates.forEach(date => {
@@ -1062,12 +1077,13 @@ const DealTimeline: React.FC = () => {
             hasNegativeSentimentIncoming: false,
             hasNegativeSentimentOutgoing: false,
             hasLessLikelyToBuy: false,
-            hasVeryLikelyToBuy: false
+            hasVeryLikelyToBuy: false,
+            events: [] as Event[]
           };
         });
         
         // Count events by type for each date
-        timelineData.events.forEach(event => {
+        timelineData.events.forEach((event: Event) => {
           // Skip events with invalid dates or dates outside our range
           if (!event.date_str || !eventsByDate[event.date_str]) {
             return;
@@ -1082,7 +1098,9 @@ const DealTimeline: React.FC = () => {
             eventsByDate[event.date_str]['Note']++;
           }
           
-          // Track negative sentiments and less likely to buy intents
+          // Store the full event data
+          eventsByDate[event.date_str].events.push(event);
+          
           if (eventType === 'Incoming Email' && event.sentiment === 'negative') {
             eventsByDate[event.date_str].hasNegativeSentimentIncoming = true;
           }
@@ -1176,8 +1194,8 @@ const DealTimeline: React.FC = () => {
         return null;
       }
       
-      // Get all events for this date from the original data
-      const eventsForDate = timelineData.events.filter(event => event.date_str === dateStr) || [];
+      // Get the events for this date from the payload
+      const eventsForDate = payload[0].payload.events || [];
 
       // Count events by type and track meeting intents and email sentiments
       const eventTypeCount: Record<string, number> = {};
@@ -1592,7 +1610,7 @@ const EventDrawer = () => {
                                 ? 'bg-red-100 text-red-800'
                                 : 'bg-gray-100 text-gray-800'
                         }`}>
-                          {event.buyer_intent === 'Likely to buy' ? 'Positive Buying Signal' : event.buyer_intent}
+                          {event.buyer_intent === 'Likely to buy' ? 'Positive Signal' : event.buyer_intent}
                             </span>
                       </div>
                     )}
@@ -1618,11 +1636,22 @@ const EventDrawer = () => {
 
                     {/* Buyer Intent Explanation for meetings */}
                     {event.type === 'Meeting' && event.buyer_intent_explanation && event.buyer_intent_explanation !== 'N/A' && (
-                      <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                        <h4 className="font-semibold text-blue-900 mb-2">Intent Analysis</h4>
-                        <p className="text-sm text-blue-800">
-                          {event.buyer_intent_explanation}
-                        </p>
+                      <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                        <div className="flex items-center gap-2 mb-3">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <h4 className="font-semibold text-blue-900">Intent Analysis</h4>
+                        </div>
+                        <div className="space-y-2">
+                          {event.buyer_intent_explanation.split('\n').map((paragraph, index) => (
+                            paragraph.trim() && (
+                              <p key={index} className="text-sm text-blue-800 leading-relaxed">
+                                {paragraph.trim()}
+                              </p>
+                            )
+                          ))}
+                        </div>
                       </div>
                     )}
 
@@ -1936,7 +1965,7 @@ return (
                     <div className="col-span-2">
                       {(eventType === 'Meeting' && event.buyer_intent) ? (
                         <span className={getIntentSentimentColor(event)}>
-                          {event.buyer_intent === 'Likely to buy' ? 'Positive buying signal' : event.buyer_intent}
+                          {event.buyer_intent === 'Likely to buy' ? 'Positive Signal' : event.buyer_intent}
                         </span>
                       ) : event.sentiment ? (
                         <span className={getIntentSentimentColor(event)}>
@@ -2339,6 +2368,11 @@ const handleRefresh = useCallback(() => {
     cleanupState();
     setMeetingContacts({});
     
+    // Clear localStorage meetingContacts
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('meetingContacts');
+    }
+    
     // Clear any cached data and force refresh
     updateState('dealTimeline.activities', null);
     updateState('dealTimeline.lastFetched', null);
@@ -2573,10 +2607,15 @@ return (
           <div className="space-y-2">
             {filteredDeals.map(deal => {
               const daysPassed = getDaysPassed(deal);
+              const isSelected = selectedDeal?.id === deal.id;
               return (
                 <div
                   key={deal.id}
-                  className="flex items-start justify-between p-3 bg-white rounded-lg hover:bg-gray-50 transition-colors cursor-pointer border border-gray-100"
+                  className={`flex items-start justify-between p-3 rounded-lg transition-colors cursor-pointer border ${
+                    isSelected 
+                      ? 'bg-blue-50 border-blue-200 shadow-sm' 
+                      : 'bg-white border-gray-100 hover:bg-gray-50'
+                  }`}
                   onClick={() => {
                     if (deal.name) {
                       const url = new URL(window.location.href);
@@ -2595,13 +2634,19 @@ return (
                   }}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-900 truncate">
+                    <div className={`text-sm font-medium truncate ${
+                      isSelected ? 'text-blue-700' : 'text-gray-900'
+                    }`}>
                       {deal.name}
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className={`text-xs ${
+                      isSelected ? 'text-blue-600' : 'text-gray-500'
+                    }`}>
                       Stage: {deal.stage}
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className={`text-xs ${
+                      isSelected ? 'text-blue-600' : 'text-gray-500'
+                    }`}>
                       Created: {formatDate(deal.createdate)}
                     </div>
                   </div>
@@ -2622,6 +2667,11 @@ return (
                           border: '1px solid rgba(0, 0, 0, 0.1)'
                         }}
                       />
+                    )}
+                    {isSelected && (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
                     )}
                   </div>
                 </div>
@@ -2646,7 +2696,7 @@ return (
                 <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 text-sm hover:bg-gray-300 transition-colors">
                   ?
                 </div>
-                <div className="absolute z-10 invisible group-hover:visible bg-white p-4 rounded-md shadow-lg border border-gray-200 w-72 sm:w-96 left-0 top-full mt-1">
+                <div className="absolute z-10 invisible group-hover:visible hover:visible bg-white p-4 rounded-md shadow-lg border border-gray-200 w-72 sm:w-96 left-0 top-full mt-1">
                   {loadingOverview ? (
                     <div className="flex items-center justify-center py-2">
                       <div className="animate-spin h-4 w-4 border-2 border-sky-500 rounded-full border-t-transparent mr-2"></div>

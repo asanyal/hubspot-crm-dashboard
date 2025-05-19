@@ -52,8 +52,15 @@ export async function GET(request: Request) {
 
     const data = await response.json();
 
-    // Create a new response with the data
-    const nextResponse = NextResponse.json(data);
+    // Ensure we always return a properly structured response
+    const structuredResponse = {
+      contacts: Array.isArray(data.contacts) ? data.contacts : [],
+      total_contacts: typeof data.total_contacts === 'number' ? data.total_contacts : 0,
+      champions_count: typeof data.champions_count === 'number' ? data.champions_count : 0
+    };
+
+    // Create a new response with the structured data
+    const nextResponse = NextResponse.json(structuredResponse);
 
     // Forward any session ID from the backend response
     const backendSessionId = response.headers.get('X-Session-ID');
@@ -63,10 +70,13 @@ export async function GET(request: Request) {
 
     return nextResponse;
   } catch (error) {
-    console.error('Error fetching contacts and champions:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch contacts and champions' },
-      { status: 500 }
-    );
+    console.error('Error in contacts-and-champion route:', error);
+    // Return a properly structured error response
+    return NextResponse.json({
+      contacts: [],
+      total_contacts: 0,
+      champions_count: 0,
+      error: 'Failed to fetch contacts and champions'
+    }, { status: 500 });
   }
 } 

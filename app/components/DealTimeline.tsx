@@ -2728,7 +2728,9 @@ return (
       {/* Regular Deals Section - Scrollable */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-4">
-          <h3 className="text-sm font-medium text-gray-500 mb-3">All Deals</h3>
+          <h3 className="text-sm font-medium text-gray-500 mb-3">
+            All Deals ({filteredDeals.length})
+          </h3>
           <div className="space-y-2">
             {filteredDeals.map(deal => {
               const daysPassed = getDaysPassed(deal);

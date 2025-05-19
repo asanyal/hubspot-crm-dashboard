@@ -230,6 +230,17 @@ const DealTimeline: React.FC = () => {
   const [activeFilterTab, setActiveFilterTab] = useState<'stages' | 'owners'>('stages');
   const [selectedOwners, setSelectedOwners] = useState<Set<string>>(new Set());
 
+  // Add this with other state declarations at the top of DealTimeline component
+  const [activeEventFilters, setActiveEventFilters] = useState<Record<string, boolean>>({
+    'Meeting': true,
+    'Incoming Email': true,
+    'Outgoing Email': true,
+    'Note': true
+  });
+
+  // Add this with other state declarations at the top
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+
   // Initialize browser ID on component mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1757,15 +1768,12 @@ const isFutureDate = (dateStr: string | undefined): boolean => {
 };
 
 // New DealLogs component
-const DealLogs: React.FC<{ events: Event[] }> = ({ events }) => {
-  // Add state for event type filtering
-  const [activeFilters, setActiveFilters] = useState<Record<string, boolean>>({
-    'Meeting': true,
-    'Incoming Email': true,
-    'Outgoing Email': true,
-    'Note': true
-  });
-
+const DealLogs: React.FC<{ 
+  events: Event[];
+  activeFilters: Record<string, boolean>;
+  onFilterChange: (filters: Record<string, boolean>) => void;
+  selectedEventId: string | null;
+}> = ({ events, activeFilters, onFilterChange, selectedEventId }) => {
   // Sort events by date and time in reverse chronological order
   const sortedEvents = [...events].sort((a, b) => {
     // Handle V2 format (event_date)
@@ -1792,10 +1800,17 @@ const DealLogs: React.FC<{ events: Event[] }> = ({ events }) => {
 
   // Function to toggle a filter
   const toggleFilter = (eventType: string) => {
-    setActiveFilters(prev => ({
-      ...prev,
-      [eventType]: !prev[eventType]
-    }));
+    onFilterChange(
+      Object.values(activeFilters).filter(Boolean).length === 1 && activeFilters[eventType]
+        ? Object.keys(activeFilters).reduce((acc, key) => {
+            acc[key] = true;
+            return acc;
+          }, {} as Record<string, boolean>)
+        : Object.keys(activeFilters).reduce((acc, key) => {
+            acc[key] = key === eventType;
+            return acc;
+          }, {} as Record<string, boolean>)
+    );
   };
 
   // Function to handle row click
@@ -1803,6 +1818,9 @@ const DealLogs: React.FC<{ events: Event[] }> = ({ events }) => {
     // Set the selected date to open the drawer
     const dateToUse = event.date_str || event.event_date?.split('T')[0] || null;
     setSelectedDate(dateToUse);
+    
+    // Set the selected event ID
+    setSelectedEventId(event.id || event.event_id || null);
     
     // Always open the drawer if it's closed
     setIsDrawerOpen(true);
@@ -1879,7 +1897,6 @@ return (
         
         {/* Filter controls */}
         <div className="mt-3 flex flex-wrap gap-2">
-          <span className="text-sm font-medium text-gray-600 self-center mr-2">Filter by:</span>
           {Object.keys(activeFilters).map(eventType => (
             <button
               key={eventType}
@@ -1916,11 +1933,14 @@ return (
               const eventDate = event.date_str || event.event_date?.split('T')[0];
               const eventType = event.type || event.event_type;
               const eventSubject = event.subject;
+              const isSelected = selectedEventId === (event.id || event.event_id);
               
               return (
                 <div 
                   key={index} 
-                  className="p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                  className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
+                    isSelected ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                  }`}
                   onClick={() => handleRowClick(event, index)}
                   data-deal-log-row="true"
                 >
@@ -3304,7 +3324,12 @@ return (
         {/* Add DealLogs component */}
         {timelineData.events && timelineData.events.length > 0 && (
           <div className="mt-4">
-            <DealLogs events={timelineData.events} />
+            <DealLogs 
+              events={timelineData.events} 
+              activeFilters={activeEventFilters}
+              onFilterChange={setActiveEventFilters}
+              selectedEventId={selectedEventId}
+            />
           </div>
         )}
       </div>

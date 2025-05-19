@@ -11,7 +11,7 @@ export interface Deal {
   id: string;
   name: string;
   createdate: string;
-  owner: string;
+  owner?: string;
   stage?: string;
   startDate?: string;
   endDate?: string;

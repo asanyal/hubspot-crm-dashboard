@@ -226,6 +226,10 @@ const DealTimeline: React.FC = () => {
   // Add this near the top of the component with other state declarations
   const [bookmarkedDeals, setBookmarkedDeals] = useState<Set<string>>(new Set());
 
+  // Add state for active tab and selected owners
+  const [activeFilterTab, setActiveFilterTab] = useState<'stages' | 'owners'>('stages');
+  const [selectedOwners, setSelectedOwners] = useState<Set<string>>(new Set());
+
   // Initialize browser ID on component mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -264,38 +268,44 @@ const DealTimeline: React.FC = () => {
   }, [uniqueStages, selectedStagesInitialized]);
 
   // Filter deals based on selected stages and search term
-  const stageFilteredDeals = useMemo(() => {
-    if (selectedStages.size === 0) return allDeals;
-    
-    return allDeals.filter(deal => {
-      if (!deal.stage) return false;
-      return selectedStages.has(deal.stage);
-    });
-  }, [allDeals, selectedStages]);
-
   const filteredDeals = useMemo(() => {
-    if (!debouncedDealSearchTerm.trim()) {
-      return stageFilteredDeals;
+    let filtered = allDeals;
+
+    // Apply stage filter
+    if (selectedStages.size > 0) {
+      filtered = filtered.filter(deal => {
+        if (!deal.stage) return false;
+        return selectedStages.has(deal.stage);
+      });
     }
 
-    const searchLower = debouncedDealSearchTerm.toLowerCase();
-    const searchTerms = searchLower.split(' ').filter(term => term.length > 0);
-    
-    if (searchTerms.length === 0) return stageFilteredDeals;
-    
-    return stageFilteredDeals.filter(deal => {
-      // Convert all fields to strings and then to lowercase, handling null/undefined
-      const dealNameLower = String(deal.name || '').toLowerCase();
-      const dealStageLower = String(deal.stage || '').toLowerCase();
-      const dealOwnerLower = String(deal.owner || '').toLowerCase();
-      
-      return searchTerms.every(term => 
-        dealNameLower.includes(term) ||
-        dealStageLower.includes(term) ||
-        dealOwnerLower.includes(term)
-      );
-    });
-  }, [stageFilteredDeals, debouncedDealSearchTerm]);
+    // Apply owner filter
+    if (selectedOwners && selectedOwners.size > 0) {
+      filtered = filtered.filter(deal => {
+        if (!deal.owner) return false;
+        return selectedOwners.has(deal.owner);
+      });
+    }
+
+    // Apply search filter
+    if (debouncedDealSearchTerm.trim()) {
+      const searchLower = debouncedDealSearchTerm.toLowerCase();
+      const searchTerms = searchLower.split(' ').filter(term => term.length > 0);
+      if (searchTerms.length > 0) {
+        filtered = filtered.filter(deal => {
+          const dealNameLower = String(deal.name || '').toLowerCase();
+          const dealStageLower = String(deal.stage || '').toLowerCase();
+          const dealOwnerLower = String(deal.owner || '').toLowerCase();
+          return searchTerms.every(term => 
+            dealNameLower.includes(term) ||
+            dealStageLower.includes(term) ||
+            dealOwnerLower.includes(term)
+          );
+        });
+      }
+    }
+    return filtered;
+  }, [allDeals, selectedStages, selectedOwners, debouncedDealSearchTerm]);
 
   // Add debounce effect for search with increased delay
   useEffect(() => {
@@ -1203,7 +1213,7 @@ const DealTimeline: React.FC = () => {
       const incomingEmailSentiments: string[] = [];
       const outgoingEmailSentiments: string[] = [];
       
-      eventsForDate.forEach(event => {
+      eventsForDate.forEach((event: Event) => {
         const type = event.type || 'Note';
         eventTypeCount[type] = (eventTypeCount[type] || 0) + 1;
         
@@ -2545,6 +2555,75 @@ useEffect(() => {
   }
 }, [selectedDeal?.name, fetchConcerns]);
 
+  // Get unique owners from all deals
+  const uniqueOwners = useMemo(() => {
+    const owners = new Set<string>();
+    allDeals.forEach(deal => {
+      if (deal.owner) {
+        owners.add(deal.owner);
+      }
+    });
+    return Array.from(owners).sort();
+  }, [allDeals]);
+
+  // Handle owner filter toggle
+  const toggleOwnerFilter = (owner: string) => {
+    setSelectedOwners(prev => {
+      const newSet = new Set(prev);
+      
+      // If this is the only selected owner, deselect it to show all owners
+      if (newSet.size === 1 && newSet.has(owner)) {
+        newSet.clear();
+        return newSet;
+      }
+      
+      // If all owners are selected, clear and select only this owner
+      if (newSet.size === uniqueOwners.length) {
+        newSet.clear();
+        newSet.add(owner);
+        return newSet;
+      }
+      
+      // Otherwise, toggle this owner
+      if (newSet.has(owner)) {
+        newSet.delete(owner);
+      } else {
+        newSet.add(owner);
+      }
+      
+      return newSet;
+    });
+  };
+
+  // Get initials for an owner name
+  const getOwnerInitials = (owner: string): string => {
+    return owner
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  // Get color for owner filter
+  const getOwnerColor = (owner: string): { bg: string; text: string; border: string } => {
+    // Generate a consistent color based on the owner name
+    const colors = [
+      { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+      { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+      { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
+      { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
+      { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
+      { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+      { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200' },
+      { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200' },
+    ];
+    
+    // Use the owner name to generate a consistent index
+    const index = owner.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
+    return colors[index];
+  };
+
 return (
   <div className="flex h-screen" suppressHydrationWarning>
     {/* Sidebar */}
@@ -2580,23 +2659,69 @@ return (
 
       {/* Stage filter chips */}
       <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-        <div className="flex flex-wrap gap-2 p-2 bg-gray-50 border-b">
-          {uniqueStages.map((stage) => {
-            const isSelected = selectedStages.has(stage);
-            return (
-              <button
-                key={stage}
-                onClick={() => toggleStageFilter(stage)}
-                className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
-                  isSelected 
-                    ? `${getStageColor(stage).bg} ${getStageColor(stage).text} border ${getStageColor(stage).border}`
-                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                } hover:opacity-90 transition-opacity`}
-              >
-                {getStageInitials(stage)}
-              </button>
-            );
-          })}
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200 mb-3">
+          <button
+            onClick={() => setActiveFilterTab('stages')}
+            className={`px-4 py-2 text-sm font-medium ${
+              activeFilterTab === 'stages'
+                ? 'border-b-2 border-blue-500 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Stages
+          </button>
+          <button
+            onClick={() => setActiveFilterTab('owners')}
+            className={`px-4 py-2 text-sm font-medium ${
+              activeFilterTab === 'owners'
+                ? 'border-b-2 border-blue-500 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Owners
+          </button>
+        </div>
+
+        {/* Filter chips */}
+        <div className="flex flex-wrap gap-2 p-2 bg-gray-50">
+          {activeFilterTab === 'stages' ? (
+            // Stage filters
+            uniqueStages.map((stage) => {
+              const isSelected = selectedStages.has(stage);
+              return (
+                <button
+                  key={stage}
+                  onClick={() => toggleStageFilter(stage)}
+                  className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
+                    isSelected 
+                      ? `${getStageColor(stage).bg} ${getStageColor(stage).text} border ${getStageColor(stage).border}`
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  } hover:opacity-90 transition-opacity`}
+                >
+                  {getStageInitials(stage)}
+                </button>
+              );
+            })
+          ) : (
+            // Owner filters
+            uniqueOwners.map((owner) => {
+              const isSelected = selectedOwners.has(owner);
+              return (
+                <button
+                  key={owner}
+                  onClick={() => toggleOwnerFilter(owner)}
+                  className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
+                    isSelected 
+                      ? `${getOwnerColor(owner).bg} ${getOwnerColor(owner).text} border ${getOwnerColor(owner).border}`
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  } hover:opacity-90 transition-opacity`}
+                >
+                  {getOwnerInitials(owner)}
+                </button>
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -2643,6 +2768,11 @@ return (
                       isSelected ? 'text-blue-600' : 'text-gray-500'
                     }`}>
                       Stage: {deal.stage}
+                    </div>
+                    <div className={`text-xs ${
+                      isSelected ? 'text-blue-600' : 'text-gray-500'
+                    }`}>
+                      Owner: {deal.owner || 'NA'}
                     </div>
                     <div className={`text-xs ${
                       isSelected ? 'text-blue-600' : 'text-gray-500'

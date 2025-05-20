@@ -14,11 +14,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const apiPath = API_CONFIG.getApiPath('deal-insights-aggregate');
-    const backendUrl = getBackendUrl(apiPath);
+    const url = API_CONFIG.getApiPath('deal-insights-aggregate');
 
     // Forward the request to the backend server
-    const response = await fetch(backendUrl, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

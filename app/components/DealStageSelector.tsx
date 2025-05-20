@@ -1015,9 +1015,15 @@ const DealStageSelector: React.FC = () => {
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-4">
-                {renderInsightBar('pricing_concerns', 'Pricing Concerns')}
-                {renderInsightBar('no_decision_maker', 'No Decision Maker')}
-                {renderInsightBar('already_has_vendor', 'Already Has Vendor')}
+                <div key="pricing-concerns">
+                  {renderInsightBar('pricing_concerns', 'Pricing Concerns')}
+                </div>
+                <div key="no-decision-maker">
+                  {renderInsightBar('no_decision_maker', 'No Decision Maker')}
+                </div>
+                <div key="already-has-vendor">
+                  {renderInsightBar('already_has_vendor', 'Already Has Vendor')}
+                </div>
               </div>
             )}
           </div>

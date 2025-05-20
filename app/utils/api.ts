@@ -44,9 +44,5 @@ export async function makeApiCall(endpoint: string, options: RequestInit = {}) {
 }
 
 export const getBackendUrl = (path: string) => {
-  const baseUrl = process.env.NEXT_PUBLIC_API_ROOT_URL || 'https://midnight-snack-a7X9bQ.replit.app';
-  // Remove trailing slash from baseUrl and leading slash from path
-  const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
-  const cleanPath = path.replace(/^\/+/, '');
-  return `${cleanBaseUrl}/${cleanPath}`;
+  return `${path}`;
 }; 

@@ -723,8 +723,8 @@ const DealStageSelector: React.FC = () => {
                 <div className="bg-gray-900 text-white text-xs rounded py-1 px-2 max-w-xs">
                   <div className="font-medium mb-1">Deals:</div>
                   <div className="max-h-32 overflow-y-auto">
-                    {deals.map((deal: string, index: number) => (
-                      <div key={index} className="whitespace-nowrap">{deal}</div>
+                    {deals.map((deal: string) => (
+                      <div key={deal} className="whitespace-nowrap">{deal}</div>
                     ))}
                   </div>
                 </div>
@@ -753,8 +753,8 @@ const DealStageSelector: React.FC = () => {
                 <div className="bg-gray-900 text-white text-xs rounded py-1 px-2 max-w-xs">
                   <div className="font-medium mb-1">Deals:</div>
                   <div className="max-h-32 overflow-y-auto">
-                    {falseDeals.map((deal: string, index: number) => (
-                      <div key={index} className="whitespace-nowrap">{deal}</div>
+                    {falseDeals.map((deal: string) => (
+                      <div key={deal} className="whitespace-nowrap">{deal}</div>
                     ))}
                   </div>
                 </div>

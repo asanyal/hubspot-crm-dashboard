@@ -16,9 +16,10 @@ export async function GET(request: Request) {
     }
 
     const apiPath = API_CONFIG.getApiPath('/all-deals');
+    console.log('ALL DEALS: API PATH', apiPath);
     const backendUrl = getBackendUrl(apiPath);
+    console.log('ALL DEALS: BACKEND URL', backendUrl);
 
-    // Forward the request to the backend server
     const response = await fetch(
       backendUrl,
       {

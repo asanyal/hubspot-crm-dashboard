@@ -14,7 +14,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const apiPath = API_CONFIG.getApiPath('/v2/deal-insights-aggregate');
+    const apiPath = API_CONFIG.getApiPath('deal-insights-aggregate');
     const backendUrl = getBackendUrl(apiPath);
 
     // Forward the request to the backend server

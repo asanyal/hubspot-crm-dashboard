@@ -35,6 +35,12 @@ interface Deal {
   Closed_Lost: boolean;
 }
 
+interface DealInsights {
+  pricing_concerns: string[];
+  no_decision_maker: string[];
+  already_has_vendor: string[];
+}
+
 const DealStageSelector: React.FC = () => {
   const { state, updateState } = useAppState();
   const { 
@@ -55,6 +61,9 @@ const DealStageSelector: React.FC = () => {
   ]);
   const [hasMounted, setHasMounted] = useState(false);
   const [failedStages, setFailedStages] = useState<Set<string>>(new Set());
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsData, setInsightsData] = useState<DealInsights | null>(null);
+  const [activeFilter, setActiveFilter] = useState<{type: keyof DealInsights, value: boolean} | null>(null);
   const router = useRouter();
   
   // Track URL parameters
@@ -523,13 +532,22 @@ const DealStageSelector: React.FC = () => {
     const lowerCaseSearch = debouncedSearchTerm.toLowerCase();
     
     return dealsForStage.filter(deal => {
-      if (deal.Deal_Name.toLowerCase().includes(lowerCaseSearch)) return true;
-      if (deal.Owner.toLowerCase().includes(lowerCaseSearch)) return true;
-      if (deal.Amount.toLowerCase().includes(lowerCaseSearch)) return true;
-      if (deal.Created_At.toLowerCase().includes(lowerCaseSearch)) return true;
-      if (deal.Last_Update.toLowerCase().includes(lowerCaseSearch)) return true;
-      if (deal.Expected_Close_Date.toLowerCase().includes(lowerCaseSearch)) return true;
-      return false;
+      // Safely handle null/undefined values and convert to string
+      const dealName = String(deal.Deal_Name || '');
+      const owner = String(deal.Owner || '');
+      const amount = String(deal.Amount || '');
+      const createdAt = String(deal.Created_At || '');
+      const lastUpdate = String(deal.Last_Update || '');
+      const expectedCloseDate = String(deal.Expected_Close_Date || '');
+
+      return (
+        dealName.toLowerCase().includes(lowerCaseSearch) ||
+        owner.toLowerCase().includes(lowerCaseSearch) ||
+        amount.toLowerCase().includes(lowerCaseSearch) ||
+        createdAt.toLowerCase().includes(lowerCaseSearch) ||
+        lastUpdate.toLowerCase().includes(lowerCaseSearch) ||
+        expectedCloseDate.toLowerCase().includes(lowerCaseSearch)
+      );
     });
   }, [selectedStage, dealsByStage, debouncedSearchTerm]);
 
@@ -545,18 +563,212 @@ const DealStageSelector: React.FC = () => {
     
     // Only filter when necessary
     return dealsForStage.filter(deal => {
+      // Safely handle null/undefined values and convert to string
+      const dealName = String(deal.Deal_Name || '');
+      const owner = String(deal.Owner || '');
+      const amount = String(deal.Amount || '');
+      const createdAt = String(deal.Created_At || '');
+      const lastUpdate = String(deal.Last_Update || '');
+      const expectedCloseDate = String(deal.Expected_Close_Date || '');
+
       // Most common fields first for better performance (short-circuit evaluation)
       return (
-        (deal.Deal_Name || '').toLowerCase().includes(lowerCaseSearch) ||
-        (deal.Owner || '').toLowerCase().includes(lowerCaseSearch) ||
-        (deal.Amount || '').toLowerCase().includes(lowerCaseSearch) ||
-        (deal.Created_At || '').toLowerCase().includes(lowerCaseSearch) ||
-        (deal.Last_Update || '').toLowerCase().includes(lowerCaseSearch) ||
-        (deal.Expected_Close_Date || '').toLowerCase().includes(lowerCaseSearch)
+        dealName.toLowerCase().includes(lowerCaseSearch) ||
+        owner.toLowerCase().includes(lowerCaseSearch) ||
+        amount.toLowerCase().includes(lowerCaseSearch) ||
+        createdAt.toLowerCase().includes(lowerCaseSearch) ||
+        lastUpdate.toLowerCase().includes(lowerCaseSearch) ||
+        expectedCloseDate.toLowerCase().includes(lowerCaseSearch)
       );
     });
   }, [selectedStage, dealsByStage, searchTerm]);
   
+
+  // Function to get storage key for insights
+  const getInsightsStorageKey = useCallback((stageName: string) => {
+    return `insights_${stageName}`;
+  }, []);
+
+  // Function to load insights from storage
+  const loadInsightsFromStorage = useCallback((stageName: string) => {
+    const storageKey = getInsightsStorageKey(stageName);
+    const storedData = localStorage.getItem(storageKey);
+    if (storedData) {
+      try {
+        const parsedData = JSON.parse(storedData);
+        setInsightsData(parsedData);
+        return true;
+      } catch (error) {
+        console.error('Error parsing stored insights:', error);
+        localStorage.removeItem(storageKey);
+      }
+    }
+    return false;
+  }, [getInsightsStorageKey]);
+
+  // Function to save insights to storage
+  const saveInsightsToStorage = useCallback((stageName: string, data: DealInsights) => {
+    const storageKey = getInsightsStorageKey(stageName);
+    localStorage.setItem(storageKey, JSON.stringify(data));
+  }, [getInsightsStorageKey]);
+
+  // Fetch insights data
+  const fetchInsights = useCallback(async (dealNames: string[]) => {
+    if (!dealNames.length) return;
+    
+    setInsightsLoading(true);
+    try {
+      const response = await makeApiCall('http://localhost:8000/api/hubspot/v2/deal-insights-aggregate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dealNames),
+      });
+      
+      if (response) {
+        const data = await response.json();
+        setInsightsData(data);
+        if (selectedStage) {
+          saveInsightsToStorage(selectedStage, data);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching insights:', error);
+    } finally {
+      setInsightsLoading(false);
+    }
+  }, [makeApiCall, selectedStage, saveInsightsToStorage]);
+
+  // Effect to fetch insights after deals load
+  useEffect(() => {
+    if (!selectedStage || !dealsByStage[selectedStage]) return;
+
+    // Try to load from storage first
+    if (loadInsightsFromStorage(selectedStage)) {
+      return;
+    }
+
+    const dealNames = dealsByStage[selectedStage].map(deal => deal.Deal_Name);
+    
+    // Clear any existing timeout
+    const timeoutId = setTimeout(() => {
+      fetchInsights(dealNames);
+    }, 1000); // 1 second delay
+
+    return () => clearTimeout(timeoutId);
+  }, [selectedStage, dealsByStage, fetchInsights, loadInsightsFromStorage]);
+
+  // Function to handle bar click
+  const handleBarClick = (type: keyof DealInsights, value: boolean) => {
+    if (!insightsData) return;
+    
+    const deals = insightsData[type];
+    setActiveFilter({ type, value });
+  };
+
+  // Function to clear filter
+  const clearFilter = () => {
+    setActiveFilter(null);
+  };
+
+  // Get filtered deals based on active filter
+  const getFilteredDeals = useCallback((): Deal[] => {
+    if (!activeFilter || !insightsData) return getCurrentDeals();
+
+    const deals = getCurrentDeals();
+    const filteredDeals = activeFilter.value
+      ? deals.filter(deal => insightsData[activeFilter.type].includes(deal.Deal_Name))
+      : deals.filter(deal => !insightsData[activeFilter.type].includes(deal.Deal_Name));
+
+    return filteredDeals;
+  }, [activeFilter, insightsData, getCurrentDeals]);
+
+  // Function to render insight bar
+  const renderInsightBar = (type: keyof DealInsights, title: string) => {
+    if (!insightsData) return null;
+
+    const deals = insightsData[type];
+    // Use unfiltered deals from dealsByStage instead of getCurrentDeals
+    const stageDeals = selectedStage ? dealsByStage[selectedStage] || [] : [];
+    const totalDeals = stageDeals.length;
+    const trueCount = deals.length;
+    const falseCount = totalDeals - trueCount;
+    const truePercentage = (trueCount / totalDeals) * 100;
+    const falsePercentage = (falseCount / totalDeals) * 100;
+
+    // Get false deals (deals not in the array)
+    const falseDeals = stageDeals
+      .map((deal: Deal) => deal.Deal_Name)
+      .filter((name: string) => !deals.includes(name));
+
+    return (
+      <div className="bg-white p-4 rounded-lg shadow">
+        <h3 className="text-sm font-medium text-gray-700 mb-3">{title}</h3>
+        <div className="space-y-4">
+          {/* True Bar */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-600">True</span>
+              <span className="font-medium">{trueCount}</span>
+            </div>
+            <div className="relative group">
+              <div 
+                className="h-6 bg-red-500 rounded cursor-pointer hover:opacity-80 transition-all"
+                style={{ width: `${truePercentage}%` }}
+                onClick={() => handleBarClick(type, true)}
+              ></div>
+              {/* Tooltip */}
+              <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block">
+                <div className="bg-gray-900 text-white text-xs rounded py-1 px-2 max-w-xs">
+                  <div className="font-medium mb-1">Deals:</div>
+                  <div className="max-h-32 overflow-y-auto">
+                    {deals.map((deal: string, index: number) => (
+                      <div key={index} className="whitespace-nowrap">{deal}</div>
+                    ))}
+                  </div>
+                </div>
+                {/* Tooltip arrow */}
+                <div className="absolute left-4 bottom-0 transform translate-y-full">
+                  <div className="border-4 border-transparent border-t-gray-900"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* False Bar */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-600">False</span>
+              <span className="font-medium">{falseCount}</span>
+            </div>
+            <div className="relative group">
+              <div 
+                className="h-6 bg-green-700 rounded cursor-pointer hover:opacity-80 transition-all"
+                style={{ width: `${falsePercentage}%` }}
+                onClick={() => handleBarClick(type, false)}
+              ></div>
+              {/* Tooltip */}
+              <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block">
+                <div className="bg-gray-900 text-white text-xs rounded py-1 px-2 max-w-xs">
+                  <div className="font-medium mb-1">Deals:</div>
+                  <div className="max-h-32 overflow-y-auto">
+                    {falseDeals.map((deal: string, index: number) => (
+                      <div key={index} className="whitespace-nowrap">{deal}</div>
+                    ))}
+                  </div>
+                </div>
+                {/* Tooltip arrow */}
+                <div className="absolute left-4 bottom-0 transform translate-y-full">
+                  <div className="border-4 border-transparent border-t-gray-900"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Update the handleRefresh function
   const handleRefresh = useCallback(() => {
@@ -584,10 +796,16 @@ const DealStageSelector: React.FC = () => {
     // Clear the stages to force a fresh fetch
     updateState('dealsByStage.availableStages', []);
     updateState('dealsByStage.lastFetched', null);
+
+    // Clear insights data and storage
+    setInsightsData(null);
+    if (selectedStage) {
+      localStorage.removeItem(getInsightsStorageKey(selectedStage));
+    }
     
     // Fetch stages (which will trigger the rest of the initialization flow)
     fetchStages();
-  }, [updateState, fetchStages, getSearchParams]);
+  }, [updateState, fetchStages, getSearchParams, selectedStage, getInsightsStorageKey]);
 
   // Function to render sort indicator
   const renderSortIndicator = (column: any) => {
@@ -688,7 +906,6 @@ const DealStageSelector: React.FC = () => {
     getSortedRowModel: getSortedRowModel(),
   });
 
-
   return (
     <div className="flex h-screen">
       {/* Left Panel */}
@@ -775,6 +992,36 @@ const DealStageSelector: React.FC = () => {
             </div>
           )}
 
+          {/* Insights Section */}
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold">Deal Insights</h2>
+              {activeFilter && (
+                <button
+                  onClick={clearFilter}
+                  className="text-sm text-sky-600 hover:text-sky-800 flex items-center"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                  Clear Filter
+                </button>
+              )}
+            </div>
+            
+            {insightsLoading ? (
+              <div className="flex justify-center items-center h-32 text-gray-600">
+                Getting Insights for stage <span className="font-bold ml-1">{selectedStage}</span>...
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-4">
+                {renderInsightBar('pricing_concerns', 'Pricing Concerns')}
+                {renderInsightBar('no_decision_maker', 'No Decision Maker')}
+                {renderInsightBar('already_has_vendor', 'Already Has Vendor')}
+              </div>
+            )}
+          </div>
+
           {!loading && selectedStage && dealsByStage[selectedStage] && (
             <div className="mb-4">
               <div className="relative">
@@ -815,7 +1062,7 @@ const DealStageSelector: React.FC = () => {
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
               <p className="mt-3">Loading deals for {selectedStage}...</p>
             </div>
-          ) : getCurrentDeals().length > 0 ? (
+          ) : getFilteredDeals().length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full bg-white border border-gray-200 rounded-lg overflow-hidden">
                 <thead className="bg-gray-100">

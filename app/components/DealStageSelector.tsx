@@ -686,9 +686,9 @@ const DealStageSelector: React.FC = () => {
 
   // Function to render insight bar
   const renderInsightBar = (type: keyof DealInsights, title: string) => {
-    if (!insightsData) return null;
+    if (!insightsData || !insightsData[type]) return null;
 
-    const deals = insightsData[type];
+    const deals = insightsData[type] || [];
     // Use unfiltered deals from dealsByStage instead of getCurrentDeals
     const stageDeals = selectedStage ? dealsByStage[selectedStage] || [] : [];
     const totalDeals = stageDeals.length;

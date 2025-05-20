@@ -733,7 +733,7 @@ const DealTimeline: React.FC = () => {
         return;
       }
     }
-    
+
     // Otherwise, fetch new data
     updateState('dealTimeline.loading', true);
     updateState('dealTimeline.error', null);
@@ -3152,7 +3152,7 @@ return (
                   </svg>
                 </div>
                 <div className="ml-4">
-                  <h4 className="text-sm font-medium text-gray-600">Existing Vendor</h4>
+                  <h4 className="text-sm font-medium text-gray-600">Using a Comptetitor?</h4>
                   {loadingConcerns ? (
                     <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
                   ) : concerns?.already_has_vendor ? (

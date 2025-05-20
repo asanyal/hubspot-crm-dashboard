@@ -618,7 +618,7 @@ const DealStageSelector: React.FC = () => {
     
     setInsightsLoading(true);
     try {
-      const response = await makeApiCall('http://localhost:8000/api/hubspot/v2/deal-insights-aggregate', {
+      const response = await makeApiCall('/api/hubspot/v2/deal-insights-aggregate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

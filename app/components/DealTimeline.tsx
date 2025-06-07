@@ -1664,14 +1664,22 @@ const EventDrawer = () => {
                           </svg>
                           <h4 className="font-semibold text-blue-900">Intent Analysis</h4>
                         </div>
-                        <div className="space-y-2">
-                          {event.buyer_intent_explanation.split('\n').map((paragraph, index) => (
-                            paragraph.trim() && (
-                              <p key={index} className="text-sm text-blue-800 leading-relaxed">
-                                {paragraph.trim()}
-                              </p>
-                            )
-                          ))}
+                        <div className="space-y-6">
+                          {(() => {
+                            // Parse the explanation into sections
+                            const sections = typeof event.buyer_intent_explanation === 'string' 
+                              ? parseMarkdownSections(event.buyer_intent_explanation)
+                              : event.buyer_intent_explanation;
+
+                            return Object.entries(sections).map(([title, content]) => (
+                              <div key={title} className="space-y-2">
+                                <h5 className="font-bold text-blue-900">{title}</h5>
+                                <p className="text-sm text-blue-800 leading-relaxed">
+                                  {content}
+                                </p>
+                              </div>
+                            ));
+                          })()}
                         </div>
                       </div>
                     )}
@@ -1681,67 +1689,73 @@ const EventDrawer = () => {
                       <div className="mt-4">
                         <h4 className="font-semibold mb-2">Smart Insights</h4>
                         {meetingContacts[`${event.subject}_${event.date_str}`] ? (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                              </svg>
-                              <span>{meetingContacts[`${event.subject}_${event.date_str}`].total_contacts} Total Participants</span>
-                    </div>
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              <span>{meetingContacts[`${event.subject}_${event.date_str}`].champions_count} Champions</span>
-                  </div>
-                            <div className="mt-3 space-y-2">
-                              {meetingContacts[`${event.subject}_${event.date_str}`].contacts.map((contact, idx) => (
-                                <div key={idx} className="p-2 bg-white rounded border border-gray-100">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-medium text-sm">{contact.speakerName} ({contact.email})</span>
-                                      {contact.champion && (
-                                        <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
-                                          Champion
-                                        </span>
-                                      )}
-                                    </div>
-                                    {contact.explanation && (
-                                      <div className="relative inline-block">
-                                        <div className="group">
-                                          <svg 
-                                            xmlns="http://www.w3.org/2000/svg" 
-                                            className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" 
-                                            fill="none" 
-                                            viewBox="0 0 24 24" 
-                                            stroke="currentColor"
-                                          >
-                                            <path 
-                                              strokeLinecap="round" 
-                                              strokeLinejoin="round" 
-                                              strokeWidth={2} 
-                                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
-                                            />
-                                          </svg>
-                                          <div className="absolute right-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
-                                            {contact.explanation}
-                                            <div className="absolute right-0 top-full border-4 border-transparent border-t-gray-900"></div>
+                          meetingContacts[`${event.subject}_${event.date_str}`].total_contacts === 0 ? (
+                            <p className="text-sm text-gray-500 italic">No champions in this call</p>
+                          ) : (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                </svg>
+                                <span>{meetingContacts[`${event.subject}_${event.date_str}`].total_contacts} Total Participants</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span>{meetingContacts[`${event.subject}_${event.date_str}`].champions_count} Champions</span>
+                              </div>
+                              <div className="mt-3 space-y-2">
+                                {meetingContacts[`${event.subject}_${event.date_str}`].contacts.map((contact, idx) => (
+                                  <div key={idx} className="p-2 bg-white rounded border border-gray-100">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-medium text-sm">{contact.speakerName} ({contact.email})</span>
+                                        {contact.champion && (
+                                          <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
+                                            Champion
+                                          </span>
+                                        )}
+                                      </div>
+                                      {contact.explanation && (
+                                        <div className="relative inline-block">
+                                          <div className="group">
+                                            <svg 
+                                              xmlns="http://www.w3.org/2000/svg" 
+                                              className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" 
+                                              fill="none" 
+                                              viewBox="0 0 24 24" 
+                                              stroke="currentColor"
+                                            >
+                                              <path 
+                                                strokeLinecap="round" 
+                                                strokeLinejoin="round" 
+                                                strokeWidth={2} 
+                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+                                              />
+                                            </svg>
+                                            <div className="absolute right-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
+                                              {contact.explanation}
+                                              <div className="absolute right-0 top-full border-4 border-transparent border-t-gray-900"></div>
+                                            </div>
                                           </div>
                                         </div>
+                                      )}
+                                    </div>
+                                    {contact.business_pain && (
+                                      <div className="mt-2 pl-4 border-l-2 border-gray-200">
+                                        <p className="text-sm text-gray-700">{contact.business_pain}</p>
                                       </div>
                                     )}
                                   </div>
-                                  {contact.business_pain && (
-                                    <div className="mt-2 pl-4 border-l-2 border-gray-200">
-                                      <p className="text-sm text-gray-700">{contact.business_pain}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        ) : (
+                          )
+                        ) : loadingChampions ? (
                           <p className="text-sm text-gray-500 italic">Analyzing champions...</p>
+                        ) : (
+                          <p className="text-sm text-gray-500 italic">No champions in this call</p>
                         )}
                       </div>
                     )}
@@ -1773,7 +1787,8 @@ const DealLogs: React.FC<{
   activeFilters: Record<string, boolean>;
   onFilterChange: (filters: Record<string, boolean>) => void;
   selectedEventId: string | null;
-}> = ({ events, activeFilters, onFilterChange, selectedEventId }) => {
+  onRowClick: (date: string | null, eventId: string | null) => void;
+}> = ({ events, activeFilters, onFilterChange, selectedEventId, onRowClick }) => {
   // Sort events by date and time in reverse chronological order
   const sortedEvents = [...events].sort((a, b) => {
     // Handle V2 format (event_date)
@@ -1817,13 +1832,10 @@ const DealLogs: React.FC<{
   const handleRowClick = (event: Event, index: number) => {
     // Set the selected date to open the drawer
     const dateToUse = event.date_str || event.event_date?.split('T')[0] || null;
-    setSelectedDate(dateToUse);
+    const eventId = event.id || event.event_id || null;
     
-    // Set the selected event ID
-    setSelectedEventId(event.id || event.event_id || null);
-    
-    // Always open the drawer if it's closed
-    setIsDrawerOpen(true);
+    // Call the parent's handler
+    onRowClick(dateToUse, eventId);
     
     // After a short delay to allow the drawer to open, scroll to the event
     setTimeout(() => {
@@ -2644,714 +2656,755 @@ useEffect(() => {
     return colors[index];
   };
 
-return (
-  <div className="flex h-screen" suppressHydrationWarning>
-    {/* Sidebar */}
-    <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
-      {/* Search bar */}
-      <div className="p-4 border-b border-gray-100">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search deals..."
-            value={dealSearchTerm}
-            onChange={(e) => {
-              // Update the input value immediately for smooth typing
-              setDealSearchTerm(e.target.value);
-            }}
-            className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <svg
-            className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+  // Add this helper function before the EventDrawer component
+  const parseMarkdownSections = (markdown: string): Record<string, string> => {
+    const sections: Record<string, string> = {};
+    const sectionTitles = [
+      "Background & Team Context",
+      "Current State & Use Cases",
+      "Gap Analysis & Pain Points",
+      "Positive & Negative Signals",
+      "Next Steps & Requirements"
+    ];
+
+    // Split by markdown headers and clean up
+    const parts = markdown.split(/#\s+/).filter(Boolean);
+    
+    sectionTitles.forEach((title, index) => {
+      const nextTitle = sectionTitles[index + 1];
+      const content = parts.find(part => part.startsWith(title));
+      
+      if (content) {
+        // Extract content between current title and next title (or end of string)
+        let sectionContent = content.substring(title.length).trim();
+        if (nextTitle) {
+          const nextTitleIndex = sectionContent.indexOf(nextTitle);
+          if (nextTitleIndex !== -1) {
+            sectionContent = sectionContent.substring(0, nextTitleIndex).trim();
+          }
+        }
+        sections[title] = sectionContent;
+      } else {
+        sections[title] = ''; // Empty string for missing sections
+      }
+    });
+
+    return sections;
+  };
+
+  return (
+    <div className="flex h-screen" suppressHydrationWarning>
+      {/* Sidebar */}
+      <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+        {/* Search bar */}
+        <div className="p-4 border-b border-gray-100">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search deals..."
+              value={dealSearchTerm}
+              onChange={(e) => {
+                // Update the input value immediately for smooth typing
+                setDealSearchTerm(e.target.value);
+              }}
+              className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
-          </svg>
-        </div>
-      </div>
-
-      {/* Stage filter chips */}
-      <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-        {/* Tabs */}
-        <div className="flex border-b border-gray-200 mb-3">
-          <button
-            onClick={() => setActiveFilterTab('stages')}
-            className={`px-4 py-2 text-sm font-medium ${
-              activeFilterTab === 'stages'
-                ? 'border-b-2 border-blue-500 text-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Stages
-          </button>
-          <button
-            onClick={() => setActiveFilterTab('owners')}
-            className={`px-4 py-2 text-sm font-medium ${
-              activeFilterTab === 'owners'
-                ? 'border-b-2 border-blue-500 text-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Owners
-          </button>
+            <svg
+              className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+          </div>
         </div>
 
-        {/* Filter chips */}
-        <div className="flex flex-wrap gap-2 p-2 bg-gray-50">
-          {activeFilterTab === 'stages' ? (
-            // Stage filters
-            uniqueStages.map((stage) => {
-              const isSelected = selectedStages.has(stage);
-              return (
-                <button
-                  key={stage}
-                  onClick={() => toggleStageFilter(stage)}
-                  className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
-                    isSelected 
-                      ? `${getStageColor(stage).bg} ${getStageColor(stage).text} border ${getStageColor(stage).border}`
-                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                  } hover:opacity-90 transition-opacity`}
-                >
-                  {getStageInitials(stage)}
-                </button>
-              );
-            })
-          ) : (
-            // Owner filters
-            uniqueOwners.map((owner) => {
-              const isSelected = selectedOwners.has(owner);
-              return (
-                <button
-                  key={owner}
-                  onClick={() => toggleOwnerFilter(owner)}
-                  className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
-                    isSelected 
-                      ? `${getOwnerColor(owner).bg} ${getOwnerColor(owner).text} border ${getOwnerColor(owner).border}`
-                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                  } hover:opacity-90 transition-opacity`}
-                >
-                  {getOwnerInitials(owner)}
-                </button>
-              );
-            })
-          )}
-        </div>
-      </div>
+        {/* Stage filter chips */}
+        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+          {/* Tabs */}
+          <div className="flex border-b border-gray-200 mb-3">
+            <button
+              onClick={() => setActiveFilterTab('stages')}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeFilterTab === 'stages'
+                  ? 'border-b-2 border-blue-500 text-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Stages
+            </button>
+            <button
+              onClick={() => setActiveFilterTab('owners')}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeFilterTab === 'owners'
+                  ? 'border-b-2 border-blue-500 text-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Owners
+            </button>
+          </div>
 
-      {/* Regular Deals Section - Scrollable */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="p-4">
-          <h3 className="text-sm font-medium text-gray-500 mb-3">
-            All Deals ({filteredDeals.length})
-          </h3>
-          <div className="space-y-2">
-            {filteredDeals.map(deal => {
-              const daysPassed = getDaysPassed(deal);
-              const isSelected = selectedDeal?.id === deal.id;
-              return (
-                <div
-                  key={deal.id}
-                  className={`flex items-start justify-between p-3 rounded-lg transition-colors cursor-pointer border ${
-                    isSelected 
-                      ? 'bg-blue-50 border-blue-200 shadow-sm' 
-                      : 'bg-white border-gray-100 hover:bg-gray-50'
-                  }`}
-                  onClick={() => {
-                    if (deal.name) {
-                      const url = new URL(window.location.href);
-                      url.searchParams.set('dealName', deal.name);
-                      url.searchParams.set('autoload', 'true');
-                      window.history.pushState({}, '', url.toString());
-                      
-                      // Update selected deal
-                      updateState('dealTimeline.selectedDeal', deal);
-                      setSelectedOption({ value: deal.id, label: deal.name });
-                      setCurrentDealId(deal.id);
-                      
-                      // Load timeline without resetting selectedStages
-                      handleGetTimeline(deal);
-                    }
-                  }}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className={`text-sm font-medium truncate ${
-                      isSelected ? 'text-blue-700' : 'text-gray-900'
-                    }`}>
-                      {deal.name}
+          {/* Filter chips */}
+          <div className="flex flex-wrap gap-2 p-2 bg-gray-50">
+            {activeFilterTab === 'stages' ? (
+              // Stage filters
+              uniqueStages.map((stage) => {
+                const isSelected = selectedStages.has(stage);
+                return (
+                  <button
+                    key={stage}
+                    onClick={() => toggleStageFilter(stage)}
+                    className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
+                      isSelected 
+                        ? `${getStageColor(stage).bg} ${getStageColor(stage).text} border ${getStageColor(stage).border}`
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                    } hover:opacity-90 transition-opacity`}
+                  >
+                    {getStageInitials(stage)}
+                  </button>
+                );
+              })
+            ) : (
+              // Owner filters
+              uniqueOwners.map((owner) => {
+                const isSelected = selectedOwners.has(owner);
+                return (
+                  <button
+                    key={owner}
+                    onClick={() => toggleOwnerFilter(owner)}
+                    className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
+                      isSelected 
+                        ? `${getOwnerColor(owner).bg} ${getOwnerColor(owner).text} border ${getOwnerColor(owner).border}`
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                    } hover:opacity-90 transition-opacity`}
+                  >
+                    {getOwnerInitials(owner)}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Regular Deals Section - Scrollable */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-4">
+            <h3 className="text-sm font-medium text-gray-500 mb-3">
+              All Deals ({filteredDeals.length})
+            </h3>
+            <div className="space-y-2">
+              {filteredDeals.map(deal => {
+                const daysPassed = getDaysPassed(deal);
+                const isSelected = selectedDeal?.id === deal.id;
+                return (
+                  <div
+                    key={deal.id}
+                    className={`flex items-start justify-between p-3 rounded-lg transition-colors cursor-pointer border ${
+                      isSelected 
+                        ? 'bg-blue-50 border-blue-200 shadow-sm' 
+                        : 'bg-white border-gray-100 hover:bg-gray-50'
+                    }`}
+                    onClick={() => {
+                      if (deal.name) {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('dealName', deal.name);
+                        url.searchParams.set('autoload', 'true');
+                        window.history.pushState({}, '', url.toString());
+                        
+                        // Update selected deal
+                        updateState('dealTimeline.selectedDeal', deal);
+                        setSelectedOption({ value: deal.id, label: deal.name });
+                        setCurrentDealId(deal.id);
+                        
+                        // Load timeline without resetting selectedStages
+                        handleGetTimeline(deal);
+                      }
+                    }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-sm font-medium truncate ${
+                        isSelected ? 'text-blue-700' : 'text-gray-900'
+                      }`}>
+                        {deal.name}
+                      </div>
+                      <div className={`text-xs ${
+                        isSelected ? 'text-blue-600' : 'text-gray-500'
+                      }`}>
+                        Stage: {deal.stage}
+                      </div>
+                      <div className={`text-xs ${
+                        isSelected ? 'text-blue-600' : 'text-gray-500'
+                      }`}>
+                        Owner: {deal.owner || 'NA'}
+                      </div>
+                      <div className={`text-xs ${
+                        isSelected ? 'text-blue-600' : 'text-gray-500'
+                      }`}>
+                        Created: {formatDate(deal.createdate)}
+                      </div>
                     </div>
-                    <div className={`text-xs ${
-                      isSelected ? 'text-blue-600' : 'text-gray-500'
-                    }`}>
-                      Stage: {deal.stage}
-                    </div>
-                    <div className={`text-xs ${
-                      isSelected ? 'text-blue-600' : 'text-gray-500'
-                    }`}>
-                      Owner: {deal.owner || 'NA'}
-                    </div>
-                    <div className={`text-xs ${
-                      isSelected ? 'text-blue-600' : 'text-gray-500'
-                    }`}>
-                      Created: {formatDate(deal.createdate)}
+                    <div className="flex items-center gap-2">
+                      {deal.stage && (
+                        <div 
+                          className="w-2 h-2 rounded-full"
+                          style={{
+                            backgroundColor: getStageColor(deal.stage).text === 'text-emerald-700' ? '#047857' :
+                                          getStageColor(deal.stage).text === 'text-red-700' ? '#b91c1c' :
+                                          getStageColor(deal.stage).text === 'text-blue-700' ? '#1d4ed8' :
+                                          getStageColor(deal.stage).text === 'text-yellow-700' ? '#a16207' :
+                                          getStageColor(deal.stage).text === 'text-purple-700' ? '#6b21a8' :
+                                          getStageColor(deal.stage).text === 'text-indigo-700' ? '#3730a3' :
+                                          getStageColor(deal.stage).text === 'text-green-700' ? '#15803d' :
+                                          getStageColor(deal.stage).text === 'text-orange-700' ? '#c2410c' :
+                                          getStageColor(deal.stage).text === 'text-pink-700' ? '#be185d' : '#6b7280',
+                            border: '1px solid rgba(0, 0, 0, 0.1)'
+                          }}
+                        />
+                      )}
+                      {isSelected && (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {deal.stage && (
-                      <div 
-                        className="w-2 h-2 rounded-full"
-                        style={{
-                          backgroundColor: getStageColor(deal.stage).text === 'text-emerald-700' ? '#047857' :
-                                        getStageColor(deal.stage).text === 'text-red-700' ? '#b91c1c' :
-                                        getStageColor(deal.stage).text === 'text-blue-700' ? '#1d4ed8' :
-                                        getStageColor(deal.stage).text === 'text-yellow-700' ? '#a16207' :
-                                        getStageColor(deal.stage).text === 'text-purple-700' ? '#6b21a8' :
-                                        getStageColor(deal.stage).text === 'text-indigo-700' ? '#3730a3' :
-                                        getStageColor(deal.stage).text === 'text-green-700' ? '#15803d' :
-                                        getStageColor(deal.stage).text === 'text-orange-700' ? '#c2410c' :
-                                        getStageColor(deal.stage).text === 'text-pink-700' ? '#be185d' : '#6b7280',
-                          border: '1px solid rgba(0, 0, 0, 0.1)'
-                        }}
-                      />
-                    )}
-                    {isSelected && (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    {/* Main Content */}
-    <div className="flex-1 overflow-y-auto">
-      <div className="p-6">
-    <div className="flex justify-between items-center mb-6">
-      <div className="flex items-center gap-4">
-        {/* <h1 className="text-2xl font-bold">Deal Timeline</h1> */}
-        {selectedDeal && (
-          <div className="flex items-center">
-            <span className="text-2xl font-bold text-gray-600">{selectedDeal.name}</span>
-            <div className="relative inline-block ml-2">
-              <div className="cursor-help group">
-                <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 text-sm hover:bg-gray-300 transition-colors">
-                  ?
-                </div>
-                <div className="absolute z-10 invisible group-hover:visible hover:visible bg-white p-4 rounded-md shadow-lg border border-gray-200 w-72 sm:w-96 left-0 top-full mt-1">
-                  {loadingOverview ? (
-                    <div className="flex items-center justify-center py-2">
-                      <div className="animate-spin h-4 w-4 border-2 border-sky-500 rounded-full border-t-transparent mr-2"></div>
-                      <p className="text-sm text-gray-500">Loading company overview...</p>
-                    </div>
-                  ) : companyOverview ? (
-                    <p className="text-sm text-gray-700">{companyOverview}</p>
-                  ) : (
-                    <p className="text-sm text-gray-500">No company information available</p>
-                  )}
+      {/* Main Content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-4">
+          {/* <h1 className="text-2xl font-bold">Deal Timeline</h1> */}
+          {selectedDeal && (
+            <div className="flex items-center">
+              <span className="text-2xl font-bold text-gray-600">{selectedDeal.name}</span>
+              <div className="relative inline-block ml-2">
+                <div className="cursor-help group">
+                  <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 text-sm hover:bg-gray-300 transition-colors">
+                    ?
+                  </div>
+                  <div className="absolute z-10 invisible group-hover:visible hover:visible bg-white p-4 rounded-md shadow-lg border border-gray-200 w-72 sm:w-96 left-0 top-full mt-1">
+                    {loadingOverview ? (
+                      <div className="flex items-center justify-center py-2">
+                        <div className="animate-spin h-4 w-4 border-2 border-sky-500 rounded-full border-t-transparent mr-2"></div>
+                        <p className="text-sm text-gray-500">Loading company overview...</p>
+                      </div>
+                    ) : companyOverview ? (
+                      <p className="text-sm text-gray-700">{companyOverview}</p>
+                    ) : (
+                      <p className="text-sm text-gray-500">No company information available</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+        
+        {/* Refresh button with last updated timestamp */}
+        <div className="flex items-center space-x-4">
+          {lastFetched && (
+            <span className="text-sm text-gray-500">
+              Updated {new Date(lastFetched).toLocaleTimeString()}
+            </span>
+          )}
+          <button
+            onClick={handleRefresh}
+            className="px-3 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded transition-colors text-sm flex items-center"
+            disabled={loading}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
+        </div>
       </div>
       
-      {/* Refresh button with last updated timestamp */}
-      <div className="flex items-center space-x-4">
-        {lastFetched && (
-          <span className="text-sm text-gray-500">
-            Updated {new Date(lastFetched).toLocaleTimeString()}
-          </span>
-        )}
-        <button
-          onClick={handleRefresh}
-          className="px-3 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded transition-colors text-sm flex items-center"
-          disabled={loading}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Refresh
-        </button>
-      </div>
-    </div>
-    
-    {/* Activity count message */}
-    {selectedDeal && (
-      <div className="mb-6 bg-sky-50 p-3 rounded-md border border-sky-100">
-        {fetchingActivities ? (
-          <p className="text-sky-700 font-medium flex items-center">
-            <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-sky-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      {/* Activity count message */}
+      {selectedDeal && (
+        <div className="mb-6 bg-sky-50 p-3 rounded-md border border-sky-100">
+          {fetchingActivities ? (
+            <p className="text-sky-700 font-medium flex items-center">
+              <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-sky-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Counting activities for <span className="font-bold ml-1">{selectedDeal.name}</span>...
+            </p>
+          ) : activitiesCount !== null ? (
+            <p className="text-sky-800 font-medium">
+              <span className="font-bold text-lg">{activitiesCount}</span> activities found for this deal
+            </p>
+          ) : timelineData ? (
+            <p className="text-sky-800 font-medium">
+              <span className="font-bold text-lg">{timelineData.events.length}</span> activities found for this deal
+            </p>
+          ) : (
+            <p className="text-sky-800 font-medium">
+              Loading deal activities...
+            </p>
+          )}
+        </div>
+      )}
+      
+      {error && (
+        <div className="text-red-500 mb-4 p-3 bg-red-50 rounded-md border border-red-100">
+          {error}
+          <button
+            className="ml-3 text-red-700 underline"
+            onClick={handleRefresh}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      
+      {loading && selectedDeal ? (
+        <div className="text-center py-10">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+          <p className="mt-3 text-lg font-medium">
+            {loadingMessage ? (
+              <span className={`text-blue-600 ${elapsedTime > 15 ? 'text-orange-500' : ''} ${elapsedTime > 80 ? 'text-red-500' : ''}`}>
+                {loadingMessage}
+              </span>
+            ) : (
+              <span className={`${elapsedTime > 15 ? 'text-orange-500' : ''} ${elapsedTime > 80 ? 'text-red-500' : ''}`}>
+                Loading deal timeline for <b>{selectedDeal?.name}</b>...
+              </span>
+            )}
+          </p>
+
+          <div className="mt-2 text-gray-600 font-mono">
+          {formatElapsedTime(elapsedTime)}
+          </div>
+        </div>
+      ) : loadingError ? (
+        <div className="text-center py-10">
+          <div className="text-red-500 mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            Counting activities for <span className="font-bold ml-1">{selectedDeal.name}</span>...
-          </p>
-        ) : activitiesCount !== null ? (
-          <p className="text-sky-800 font-medium">
-            <span className="font-bold text-lg">{activitiesCount}</span> activities found for this deal
-          </p>
-        ) : timelineData ? (
-          <p className="text-sky-800 font-medium">
-            <span className="font-bold text-lg">{timelineData.events.length}</span> activities found for this deal
-          </p>
-        ) : (
-          <p className="text-sky-800 font-medium">
-            Loading deal activities...
-          </p>
-        )}
-      </div>
-    )}
-    
-    {error && (
-      <div className="text-red-500 mb-4 p-3 bg-red-50 rounded-md border border-red-100">
-        {error}
-        <button
-          className="ml-3 text-red-700 underline"
-          onClick={handleRefresh}
-        >
-          Retry
-        </button>
-      </div>
-    )}
-    
-    {loading && selectedDeal ? (
-      <div className="text-center py-10">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-        <p className="mt-3 text-lg font-medium">
-          {loadingMessage ? (
-            <span className={`text-blue-600 ${elapsedTime > 15 ? 'text-orange-500' : ''} ${elapsedTime > 80 ? 'text-red-500' : ''}`}>
-              {loadingMessage}
-            </span>
-          ) : (
-            <span className={`${elapsedTime > 15 ? 'text-orange-500' : ''} ${elapsedTime > 80 ? 'text-red-500' : ''}`}>
-              Loading deal timeline for <b>{selectedDeal?.name}</b>...
-            </span>
-          )}
-        </p>
-
-        <div className="mt-2 text-gray-600 font-mono">
-        {formatElapsedTime(elapsedTime)}
+          </div>
+          <p className="mb-4">Encountered an error while loading. Try again?</p>
+          <button 
+            onClick={() => selectedDeal && handleGetTimeline(selectedDeal)} 
+            className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded transition-colors"
+            disabled={loading}
+          >
+            Load Timeline
+          </button>
         </div>
-      </div>
-    ) : loadingError ? (
-      <div className="text-center py-10">
-        <div className="text-red-500 mb-3">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <p className="mb-4">Encountered an error while loading. Try again?</p>
-        <button 
-          onClick={() => selectedDeal && handleGetTimeline(selectedDeal)} 
-          className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded transition-colors"
-          disabled={loading}
-        >
-          Load Timeline
-        </button>
-      </div>
-    ) : timelineData ? (
-      <div className="bg-white p-4 rounded-lg shadow">
-        {dealInfo && (
-          <div className="mb-4 p-3 bg-gray-50 rounded-md">
-            <div className="flex flex-wrap gap-x-8">
-              <p className="text-gray-700">
-                <span className="font-semibold">Deal Owner:</span> <span className="text-red-600"><b>{dealInfo.dealOwner}</b></span>
-              </p>
-              <p className="text-gray-700">
-                <span className="font-semibold">Stage:</span> <span className="text-red-600"><b>{dealInfo.dealStage}</b></span>
-              </p>
-              <p className="text-gray-700">
-                <span className="font-semibold">Started:</span> {formatDate(dealInfo.startDate)}
-              </p>
-              <p className="text-gray-700">
-                <span className="font-semibold">Last Touch Point:</span> {formatDate(dealInfo.endDate)}
-                <span className="text-gray-700 text-sm ml-1">
-                  <b>(been {calculateDaysPassed(dealInfo.endDate)} days)</b>
-                </span>
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Sentiment and Intent Summary Boxes */}
-        {timelineData && timelineData.events && (
-          <div className="mb-6 grid grid-cols-3 gap-4">
-            {/* Positive Sentiment Incoming Emails */}
-            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
-              <div className="flex items-center">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <h4 className="text-sm font-medium text-gray-600">Positive Incoming Emails</h4>
-                  <button 
-                    onClick={() => handleMetricClick('positive-incoming')}
-                    className="text-2xl font-bold text-green-600 hover:text-green-800 transition-colors cursor-pointer"
-                  >
-                    {timelineData.events.filter(e => e.type === 'Incoming Email' && e.sentiment === 'positive').length}
-                  </button>
-                </div>
+      ) : timelineData ? (
+        <div className="bg-white p-4 rounded-lg shadow">
+          {dealInfo && (
+            <div className="mb-4 p-3 bg-gray-50 rounded-md">
+              <div className="flex flex-wrap gap-x-8">
+                <p className="text-gray-700">
+                  <span className="font-semibold">Deal Owner:</span> <span className="text-red-600"><b>{dealInfo.dealOwner}</b></span>
+                </p>
+                <p className="text-gray-700">
+                  <span className="font-semibold">Stage:</span> <span className="text-red-600"><b>{dealInfo.dealStage}</b></span>
+                </p>
+                <p className="text-gray-700">
+                  <span className="font-semibold">Started:</span> {formatDate(dealInfo.startDate)}
+                </p>
+                <p className="text-gray-700">
+                  <span className="font-semibold">Last Touch Point:</span> {formatDate(dealInfo.endDate)}
+                  <span className="text-gray-700 text-sm ml-1">
+                    <b>(been {calculateDaysPassed(dealInfo.endDate)} days)</b>
+                  </span>
+                </p>
               </div>
-            </div>
-            
-            {/* Likely/Very Likely to Buy */}
-            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
-              <div className="flex items-center">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <h4 className="text-sm font-medium text-gray-600">Positive Buying Signals</h4>
-                  <button 
-                    onClick={() => handleMetricClick('likely-buy')}
-                    className="text-2xl font-bold text-green-600 hover:text-green-800 transition-colors cursor-pointer"
-                  >
-                    {timelineData.events.filter(e => 
-                      e.type === 'Meeting' && 
-                      (e.buyer_intent === 'Likely to buy' || e.buyer_intent === 'Very likely to buy')
-                    ).length}
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            {/* Less Likely to Buy */}
-            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
-              <div className="flex items-center">
-                <div className="p-2 bg-red-100 rounded-lg">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <h4 className="text-sm font-medium text-gray-600">Less Likely to Buy</h4>
-                  <button 
-                    onClick={() => handleMetricClick('less-likely')}
-                    className="text-2xl font-bold text-red-600 hover:text-red-800 transition-colors cursor-pointer"
-                  >
-                    {timelineData.events.filter(e => 
-                      e.type === 'Meeting' && e.buyer_intent === 'Less likely to buy'
-                    ).length}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Add Challenges section */}
-        {timelineData && timelineData.events && (
-          <div className="mb-6 grid grid-cols-3 gap-4">
-            {/* Pricing Concerns */}
-            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
-              <div className="flex items-center">
-                <div className={`p-2 rounded-lg ${
-                  concerns?.pricing_concerns?.has_concerns ? 'bg-orange-100' : 'bg-green-100'
-                }`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                    concerns?.pricing_concerns?.has_concerns ? 'text-orange-600' : 'text-green-600'
-                  }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <h4 className="text-sm font-medium text-gray-600">Pricing Concerns</h4>
-                  {loadingConcerns ? (
-                    <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                  ) : concerns?.pricing_concerns ? (
-                    <div className="group relative">
-                      <span className={`text-lg font-bold ${
-                        concerns.pricing_concerns.has_concerns ? 'text-red-600' : 'text-green-600'
-                      }`}>
-                        {String(concerns.pricing_concerns.has_concerns ? 'Yes' : 'No')}
-                      </span>
-                      {concerns.pricing_concerns.explanation && 
-                       concerns.pricing_concerns.explanation !== "No data available" && 
-                       typeof concerns.pricing_concerns.explanation === 'string' && (
-                        <div className="absolute z-10 invisible group-hover:visible hover:visible left-0 top-full">
-                          <div className="h-2 w-full"></div>
-                          <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
-                            <p className="text-sm text-gray-700">{String(concerns.pricing_concerns.explanation)}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-gray-400">N/A</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Decision Maker */}
-            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
-              <div className="flex items-center">
-                <div className={`p-2 rounded-lg ${
-                  concerns?.no_decision_maker?.is_issue ? 'bg-orange-100' : 'bg-green-100'
-                }`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                    concerns?.no_decision_maker?.is_issue ? 'text-orange-600' : 'text-green-600'
-                  }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <h4 className="text-sm font-medium text-gray-600">Decision Maker</h4>
-                  {loadingConcerns ? (
-                    <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                  ) : concerns?.no_decision_maker ? (
-                    <div className="group relative">
-                      <span className={`text-lg font-bold ${
-                        concerns.no_decision_maker.is_issue ? 'text-red-600' : 'text-green-600'
-                      }`}>
-                        {String(concerns.no_decision_maker.is_issue ? 'No' : 'Yes')}
-                      </span>
-                      {concerns.no_decision_maker.explanation && 
-                       concerns.no_decision_maker.explanation !== "No data available" && 
-                       typeof concerns.no_decision_maker.explanation === 'string' && (
-                        <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
-                          <div className="h-2 w-full"></div>
-                          <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
-                            <p className="text-sm text-gray-700">{String(concerns.no_decision_maker.explanation)}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-gray-400">N/A</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Existing Vendor */}
-            <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
-              <div className="flex items-center">
-                <div className={`p-2 rounded-lg ${
-                  concerns?.already_has_vendor?.has_vendor ? 'bg-orange-100' : 'bg-green-100'
-                }`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                    concerns?.already_has_vendor?.has_vendor ? 'text-orange-600' : 'text-green-600'
-                  }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <h4 className="text-sm font-medium text-gray-600">Using a Comptetitor?</h4>
-                  {loadingConcerns ? (
-                    <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                  ) : concerns?.already_has_vendor ? (
-                    <div className="group relative">
-                      <span className={`text-lg font-bold ${
-                        concerns.already_has_vendor.has_vendor ? 'text-red-600' : 'text-green-600'
-                      }`}>
-                        {String(concerns.already_has_vendor.has_vendor ? 'Yes' : 'No')}
-                      </span>
-                      {concerns.already_has_vendor.explanation && 
-                       concerns.already_has_vendor.explanation !== "No data available" && 
-                       typeof concerns.already_has_vendor.explanation === 'string' && (
-                        <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
-                          <div className="h-2 w-full"></div>
-                          <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
-                            <p className="text-sm text-gray-700">{String(concerns.already_has_vendor.explanation)}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-gray-400">N/A</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-4">
-          <h3 className="text-xl font-semibold mb-2">Deal Timeline: {selectedDeal?.name}</h3>
-          {chartData.length > 0 ? (
-            <div className="h-[500px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={chartData}
-                  margin={{ top: 20, right: 30, left: 30, bottom: 20 }}
-                  barSize={20}
-                  maxBarSize={20}
-                  ref={chartRef}
-                  onClick={handleBarClick}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                      
-                      {/* Add custom background for "Less likely to buy" meetings */}
-                      {chartData.map((entry, index) => {
-                        if (entry.hasLessLikelyToBuy) {
-                          return (
-                            <ReferenceArea
-                              key={`bg-red-${entry.date}-${index}-less-likely`}
-                              x1={entry.date}
-                              x2={entry.date}
-                              y1={0}
-                              y2={500}
-                              fill="#fee2e2"
-                              fillOpacity={0.3}
-                              stroke="none"
-                            />
-                          );
-                        }
-                        return null;
-                      })}
-                      
-                      {/* Add custom background for "Very likely to buy" meetings */}
-                      {chartData.map((entry, index) => {
-                        if (entry.hasVeryLikelyToBuy) {
-                          return (
-                            <ReferenceArea
-                              key={`bg-green-${entry.date}-${index}-very-likely`}
-                              x1={entry.date}
-                              x2={entry.date}
-                              y1={0}
-                              y2={500}
-                              fill="#dcfce7"
-                              fillOpacity={0.3}
-                              stroke="none"
-                            />
-                          );
-                        }
-                        return null;
-                      })}
-                      
-                  <XAxis 
-                    dataKey="date" 
-                    tickFormatter={formatXAxisDate}
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                    tickMargin={15}
-                    domain={[
-                      'dataMin',
-                      () => {
-                        // Get the date of the last data point
-                        if (chartData.length === 0) return new Date();
-                        
-                        const lastDate = new Date(chartData[chartData.length - 1].date);
-                        // Add 5 days to the last date
-                        lastDate.setDate(lastDate.getDate() + 5);
-                        return lastDate;
-                      }
-                    ]}
-                    interval={Math.max(0, Math.ceil(Math.max(1, (endIndex - startIndex) / 10)))}
-                  />
-
-                  <YAxis allowDecimals={false} />
-                  <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(0,0,0,0.1)'}} />
-                  <Legend />
-                  
-                      <Bar 
-                        dataKey="Meeting" 
-                        stackId="a" 
-                        fill="#f87171"
-                        name="Meeting" 
-                        shape={(props: any) => {
-                          const { x, y, width, height, payload } = props;
-                          return (
-                            <rect
-                              x={x}
-                              y={y}
-                              width={width}
-                              height={height}
-                              fill={payload?.hasLessLikelyToBuy ? "#6e0200" : "#f87171"}
-                            />
-                          );
-                        }}
-                      />
-                      <Bar 
-                        dataKey="Outgoing Email" 
-                        stackId="a" 
-                        fill="#93c5fd"
-                        name="Outgoing Email" 
-                      />
-                      <Bar 
-                        dataKey="Incoming Email" 
-                        stackId="a" 
-                        fill="#86efac"
-                        name="Incoming Email" 
-                      />
-                      <Bar 
-                        dataKey="Note" 
-                        stackId="a" 
-                        fill="#99f6e4" 
-                        name="Note" 
-                      />
-
-                  {chartData.length > 1 ? (
-                    <Brush 
-                      dataKey="date"
-                      height={30}
-                      stroke="#8884d8"
-                      tickFormatter={formatXAxisDate}
-                      startIndex={Number.isInteger(startIndex) && startIndex >= 0 ? startIndex : 0}
-                      endIndex={Number.isInteger(endIndex) && endIndex >= 0 && endIndex < chartData.length 
-                        ? endIndex 
-                        : (chartData.length > 0 ? chartData.length - 1 : 0)}
-                      onChange={handleBrushChange}
-                    />
-                  ) : null}
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="text-center py-10 text-gray-600">
-              No timeline events found for this deal.
             </div>
           )}
-        </div>
 
-        {/* Add DealLogs component */}
-        {timelineData.events && timelineData.events.length > 0 && (
+          {/* Sentiment and Intent Summary Boxes */}
+          {timelineData && timelineData.events && (
+            <div className="mb-6 grid grid-cols-3 gap-4">
+              {/* Positive Sentiment Incoming Emails */}
+              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+                <div className="flex items-center">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <h4 className="text-sm font-medium text-gray-600">Positive Incoming Emails</h4>
+                    <button 
+                      onClick={() => handleMetricClick('positive-incoming')}
+                      className="text-2xl font-bold text-green-600 hover:text-green-800 transition-colors cursor-pointer"
+                    >
+                      {timelineData.events.filter(e => e.type === 'Incoming Email' && e.sentiment === 'positive').length}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Likely/Very Likely to Buy */}
+              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+                <div className="flex items-center">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <h4 className="text-sm font-medium text-gray-600">Positive Buying Signals</h4>
+                    <button 
+                      onClick={() => handleMetricClick('likely-buy')}
+                      className="text-2xl font-bold text-green-600 hover:text-green-800 transition-colors cursor-pointer"
+                    >
+                      {timelineData.events.filter(e => 
+                        e.type === 'Meeting' && 
+                        (e.buyer_intent === 'Likely to buy' || e.buyer_intent === 'Very likely to buy')
+                      ).length}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Less Likely to Buy */}
+              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
+                <div className="flex items-center">
+                  <div className="p-2 bg-red-100 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <h4 className="text-sm font-medium text-gray-600">Less Likely to Buy</h4>
+                    <button 
+                      onClick={() => handleMetricClick('less-likely')}
+                      className="text-2xl font-bold text-red-600 hover:text-red-800 transition-colors cursor-pointer"
+                    >
+                      {timelineData.events.filter(e => 
+                        e.type === 'Meeting' && e.buyer_intent === 'Less likely to buy'
+                      ).length}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Add Challenges section */}
+          {timelineData && timelineData.events && (
+            <div className="mb-6 grid grid-cols-3 gap-4">
+              {/* Pricing Concerns */}
+              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+                <div className="flex items-center">
+                  <div className={`p-2 rounded-lg ${
+                    concerns?.pricing_concerns?.has_concerns ? 'bg-orange-100' : 'bg-green-100'
+                  }`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
+                      concerns?.pricing_concerns?.has_concerns ? 'text-orange-600' : 'text-green-600'
+                    }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <h4 className="text-sm font-medium text-gray-600">Pricing Concerns</h4>
+                    {loadingConcerns ? (
+                      <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
+                    ) : concerns?.pricing_concerns ? (
+                      <div className="group relative">
+                        <span className={`text-lg font-bold ${
+                          concerns.pricing_concerns.has_concerns ? 'text-red-600' : 'text-green-600'
+                        }`}>
+                          {String(concerns.pricing_concerns.has_concerns ? 'Yes' : 'No')}
+                        </span>
+                        {concerns.pricing_concerns.explanation && 
+                         concerns.pricing_concerns.explanation !== "No data available" && 
+                         typeof concerns.pricing_concerns.explanation === 'string' && (
+                          <div className="absolute z-10 invisible group-hover:visible hover:visible left-0 top-full">
+                            <div className="h-2 w-full"></div>
+                            <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
+                              <p className="text-sm text-gray-700">{String(concerns.pricing_concerns.explanation)}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">N/A</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Decision Maker */}
+              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+                <div className="flex items-center">
+                  <div className={`p-2 rounded-lg ${
+                    concerns?.no_decision_maker?.is_issue ? 'bg-orange-100' : 'bg-green-100'
+                  }`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
+                      concerns?.no_decision_maker?.is_issue ? 'text-orange-600' : 'text-green-600'
+                    }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <h4 className="text-sm font-medium text-gray-600">Decision Maker</h4>
+                    {loadingConcerns ? (
+                      <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
+                    ) : concerns?.no_decision_maker ? (
+                      <div className="group relative">
+                        <span className={`text-lg font-bold ${
+                          concerns.no_decision_maker.is_issue ? 'text-red-600' : 'text-green-600'
+                        }`}>
+                          {String(concerns.no_decision_maker.is_issue ? 'No' : 'Yes')}
+                        </span>
+                        {concerns.no_decision_maker.explanation && 
+                         concerns.no_decision_maker.explanation !== "No data available" && 
+                         typeof concerns.no_decision_maker.explanation === 'string' && (
+                          <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
+                            <div className="h-2 w-full"></div>
+                            <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
+                              <p className="text-sm text-gray-700">{String(concerns.no_decision_maker.explanation)}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">N/A</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Existing Vendor */}
+              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+                <div className="flex items-center">
+                  <div className={`p-2 rounded-lg ${
+                    concerns?.already_has_vendor?.has_vendor ? 'bg-orange-100' : 'bg-green-100'
+                  }`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
+                      concerns?.already_has_vendor?.has_vendor ? 'text-orange-600' : 'text-green-600'
+                    }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <h4 className="text-sm font-medium text-gray-600">Using a Comptetitor?</h4>
+                    {loadingConcerns ? (
+                      <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
+                    ) : concerns?.already_has_vendor ? (
+                      <div className="group relative">
+                        <span className={`text-lg font-bold ${
+                          concerns.already_has_vendor.has_vendor ? 'text-red-600' : 'text-green-600'
+                        }`}>
+                          {String(concerns.already_has_vendor.has_vendor ? 'Yes' : 'No')}
+                        </span>
+                        {concerns.already_has_vendor.explanation && 
+                         concerns.already_has_vendor.explanation !== "No data available" && 
+                         typeof concerns.already_has_vendor.explanation === 'string' && (
+                          <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
+                            <div className="h-2 w-full"></div>
+                            <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
+                              <p className="text-sm text-gray-700">{String(concerns.already_has_vendor.explanation)}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">N/A</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="mt-4">
-            <DealLogs 
-              events={timelineData.events} 
-              activeFilters={activeEventFilters}
-              onFilterChange={setActiveEventFilters}
-              selectedEventId={selectedEventId}
-            />
-          </div>
-        )}
-      </div>
-    ) : selectedDeal ? (
-      <div className="text-center py-10 text-gray-600">
-        <p className="mb-4">No timeline data loaded yet.</p>
-        <button 
-          onClick={() => handleGetTimeline(selectedDeal)} 
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-          disabled={loading}
-        >
-          Load Timeline
-        </button>
-      </div>
-    ) : null}
+            <h3 className="text-xl font-semibold mb-2">Deal Timeline: {selectedDeal?.name}</h3>
+            {chartData.length > 0 ? (
+              <div className="h-[500px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={chartData}
+                    margin={{ top: 20, right: 30, left: 30, bottom: 20 }}
+                    barSize={20}
+                    maxBarSize={20}
+                    ref={chartRef}
+                    onClick={handleBarClick}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                        
+                        {/* Add custom background for "Less likely to buy" meetings */}
+                        {chartData.map((entry, index) => {
+                          if (entry.hasLessLikelyToBuy) {
+                            return (
+                              <ReferenceArea
+                                key={`bg-red-${entry.date}-${index}-less-likely`}
+                                x1={entry.date}
+                                x2={entry.date}
+                                y1={0}
+                                y2={500}
+                                fill="#fee2e2"
+                                fillOpacity={0.3}
+                                stroke="none"
+                              />
+                            );
+                          }
+                          return null;
+                        })}
+                        
+                        {/* Add custom background for "Very likely to buy" meetings */}
+                        {chartData.map((entry, index) => {
+                          if (entry.hasVeryLikelyToBuy) {
+                            return (
+                              <ReferenceArea
+                                key={`bg-green-${entry.date}-${index}-very-likely`}
+                                x1={entry.date}
+                                x2={entry.date}
+                                y1={0}
+                                y2={500}
+                                fill="#dcfce7"
+                                fillOpacity={0.3}
+                                stroke="none"
+                              />
+                            );
+                          }
+                          return null;
+                        })}
+                        
+                    <XAxis 
+                      dataKey="date" 
+                      tickFormatter={formatXAxisDate}
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                      tickMargin={15}
+                      domain={[
+                        'dataMin',
+                        () => {
+                          // Get the date of the last data point
+                          if (chartData.length === 0) return new Date();
+                          
+                          const lastDate = new Date(chartData[chartData.length - 1].date);
+                          // Add 5 days to the last date
+                          lastDate.setDate(lastDate.getDate() + 5);
+                          return lastDate;
+                        }
+                      ]}
+                      interval={Math.max(0, Math.ceil(Math.max(1, (endIndex - startIndex) / 10)))}
+                    />
 
-    {/* Event Detail Drawer */}
-    <EventDrawer />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(0,0,0,0.1)'}} />
+                    <Legend />
+                    
+                        <Bar 
+                          dataKey="Meeting" 
+                          stackId="a" 
+                          fill="#f87171"
+                          name="Meeting" 
+                          shape={(props: any) => {
+                            const { x, y, width, height, payload } = props;
+                            return (
+                              <rect
+                                x={x}
+                                y={y}
+                                width={width}
+                                height={height}
+                                fill={payload?.hasLessLikelyToBuy ? "#6e0200" : "#f87171"}
+                              />
+                            );
+                          }}
+                        />
+                        <Bar 
+                          dataKey="Outgoing Email" 
+                          stackId="a" 
+                          fill="#93c5fd"
+                          name="Outgoing Email" 
+                        />
+                        <Bar 
+                          dataKey="Incoming Email" 
+                          stackId="a" 
+                          fill="#86efac"
+                          name="Incoming Email" 
+                        />
+                        <Bar 
+                          dataKey="Note" 
+                          stackId="a" 
+                          fill="#99f6e4" 
+                          name="Note" 
+                        />
+
+                    {chartData.length > 1 ? (
+                      <Brush 
+                        dataKey="date"
+                        height={30}
+                        stroke="#8884d8"
+                        tickFormatter={formatXAxisDate}
+                        startIndex={Number.isInteger(startIndex) && startIndex >= 0 ? startIndex : 0}
+                        endIndex={Number.isInteger(endIndex) && endIndex >= 0 && endIndex < chartData.length 
+                          ? endIndex 
+                          : (chartData.length > 0 ? chartData.length - 1 : 0)}
+                        onChange={handleBrushChange}
+                      />
+                    ) : null}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="text-center py-10 text-gray-600">
+                No timeline events found for this deal.
+              </div>
+            )}
+          </div>
+
+          {/* Add DealLogs component */}
+          {timelineData.events && timelineData.events.length > 0 && (
+            <div className="mt-4">
+              <DealLogs 
+                events={timelineData.events} 
+                activeFilters={activeEventFilters}
+                onFilterChange={setActiveEventFilters}
+                selectedEventId={selectedEventId}
+                onRowClick={(date, eventId) => {
+                  setSelectedDate(date);
+                  setSelectedEventId(eventId);
+                  setIsDrawerOpen(true);
+                }}
+              />
+            </div>
+          )}
+        </div>
+      ) : selectedDeal ? (
+        <div className="text-center py-10 text-gray-600">
+          <p className="mb-4">No timeline data loaded yet.</p>
+          <button 
+            onClick={() => handleGetTimeline(selectedDeal)} 
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+            disabled={loading}
+          >
+            Load Timeline
+          </button>
+        </div>
+      ) : null}
+
+      {/* Event Detail Drawer */}
+      <EventDrawer />
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
 };
 
 export default DealTimeline;

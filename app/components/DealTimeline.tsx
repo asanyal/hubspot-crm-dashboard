@@ -1512,9 +1512,16 @@ const EventDrawer = () => {
       } transition-transform duration-300 ease-in-out`}
     >
       <div className="p-4 border-b border-gray-200 sticky top-0 bg-white z-10 flex justify-between items-center">
-        <h3 className="text-xl font-bold">
-          {selectedDate ? formatDateDetailed(selectedDate) : 'Events'}
-        </h3>
+        <div>
+          <h3 className="text-xl font-bold">
+            {selectedDeal?.name || 'Events'}
+          </h3>
+          {selectedDate && (
+            <p className="text-sm text-gray-500 mt-1">
+              {formatDateDetailed(selectedDate)}
+            </p>
+          )}
+        </div>
         <button 
           onClick={() => setIsDrawerOpen(false)}
           className="text-gray-500 hover:text-gray-700"
@@ -3014,21 +3021,31 @@ useEffect(() => {
             <div className="mb-4 p-3 bg-gray-50 rounded-md">
               <div className="flex flex-wrap gap-x-8">
                 <p className="text-gray-700">
+                  <span className="font-semibold">Started:</span> {formatDate(dealInfo.startDate)}
+                </p>
+                <p className="text-gray-700">
                   <span className="font-semibold">Deal Owner:</span> <span className="text-red-600"><b>{dealInfo.dealOwner}</b></span>
                 </p>
                 <p className="text-gray-700">
                   <span className="font-semibold">Stage:</span> <span className="text-red-600"><b>{dealInfo.dealStage}</b></span>
                 </p>
-                <p className="text-gray-700">
-                  <span className="font-semibold">Started:</span> {formatDate(dealInfo.startDate)}
-                </p>
-                <p className="text-gray-700">
-                  <span className="font-semibold">Last Touch Point:</span> {formatDate(dealInfo.endDate)}
-                  <span className="text-gray-700 text-sm ml-1">
-                    <b>(been {calculateDaysPassed(dealInfo.endDate)} days)</b>
-                  </span>
-                </p>
               </div>
+            </div>
+          )}
+
+          {/* Last Touch Point Section */}
+          {dealInfo && (
+            <div className={`mb-4 p-3 rounded-md ${
+              calculateDaysPassed(dealInfo.endDate) > 10 
+                ? 'bg-red-50' 
+                : 'bg-green-50'
+            }`}>
+              <p className="text-gray-700">
+                <span className="font-semibold">Last Touch Point:</span> {formatDate(dealInfo.endDate)}
+                <span className="text-gray-700 text-sm ml-1">
+                  <b>(been {calculateDaysPassed(dealInfo.endDate)} days)</b>
+                </span>
+              </p>
             </div>
           )}
 

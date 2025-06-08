@@ -28,7 +28,6 @@ interface Deal {
   Deal_Name: string;
   Owner: string;
   Amount: string;
-  Created_At: string;
   Last_Update: string;
   Expected_Close_Date: string;
   Closed_Won: boolean;
@@ -40,6 +39,47 @@ interface DealInsights {
   no_decision_maker: string[];
   already_has_vendor: string[];
 }
+
+// Add color utility functions
+const generateColor = (str: string): string => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = hash % 360;
+  return `hsl(${hue}, 70%, 80%)`;
+};
+
+const getTextColor = (bgColor: string): string => {
+  // Convert HSL to RGB and check if it's light or dark
+  const [h, s, l] = bgColor.match(/\d+/g)?.map(Number) || [0, 0, 0];
+  return l > 60 ? '#1a1a1a' : '#ffffff';
+};
+
+const formatStageAbbr = (stageName: string): string => {
+  return stageName
+    .split(' ')
+    .map(word => word[0])
+    .join('')
+    .toUpperCase();
+};
+
+const formatOwnerInitials = (owner: string | null | undefined): string => {
+  if (!owner || typeof owner !== 'string') return '';
+  
+  // Handle special cases
+  if (owner.toLowerCase() === 'unknown owner') return 'UNK';
+  
+  // Remove any special characters and extra spaces
+  const cleanOwner = owner.replace(/[^a-zA-Z\s]/g, '').trim();
+  if (!cleanOwner) return '';
+  
+  return cleanOwner
+    .split(' ')
+    .map(word => word[0])
+    .join('')
+    .toUpperCase();
+};
 
 const DealStageSelector: React.FC = () => {
   const { state, updateState } = useAppState();
@@ -57,7 +97,7 @@ const DealStageSelector: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [sorting, setSorting] = useState<SortingState>([
-    { id: 'Created_At', desc: true }
+    { id: 'Last_Update', desc: true }
   ]);
   const [hasMounted, setHasMounted] = useState(false);
   const [failedStages, setFailedStages] = useState<Set<string>>(new Set());
@@ -536,7 +576,6 @@ const DealStageSelector: React.FC = () => {
       const dealName = String(deal.Deal_Name || '');
       const owner = String(deal.Owner || '');
       const amount = String(deal.Amount || '');
-      const createdAt = String(deal.Created_At || '');
       const lastUpdate = String(deal.Last_Update || '');
       const expectedCloseDate = String(deal.Expected_Close_Date || '');
 
@@ -544,7 +583,6 @@ const DealStageSelector: React.FC = () => {
         dealName.toLowerCase().includes(lowerCaseSearch) ||
         owner.toLowerCase().includes(lowerCaseSearch) ||
         amount.toLowerCase().includes(lowerCaseSearch) ||
-        createdAt.toLowerCase().includes(lowerCaseSearch) ||
         lastUpdate.toLowerCase().includes(lowerCaseSearch) ||
         expectedCloseDate.toLowerCase().includes(lowerCaseSearch)
       );
@@ -567,7 +605,6 @@ const DealStageSelector: React.FC = () => {
       const dealName = String(deal.Deal_Name || '');
       const owner = String(deal.Owner || '');
       const amount = String(deal.Amount || '');
-      const createdAt = String(deal.Created_At || '');
       const lastUpdate = String(deal.Last_Update || '');
       const expectedCloseDate = String(deal.Expected_Close_Date || '');
 
@@ -576,7 +613,6 @@ const DealStageSelector: React.FC = () => {
         dealName.toLowerCase().includes(lowerCaseSearch) ||
         owner.toLowerCase().includes(lowerCaseSearch) ||
         amount.toLowerCase().includes(lowerCaseSearch) ||
-        createdAt.toLowerCase().includes(lowerCaseSearch) ||
         lastUpdate.toLowerCase().includes(lowerCaseSearch) ||
         expectedCloseDate.toLowerCase().includes(lowerCaseSearch)
       );
@@ -689,7 +725,6 @@ const DealStageSelector: React.FC = () => {
     if (!insightsData || !insightsData[type]) return null;
 
     const deals = insightsData[type] || [];
-    // Use unfiltered deals from dealsByStage instead of getCurrentDeals
     const stageDeals = selectedStage ? dealsByStage[selectedStage] || [] : [];
     const totalDeals = stageDeals.length;
     const trueCount = deals.length;
@@ -697,13 +732,12 @@ const DealStageSelector: React.FC = () => {
     const truePercentage = (trueCount / totalDeals) * 100;
     const falsePercentage = (falseCount / totalDeals) * 100;
 
-    // Get false deals (deals not in the array)
     const falseDeals = stageDeals
       .map((deal: Deal) => deal.Deal_Name)
       .filter((name: string) => !deals.includes(name));
 
     return (
-      <div className="bg-white p-4 rounded-lg shadow">
+      <div key={type} className="bg-white p-4 rounded-lg shadow">
         <h3 className="text-sm font-medium text-gray-700 mb-3">{title}</h3>
         <div className="space-y-4">
           {/* True Bar */}
@@ -852,47 +886,99 @@ const DealStageSelector: React.FC = () => {
         </button>
       ),
     }),
-    columnHelper.accessor('Owner', {
-      header: 'Owner',
-    }),
-    columnHelper.accessor('Amount', {
-      header: 'Amount',
-      cell: info => formatAmount(info.getValue()),
-      // Custom sorting for currency values
-      sortingFn: (rowA, rowB, columnId) => {
-        const valueA = parseFloat(rowA.original.Amount.replace(/[^0-9.-]+/g, '') || '0');
-        const valueB = parseFloat(rowB.original.Amount.replace(/[^0-9.-]+/g, '') || '0');
-        return valueA - valueB;
+    columnHelper.accessor('Deal_Name', {
+      id: 'stage',
+      header: 'Stage',
+      cell: info => {
+        const stageName = selectedStage || '';
+        const bgColor = generateColor(stageName);
+        const textColor = getTextColor(bgColor);
+        return (
+          <span
+            className="px-2 py-1 rounded-full text-xs font-medium"
+            style={{ backgroundColor: bgColor, color: textColor }}
+          >
+            {formatStageAbbr(stageName)}
+          </span>
+        );
       },
     }),
-    columnHelper.accessor('Created_At', {
-      header: 'Created At',
-      // Custom sorting for dates
-      sortingFn: (rowA, rowB, columnId) => {
-        const dateA = new Date(rowA.original.Created_At);
-        const dateB = new Date(rowB.original.Created_At);
-        return dateA.getTime() - dateB.getTime();
+    columnHelper.accessor('Owner', {
+      header: 'Owner',
+      cell: info => {
+        const owner = info.getValue();
+        const bgColor = generateColor(owner);
+        const textColor = getTextColor(bgColor);
+        return (
+          <span
+            className="px-2 py-1 rounded-full text-xs font-medium"
+            style={{ backgroundColor: bgColor, color: textColor }}
+          >
+            {formatOwnerInitials(owner)}
+          </span>
+        );
       },
     }),
     columnHelper.accessor('Last_Update', {
       header: 'Last Update',
-      // Custom sorting for dates
       sortingFn: (rowA, rowB, columnId) => {
         const dateA = new Date(rowA.original.Last_Update);
         const dateB = new Date(rowB.original.Last_Update);
         return dateA.getTime() - dateB.getTime();
       },
     }),
-    columnHelper.accessor('Expected_Close_Date', {
-      header: 'Expected Close',
-      // Custom sorting for dates
-      sortingFn: (rowA, rowB, columnId) => {
-        const dateA = new Date(rowA.original.Expected_Close_Date);
-        const dateB = new Date(rowB.original.Expected_Close_Date);
-        return dateA.getTime() - dateB.getTime();
+    columnHelper.accessor('Deal_Name', {
+      id: 'pricing_concerns',
+      header: 'Pricing Concerns?',
+      cell: info => {
+        const dealName = info.getValue();
+        const hasPricingConcerns = insightsData?.pricing_concerns?.includes(dealName) || false;
+        return (
+          <span
+            className={`px-2 py-1 rounded-full text-xs font-medium ${
+              hasPricingConcerns ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+            }`}
+          >
+            {hasPricingConcerns ? 'Yes' : 'No'}
+          </span>
+        );
       },
     }),
-  ], [columnHelper, navigateToDealTimeline]);
+    columnHelper.accessor('Deal_Name', {
+      id: 'decision_maker',
+      header: 'Decision Maker?',
+      cell: info => {
+        const dealName = info.getValue();
+        const noDecisionMaker = insightsData?.no_decision_maker?.includes(dealName) || false;
+        return (
+          <span
+            className={`px-2 py-1 rounded-full text-xs font-medium ${
+              noDecisionMaker ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+            }`}
+          >
+            {noDecisionMaker ? 'No' : 'Yes'}
+          </span>
+        );
+      },
+    }),
+    columnHelper.accessor('Deal_Name', {
+      id: 'using_competitor',
+      header: 'Using Competitor?',
+      cell: info => {
+        const dealName = info.getValue();
+        const hasCompetitor = insightsData?.already_has_vendor?.includes(dealName) || false;
+        return (
+          <span
+            className={`px-2 py-1 rounded-full text-xs font-medium ${
+              hasCompetitor ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+            }`}
+          >
+            {hasCompetitor ? 'Yes' : 'No'}
+          </span>
+        );
+      },
+    }),
+  ], [columnHelper, navigateToDealTimeline, selectedStage, insightsData]);
 
   // Create the table instance
   const table = useReactTable({
@@ -917,39 +1003,42 @@ const DealStageSelector: React.FC = () => {
         {/* Stages List */}
         <div className="divide-y divide-gray-100">
           {stagesLoading ? (
-            <div className="p-4 text-gray-500 flex items-center">
+            <div key="loading" className="p-4 text-gray-500 flex items-center">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700 mr-2"></div>
               Loading stages...
             </div>
           ) : availableStages.length > 0 ? (
-            availableStages.map((stage) => (
-              <div
-                key={stage.stage_id}
-                className={`p-4 cursor-pointer hover:bg-gray-50 ${
-                  selectedStage === stage.stage_name ? 'bg-sky-50' : ''
-                }`}
-                onClick={() => handleStageSelect(stage.stage_name)}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-medium text-gray-600">
-                    {stage.display_order}
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900">{stage.stage_name}</div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {stage.closed_won || stage.closed_lost ? '' : `${stage.probability}% Probability`}
+            availableStages.map((stage) => {
+              const stageKey = stage.stage_id || stage.stage_name;
+              return (
+                <div
+                  key={`stage-${stageKey}`}
+                  className={`p-4 cursor-pointer hover:bg-gray-50 ${
+                    selectedStage === stage.stage_name ? 'bg-sky-50' : ''
+                  }`}
+                  onClick={() => handleStageSelect(stage.stage_name)}
+                >
+                  <div key={`stage-content-${stageKey}`} className="flex items-center gap-3">
+                    <div key={`stage-order-${stageKey}`} className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-medium text-gray-600">
+                      {stage.display_order}
                     </div>
+                    <div key={`stage-info-${stageKey}`} className="flex-1">
+                      <div className="font-medium text-gray-900">{stage.stage_name}</div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {stage.closed_won || stage.closed_lost ? '' : `${stage.probability}% Probability`}
+                      </div>
+                    </div>
+                    {selectedStage === stage.stage_name && (
+                      <svg key={`stage-check-${stageKey}`} xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-sky-600" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    )}
                   </div>
-                  {selectedStage === stage.stage_name && (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-sky-600" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
-            <div className="p-4 text-gray-500">No stages found</div>
+            <div key="no-stages" className="p-4 text-gray-500">No stages found</div>
           )}
         </div>
       </div>
@@ -1015,15 +1104,15 @@ const DealStageSelector: React.FC = () => {
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-4">
-                <div key="pricing-concerns">
-                  {renderInsightBar('pricing_concerns', 'Pricing Concerns')}
-                </div>
-                <div key="no-decision-maker">
-                  {renderInsightBar('no_decision_maker', 'No Decision Maker')}
-                </div>
-                <div key="already-has-vendor">
-                  {renderInsightBar('already_has_vendor', 'Already Has Vendor')}
-                </div>
+                {[
+                  { type: 'pricing_concerns' as const, title: 'Pricing Concerns' },
+                  { type: 'no_decision_maker' as const, title: 'No Decision Maker' },
+                  { type: 'already_has_vendor' as const, title: 'Already Has Vendor' }
+                ].map(insight => (
+                  <div key={insight.type}>
+                    {renderInsightBar(insight.type, insight.title)}
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -1076,7 +1165,7 @@ const DealStageSelector: React.FC = () => {
                     <tr key={headerGroup.id}>
                       {headerGroup.headers.map(header => (
                         <th 
-                          key={`${headerGroup.id}-${header.id}`}
+                          key={header.id}
                           className="py-3 px-4 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
                           onClick={header.column.getToggleSortingHandler()}
                         >

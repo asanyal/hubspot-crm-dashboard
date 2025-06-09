@@ -28,7 +28,6 @@ interface Deal {
   Deal_Name: string;
   Owner: string;
   Amount: string;
-  Last_Update: string;
   Expected_Close_Date: string;
   Closed_Won: boolean;
   Closed_Lost: boolean;
@@ -97,7 +96,7 @@ const DealStageSelector: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [sorting, setSorting] = useState<SortingState>([
-    { id: 'Last_Update', desc: true }
+    { id: 'Deal_Name', desc: false }
   ]);
   const [hasMounted, setHasMounted] = useState(false);
   const [failedStages, setFailedStages] = useState<Set<string>>(new Set());
@@ -576,14 +575,12 @@ const DealStageSelector: React.FC = () => {
       const dealName = String(deal.Deal_Name || '');
       const owner = String(deal.Owner || '');
       const amount = String(deal.Amount || '');
-      const lastUpdate = String(deal.Last_Update || '');
       const expectedCloseDate = String(deal.Expected_Close_Date || '');
 
       return (
         dealName.toLowerCase().includes(lowerCaseSearch) ||
         owner.toLowerCase().includes(lowerCaseSearch) ||
         amount.toLowerCase().includes(lowerCaseSearch) ||
-        lastUpdate.toLowerCase().includes(lowerCaseSearch) ||
         expectedCloseDate.toLowerCase().includes(lowerCaseSearch)
       );
     });
@@ -605,7 +602,6 @@ const DealStageSelector: React.FC = () => {
       const dealName = String(deal.Deal_Name || '');
       const owner = String(deal.Owner || '');
       const amount = String(deal.Amount || '');
-      const lastUpdate = String(deal.Last_Update || '');
       const expectedCloseDate = String(deal.Expected_Close_Date || '');
 
       // Most common fields first for better performance (short-circuit evaluation)
@@ -613,7 +609,6 @@ const DealStageSelector: React.FC = () => {
         dealName.toLowerCase().includes(lowerCaseSearch) ||
         owner.toLowerCase().includes(lowerCaseSearch) ||
         amount.toLowerCase().includes(lowerCaseSearch) ||
-        lastUpdate.toLowerCase().includes(lowerCaseSearch) ||
         expectedCloseDate.toLowerCase().includes(lowerCaseSearch)
       );
     });
@@ -917,14 +912,6 @@ const DealStageSelector: React.FC = () => {
             {formatOwnerInitials(owner)}
           </span>
         );
-      },
-    }),
-    columnHelper.accessor('Last_Update', {
-      header: 'Last Update',
-      sortingFn: (rowA, rowB, columnId) => {
-        const dateA = new Date(rowA.original.Last_Update);
-        const dateB = new Date(rowB.original.Last_Update);
-        return dateA.getTime() - dateB.getTime();
       },
     }),
     columnHelper.accessor('Deal_Name', {

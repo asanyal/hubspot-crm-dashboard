@@ -1251,6 +1251,8 @@ const DealTimeline: React.FC = () => {
           return 'text-green-700 font-medium';
         } else if (intent === 'Less likely to buy') {
           return 'text-red-600 font-medium';
+        } else if (intent === 'Neutral') {
+          return 'text-[#F5F5DC] font-medium';
         }
         return 'text-gray-600';
       };
@@ -1678,12 +1680,16 @@ const EventDrawer = () => {
                               ? parseMarkdownSections(event.buyer_intent_explanation)
                               : event.buyer_intent_explanation;
 
-                            return Object.entries(sections).map(([title, content]) => (
+                            return Object.entries(sections).map(([title, bulletPoints]) => (
                               <div key={title} className="space-y-2">
                                 <h5 className="font-bold text-blue-900">{title}</h5>
-                                <p className="text-sm text-blue-800 leading-relaxed">
-                                  {content}
-                                </p>
+                                <ul className="list-disc pl-5 space-y-1">
+                                  {bulletPoints.map((point, index) => (
+                                    <li key={index} className="text-sm text-blue-800 leading-relaxed">
+                                      {point}
+                                    </li>
+                                  ))}
+                                </ul>
                               </div>
                             ));
                           })()}
@@ -1898,6 +1904,8 @@ const DealLogs: React.FC<{
         return 'text-green-700 font-medium';
       } else if (buyerIntent === 'Less likely to buy') {
         return 'text-red-600 font-medium';
+      } else if (buyerIntent === 'Neutral') {
+        return 'text-[#F5F5DC] font-medium';
       }
     } else if (sentiment) {
       if (sentiment === 'positive') {
@@ -2664,39 +2672,14 @@ useEffect(() => {
   };
 
   // Add this helper function before the EventDrawer component
-  const parseMarkdownSections = (markdown: string): Record<string, string> => {
-    const sections: Record<string, string> = {};
-    const sectionTitles = [
-      "Background & Team Context",
-      "Current State & Use Cases",
-      "Gap Analysis & Pain Points",
-      "Positive & Negative Signals",
-      "Next Steps & Requirements"
-    ];
+  const parseMarkdownSections = (markdown: string | Record<string, string[]>): Record<string, string[]> => {
+    // If it's already an object with arrays, return it as is
+    if (typeof markdown === 'object' && markdown !== null) {
+      return markdown as Record<string, string[]>;
+    }
 
-    // Split by markdown headers and clean up
-    const parts = markdown.split(/#\s+/).filter(Boolean);
-    
-    sectionTitles.forEach((title, index) => {
-      const nextTitle = sectionTitles[index + 1];
-      const content = parts.find(part => part.startsWith(title));
-      
-      if (content) {
-        // Extract content between current title and next title (or end of string)
-        let sectionContent = content.substring(title.length).trim();
-        if (nextTitle) {
-          const nextTitleIndex = sectionContent.indexOf(nextTitle);
-          if (nextTitleIndex !== -1) {
-            sectionContent = sectionContent.substring(0, nextTitleIndex).trim();
-          }
-        }
-        sections[title] = sectionContent;
-      } else {
-        sections[title] = ''; // Empty string for missing sections
-      }
-    });
-
-    return sections;
+    // If it's a string, return empty object (old format no longer supported)
+    return {};
   };
 
   return (

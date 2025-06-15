@@ -98,15 +98,15 @@ interface Concerns {
   pricing_concerns: {
     has_concerns: boolean;
     explanation: string;
-  };
+  } | string;
   no_decision_maker: {
     is_issue: boolean;
     explanation: string;
-  };
+  } | string;
   already_has_vendor: {
     has_vendor: boolean;
     explanation: string;
-  };
+  } | string;
 }
 
 interface ChartDataPoint {
@@ -1046,11 +1046,8 @@ const DealTimeline: React.FC = () => {
   }, [hasMounted, isInitialLoad, makeApiCall, updateState, selectedDeal, isInitialized]);
 
   useEffect(() => {
-    if (timelineData && timelineData.events && timelineData.start_date && timelineData.end_date) {
+    if (timelineData && timelineData.events && timelineData.events.length > 0) {
       console.log("Timeline Data Received:", {
-        startDate: timelineData.start_date,
-        endDate: timelineData.end_date,
-        totalEvents: timelineData.events.length,
         events: timelineData.events.map(event => ({
           date: event.date_str,
           type: event.type,
@@ -1061,26 +1058,38 @@ const DealTimeline: React.FC = () => {
           content_preview: event.content_preview?.slice(0, 100) + '...'
         }))
       });
-      const extendedEndDate = new Date(timelineData.end_date);
-      extendedEndDate.setDate(extendedEndDate.getDate() + 1);
-      timelineData.end_date = extendedEndDate.toISOString().split('T')[0];
+
       try {
-        // Validate start and end dates
-        if (!isValidDate(timelineData.start_date) || !isValidDate(timelineData.end_date)) {
-          console.error('Invalid start or end date:', timelineData.start_date, timelineData.end_date);
+        // Find the earliest and latest dates from the events
+        const eventDates = timelineData.events
+          .map(event => event.date_str)
+          .filter(date => date && isValidDate(date));
+
+        if (eventDates.length === 0) {
+          console.error('No valid dates found in events');
           setChartData([]);
           return;
         }
+
+        // Sort dates as strings to avoid timezone issues
+        const sortedDates = eventDates.sort();
+        const startDate = sortedDates[0];
+        const endDate = sortedDates[sortedDates.length - 1];
         
-        const startDate = new Date(timelineData.start_date);
-        const endDate = extendedEndDate;
-        
-        // Create an array of all dates in the range including the end date
+        // Create an array of all dates in the range
         const dates = [];
+        let currentDate = new Date(startDate);
+        const lastDate = new Date(endDate);
+        
+        // Add one day to end date to include the last day
+        lastDate.setDate(lastDate.getDate() + 1);
         
         // Ensure we include the end date with <=
-        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-          dates.push(d.toISOString().split('T')[0]);
+        while (currentDate <= lastDate) {
+          // Format date as YYYY-MM-DD to avoid timezone issues
+          const dateStr = currentDate.toISOString().split('T')[0];
+          dates.push(dateStr);
+          currentDate.setDate(currentDate.getDate() + 1);
         }
         
         // Create a map of events by date
@@ -1107,6 +1116,7 @@ const DealTimeline: React.FC = () => {
         timelineData.events.forEach((event: Event) => {
           // Skip events with invalid dates or dates outside our range
           if (!event.date_str || !eventsByDate[event.date_str]) {
+            console.warn('Skipping event with invalid date:', event.date_str);
             return;
           }
           
@@ -3109,10 +3119,12 @@ useEffect(() => {
               <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
                 <div className="flex items-center">
                   <div className={`p-2 rounded-lg ${
-                    concerns?.pricing_concerns?.has_concerns ? 'bg-orange-100' : 'bg-green-100'
+                    concerns?.pricing_concerns === "No data" ? 'bg-gray-100' : 
+                    typeof concerns?.pricing_concerns === 'object' && concerns?.pricing_concerns?.has_concerns ? 'bg-orange-100' : 'bg-green-100'
                   }`}>
                     <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                      concerns?.pricing_concerns?.has_concerns ? 'text-orange-600' : 'text-green-600'
+                      concerns?.pricing_concerns === "No data" ? 'text-gray-400' :
+                      typeof concerns?.pricing_concerns === 'object' && concerns?.pricing_concerns?.has_concerns ? 'text-orange-600' : 'text-green-600'
                     }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
@@ -3121,7 +3133,9 @@ useEffect(() => {
                     <h4 className="text-sm font-medium text-gray-600">Pricing Concerns</h4>
                     {loadingConcerns ? (
                       <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                    ) : concerns?.pricing_concerns ? (
+                    ) : concerns?.pricing_concerns === "No data" ? (
+                      <span className="text-gray-400">N/A</span>
+                    ) : typeof concerns?.pricing_concerns === 'object' && concerns?.pricing_concerns ? (
                       <div className="group relative">
                         <span className={`text-lg font-bold ${
                           concerns.pricing_concerns.has_concerns ? 'text-red-600' : 'text-green-600'
@@ -3150,10 +3164,12 @@ useEffect(() => {
               <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
                 <div className="flex items-center">
                   <div className={`p-2 rounded-lg ${
-                    concerns?.no_decision_maker?.is_issue ? 'bg-orange-100' : 'bg-green-100'
+                    concerns?.no_decision_maker === "No data" ? 'bg-gray-100' :
+                    typeof concerns?.no_decision_maker === 'object' && concerns?.no_decision_maker?.is_issue ? 'bg-orange-100' : 'bg-green-100'
                   }`}>
                     <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                      concerns?.no_decision_maker?.is_issue ? 'text-orange-600' : 'text-green-600'
+                      concerns?.no_decision_maker === "No data" ? 'text-gray-400' :
+                      typeof concerns?.no_decision_maker === 'object' && concerns?.no_decision_maker?.is_issue ? 'text-orange-600' : 'text-green-600'
                     }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                     </svg>
@@ -3162,7 +3178,9 @@ useEffect(() => {
                     <h4 className="text-sm font-medium text-gray-600">Decision Maker</h4>
                     {loadingConcerns ? (
                       <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                    ) : concerns?.no_decision_maker ? (
+                    ) : concerns?.no_decision_maker === "No data" ? (
+                      <span className="text-gray-400">N/A</span>
+                    ) : typeof concerns?.no_decision_maker === 'object' && concerns?.no_decision_maker ? (
                       <div className="group relative">
                         <span className={`text-lg font-bold ${
                           concerns.no_decision_maker.is_issue ? 'text-red-600' : 'text-green-600'
@@ -3191,19 +3209,23 @@ useEffect(() => {
               <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
                 <div className="flex items-center">
                   <div className={`p-2 rounded-lg ${
-                    concerns?.already_has_vendor?.has_vendor ? 'bg-orange-100' : 'bg-green-100'
+                    concerns?.already_has_vendor === "No data" ? 'bg-gray-100' :
+                    typeof concerns?.already_has_vendor === 'object' && concerns?.already_has_vendor?.has_vendor ? 'bg-orange-100' : 'bg-green-100'
                   }`}>
                     <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                      concerns?.already_has_vendor?.has_vendor ? 'text-orange-600' : 'text-green-600'
+                      concerns?.already_has_vendor === "No data" ? 'text-gray-400' :
+                      typeof concerns?.already_has_vendor === 'object' && concerns?.already_has_vendor?.has_vendor ? 'text-orange-600' : 'text-green-600'
                     }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
                   </div>
                   <div className="ml-4">
-                    <h4 className="text-sm font-medium text-gray-600">Using a Comptetitor?</h4>
+                    <h4 className="text-sm font-medium text-gray-600">Using a Competitor?</h4>
                     {loadingConcerns ? (
                       <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                    ) : concerns?.already_has_vendor ? (
+                    ) : concerns?.already_has_vendor === "No data" ? (
+                      <span className="text-gray-400">N/A</span>
+                    ) : typeof concerns?.already_has_vendor === 'object' && concerns?.already_has_vendor ? (
                       <div className="group relative">
                         <span className={`text-lg font-bold ${
                           concerns.already_has_vendor.has_vendor ? 'text-red-600' : 'text-green-600'

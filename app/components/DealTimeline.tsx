@@ -23,12 +23,15 @@ interface Contact {
     role: number;
     parr_explanation: string;
   };
+  name?: string; // Add name field
+  title?: string; // Add title field
 }
 
 interface ContactsData {
   contacts: Contact[];
   total_contacts: number;
   champions_count: number;
+  total_attendees?: number; // Add total_attendees field
 }
 
 interface Event {
@@ -1692,23 +1695,42 @@ const EventDrawer = () => {
                         </div>
                         <div className="space-y-6">
                           {(() => {
-                            // Parse the explanation into sections
-                            const sections = typeof event.buyer_intent_explanation === 'string' 
-                              ? parseMarkdownSections(event.buyer_intent_explanation)
-                              : event.buyer_intent_explanation;
+                            const explanation = event.buyer_intent_explanation;
 
-                            return Object.entries(sections).map(([title, bulletPoints]) => (
-                              <div key={title} className="space-y-2">
-                                <h5 className="font-bold text-blue-900">{title}</h5>
-                                <ul className="list-disc pl-5 space-y-1">
-                                  {bulletPoints.map((point, index) => (
-                                    <li key={index} className="text-sm text-blue-800 leading-relaxed">
-                                      {point}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            ));
+                            const isStructuredObject =
+                              typeof explanation === 'object' &&
+                              explanation !== null &&
+                              !Array.isArray(explanation);
+
+                            const sections = isStructuredObject
+                              ? explanation
+                              : {
+                                  Explanation: [
+                                    typeof explanation === 'string' ? explanation : 'N/A',
+                                  ],
+                                };
+
+                            return Object.entries(sections).map(([title, rawBulletPoints]) => {
+                              // Normalize bullet points into an array of strings
+                              const bulletPoints = Array.isArray(rawBulletPoints)
+                                ? rawBulletPoints
+                                : typeof rawBulletPoints === 'object' && rawBulletPoints !== null
+                                  ? Object.values(rawBulletPoints)
+                                  : [String(rawBulletPoints)];
+
+                              return (
+                                <div key={title} className="space-y-2">
+                                  <h5 className="font-bold text-blue-900">{title}</h5>
+                                  <ul className="list-disc pl-5 space-y-1">
+                                    {bulletPoints.map((point, index) => (
+                                      <li key={index} className="text-sm text-blue-800 leading-relaxed">
+                                        {String(point)}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              );
+                            });
                           })()}
                         </div>
                       </div>
@@ -1717,75 +1739,22 @@ const EventDrawer = () => {
                     {/* Champion Information for Meetings */}
                     {event.type === 'Meeting' && event.subject && event.date_str && (
                       <div className="mt-4">
-                        <h4 className="font-semibold mb-2">Smart Insights</h4>
-                        {meetingContacts[`${event.subject}_${event.date_str}`] ? (
-                          meetingContacts[`${event.subject}_${event.date_str}`].total_contacts === 0 ? (
-                            <p className="text-sm text-gray-500 italic">No champions in this call</p>
-                          ) : (
-                            <div className="space-y-2">
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                </svg>
-                                <span>{meetingContacts[`${event.subject}_${event.date_str}`].total_contacts} Total Participants</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span>{meetingContacts[`${event.subject}_${event.date_str}`].champions_count} Champions</span>
-                              </div>
-                              <div className="mt-3 space-y-2">
-                                {meetingContacts[`${event.subject}_${event.date_str}`].contacts.map((contact, idx) => (
-                                  <div key={idx} className="p-2 bg-white rounded border border-gray-100">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-medium text-sm">{contact.speakerName} ({contact.email})</span>
-                                        {contact.champion && (
-                                          <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
-                                            Champion
-                                          </span>
-                                        )}
-                                      </div>
-                                      {contact.explanation && (
-                                        <div className="relative inline-block">
-                                          <div className="group">
-                                            <svg 
-                                              xmlns="http://www.w3.org/2000/svg" 
-                                              className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" 
-                                              fill="none" 
-                                              viewBox="0 0 24 24" 
-                                              stroke="currentColor"
-                                            >
-                                              <path 
-                                                strokeLinecap="round" 
-                                                strokeLinejoin="round" 
-                                                strokeWidth={2} 
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
-                                              />
-                                            </svg>
-                                            <div className="absolute right-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
-                                              {contact.explanation}
-                                              <div className="absolute right-0 top-full border-4 border-transparent border-t-gray-900"></div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                    {contact.business_pain && (
-                                      <div className="mt-2 pl-4 border-l-2 border-gray-200">
-                                        <p className="text-sm text-gray-700">{contact.business_pain}</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
+                        <h4 className="font-semibold mb-2">Attendees</h4>
+                        {meetingContacts[`${event.subject}_${event.date_str}`]?.contacts?.length > 0 ? (
+                          meetingContacts[`${event.subject}_${event.date_str}`].contacts.map((contact, idx) => (
+                            <div key={idx} className="p-2 bg-white rounded border border-gray-100">
+                              <div className="flex flex-col">
+                                <span className="font-medium text-sm">
+                                  {contact.name !== 'Unknown name' ? contact.name : (contact.email || 'No email available')}
+                                </span>
+                                <span className="text-xs text-gray-600">
+                                  {contact.title !== 'Unknown title' ? contact.title : 'No title available'}
+                                </span>
                               </div>
                             </div>
-                          )
-                        ) : loadingChampions ? (
-                          <p className="text-sm text-gray-500 italic">Analyzing champions...</p>
+                          ))
                         ) : (
-                          <p className="text-sm text-gray-500 italic">No champions in this call</p>
+                          <p className="text-sm text-gray-500 italic">No attendees in this call</p>
                         )}
                       </div>
                     )}

@@ -1,7 +1,7 @@
 import { API_CONFIG } from './config';
 
 export async function makeApiCall(endpoint: string, options: RequestInit = {}) {
-  const baseUrl = process.env.NEXT_PUBLIC_API_ROOT_URL || 'https://midnight-snack-a7X9bQ.replit.app';
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
   const apiPath = API_CONFIG.getApiPath(endpoint);
   const url = `${baseUrl}${apiPath}`;
   console.log('ATIN SANYAL url', url);

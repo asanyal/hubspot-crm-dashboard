@@ -35,8 +35,11 @@ interface Deal {
 
 interface DealInsights {
   pricing_concerns: string[];
+  pricing_concerns_no_data: string[];
   no_decision_maker: string[];
-  already_has_vendor: string[];
+  no_decision_maker_no_data: string[];
+  using_competitor: string[];
+  using_competitor_no_data: string[];
 }
 
 // Add color utility functions
@@ -523,8 +526,9 @@ const DealStageSelector: React.FC = () => {
   // Navigate to deal timeline
   const navigateToDealTimeline = useCallback((dealName: string) => {
     const encodedDealName = encodeURIComponent(dealName);
-    router.push(`/deal-timeline?dealName=${encodedDealName}&autoload=true`);
-  }, [router]);
+    // Force a complete page reload and clear history
+    window.location.replace(`/deal-timeline?dealName=${encodedDealName}&autoload=true&t=${Date.now()}`);
+  }, []);
 
   // Format amount as currency
   const formatAmount = (amount: string): string => {
@@ -720,14 +724,21 @@ const DealStageSelector: React.FC = () => {
     if (!insightsData || !insightsData[type]) return null;
 
     const deals = insightsData[type] || [];
+    const noDataDeals = insightsData[`${type}_no_data` as keyof DealInsights] || [];
     const stageDeals = selectedStage ? dealsByStage[selectedStage] || [] : [];
-    const totalDeals = stageDeals.length;
+    
+    // Filter out deals that have no data
+    const validDeals = stageDeals.filter(deal => !noDataDeals.includes(deal.Deal_Name));
+    const totalDeals = validDeals.length;
+    
+    if (totalDeals === 0) return null; // Don't show bar if no valid deals
+
     const trueCount = deals.length;
     const falseCount = totalDeals - trueCount;
     const truePercentage = (trueCount / totalDeals) * 100;
     const falsePercentage = (falseCount / totalDeals) * 100;
 
-    const falseDeals = stageDeals
+    const falseDeals = validDeals
       .map((deal: Deal) => deal.Deal_Name)
       .filter((name: string) => !deals.includes(name));
 
@@ -919,13 +930,21 @@ const DealStageSelector: React.FC = () => {
       header: 'Pricing Concerns?',
       cell: info => {
         const dealName = info.getValue();
+        const hasNoData = insightsData?.pricing_concerns_no_data?.includes(dealName) || false;
         const hasPricingConcerns = insightsData?.pricing_concerns?.includes(dealName) || false;
+        
+        if (hasNoData) {
+          return (
+            <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+              N/A
+            </span>
+          );
+        }
+        
         return (
-          <span
-            className={`px-2 py-1 rounded-full text-xs font-medium ${
-              hasPricingConcerns ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-            }`}
-          >
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+            hasPricingConcerns ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+          }`}>
             {hasPricingConcerns ? 'Yes' : 'No'}
           </span>
         );
@@ -936,13 +955,21 @@ const DealStageSelector: React.FC = () => {
       header: 'Decision Maker?',
       cell: info => {
         const dealName = info.getValue();
+        const hasNoData = insightsData?.no_decision_maker_no_data?.includes(dealName) || false;
         const noDecisionMaker = insightsData?.no_decision_maker?.includes(dealName) || false;
+        
+        if (hasNoData) {
+          return (
+            <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+              N/A
+            </span>
+          );
+        }
+        
         return (
-          <span
-            className={`px-2 py-1 rounded-full text-xs font-medium ${
-              noDecisionMaker ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-            }`}
-          >
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+            noDecisionMaker ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+          }`}>
             {noDecisionMaker ? 'No' : 'Yes'}
           </span>
         );
@@ -953,13 +980,21 @@ const DealStageSelector: React.FC = () => {
       header: 'Using Competitor?',
       cell: info => {
         const dealName = info.getValue();
-        const hasCompetitor = insightsData?.already_has_vendor?.includes(dealName) || false;
+        const hasNoData = insightsData?.using_competitor_no_data?.includes(dealName) || false;
+        const hasCompetitor = insightsData?.using_competitor?.includes(dealName) || false;
+        
+        if (hasNoData) {
+          return (
+            <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+              N/A
+            </span>
+          );
+        }
+        
         return (
-          <span
-            className={`px-2 py-1 rounded-full text-xs font-medium ${
-              hasCompetitor ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-            }`}
-          >
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+            hasCompetitor ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+          }`}>
             {hasCompetitor ? 'Yes' : 'No'}
           </span>
         );
@@ -1094,7 +1129,7 @@ const DealStageSelector: React.FC = () => {
                 {[
                   { type: 'pricing_concerns' as const, title: 'Pricing Concerns' },
                   { type: 'no_decision_maker' as const, title: 'No Decision Maker' },
-                  { type: 'already_has_vendor' as const, title: 'Already Has Vendor' }
+                  { type: 'using_competitor' as const, title: 'Using Competitor' }
                 ].map(insight => (
                   <div key={insight.type}>
                     {renderInsightBar(insight.type, insight.title)}

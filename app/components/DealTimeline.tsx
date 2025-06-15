@@ -422,6 +422,7 @@ const DealTimeline: React.FC = () => {
     setStartIndex(0);
     setEndIndex(0);
     setCurrentDealId(null);
+    setConcerns(null); // Clear concerns state when changing deals
     // Deliberately NOT resetting selectedStages and selectedStagesInitialized
     // to preserve stage filter selections when changing deals
   }, []);
@@ -1273,6 +1274,8 @@ const DealTimeline: React.FC = () => {
           return 'text-green-700 font-medium';
         } else if (sentiment === 'negative') {
           return 'text-red-600 font-medium';
+        } else if (sentiment === 'neutral') {
+          return 'text-yellow-600 font-medium';
         }
         return 'text-gray-600';
       };
@@ -1616,13 +1619,15 @@ const EventDrawer = () => {
                                 ? 'bg-green-100 text-green-800' 
                                 : event.sentiment === 'negative'
                                 ? 'bg-red-100 text-red-800'
+                                : event.sentiment === 'neutral'
+                                ? 'bg-yellow-100 text-yellow-800'
                                 : 'bg-gray-100 text-gray-800'
                             }`}>
                               {event.sentiment.charAt(0).toUpperCase() + event.sentiment.slice(1)} Sentiment
                             </span>
-                      </div>
-                    )}
-                    </div>
+                          </div>
+                        )}
+                        </div>
                     )}
 
                     {/* Meeting-specific header for meeting events */}
@@ -1648,6 +1653,8 @@ const EventDrawer = () => {
                                 ? 'bg-green-100 text-green-800'
                             : event.buyer_intent === 'Less likely to buy' 
                                 ? 'bg-red-100 text-red-800'
+                                : event.buyer_intent === 'Neutral'
+                                ? 'bg-yellow-100 text-yellow-800'
                                 : 'bg-gray-100 text-gray-800'
                         }`}>
                           {event.buyer_intent === 'Likely to buy' ? 'Positive Signal' : event.buyer_intent}
@@ -1915,13 +1922,15 @@ const DealLogs: React.FC<{
       } else if (buyerIntent === 'Less likely to buy') {
         return 'text-red-600 font-medium';
       } else if (buyerIntent === 'Neutral') {
-        return 'text-[#F5F5DC] font-medium';
+        return 'text-yellow-600 font-medium';
       }
     } else if (sentiment) {
       if (sentiment === 'positive') {
         return 'text-green-700 font-medium';
       } else if (sentiment === 'negative') {
         return 'text-red-600 font-medium';
+      } else if (sentiment === 'neutral') {
+        return 'text-yellow-600 font-medium';
       }
     }
     return 'text-gray-600';
@@ -2291,6 +2300,8 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
     
     // Clear meeting contacts before fetching new data
     setMeetingContacts({});
+    // Clear chart data immediately when changing deals
+    setChartData([]);
     
     // Set loading state
     updateState('dealTimeline.loading', true);
@@ -2320,6 +2331,11 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
         
         // Only update state if we're still working with the same deal
         if (selectedDealRef.current?.name === dealToUse.name) {
+          // Clear chart data if there are no events
+          if (!data.events || data.events.length === 0) {
+            setChartData([]);
+          }
+          
           updateState('dealTimeline.activities', data);
           updateState('dealTimeline.lastFetched', Date.now());
           
@@ -2362,6 +2378,8 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
       setLoadingError(true);
       setLoadingMessage(`Error loading timeline data for ${dealToUse.name}`);
       updateState('dealTimeline.error', 'Failed to load timeline data. Please try again.');
+      // Clear chart data on error
+      setChartData([]);
     } finally {
       if (!loadingChampions) {
         updateState('dealTimeline.loading', false);

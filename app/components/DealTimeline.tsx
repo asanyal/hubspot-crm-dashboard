@@ -2748,17 +2748,21 @@ useEffect(() => {
               uniqueStages.map((stage) => {
                 const isSelected = selectedStages.has(stage);
                 return (
-                  <button
-                    key={stage}
-                    onClick={() => toggleStageFilter(stage)}
-                    className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
-                      isSelected 
-                        ? `${getStageColor(stage).bg} ${getStageColor(stage).text} border ${getStageColor(stage).border}`
-                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                    } hover:opacity-90 transition-opacity`}
-                  >
-                    {getStageInitials(stage)}
-                  </button>
+                  <div key={stage} className="relative inline-block group">
+                    <button
+                      onClick={() => toggleStageFilter(stage)}
+                      className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
+                        isSelected 
+                          ? `${getStageColor(stage).bg} ${getStageColor(stage).text} border ${getStageColor(stage).border}`
+                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                      } hover:opacity-90 transition-opacity`}
+                    >
+                      {getStageInitials(stage)}
+                    </button>
+                    <div className="invisible group-hover:visible absolute z-50 -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                      {stage}
+                    </div>
+                  </div>
                 );
               })
             ) : (
@@ -2766,17 +2770,21 @@ useEffect(() => {
               uniqueOwners.map((owner) => {
                 const isSelected = selectedOwners.has(owner);
                 return (
-                  <button
-                    key={owner}
-                    onClick={() => toggleOwnerFilter(owner)}
-                    className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
-                      isSelected 
-                        ? `${getOwnerColor(owner).bg} ${getOwnerColor(owner).text} border ${getOwnerColor(owner).border}`
-                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                    } hover:opacity-90 transition-opacity`}
-                  >
-                    {getOwnerInitials(owner)}
-                  </button>
+                  <div key={owner} className="relative inline-block group">
+                    <button
+                      onClick={() => toggleOwnerFilter(owner)}
+                      className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
+                        isSelected 
+                          ? `${getOwnerColor(owner).bg} ${getOwnerColor(owner).text} border ${getOwnerColor(owner).border}`
+                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                      } hover:opacity-90 transition-opacity`}
+                    >
+                      {getOwnerInitials(owner)}
+                    </button>
+                    <div className="invisible group-hover:visible absolute z-50 -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                      {owner}
+                    </div>
+                  </div>
                 );
               })
             )}

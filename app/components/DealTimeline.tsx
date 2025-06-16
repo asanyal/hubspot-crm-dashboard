@@ -2300,9 +2300,12 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
         
         // Only update state if we're still working with the same deal
         if (selectedDealRef.current?.name === dealToUse.name) {
-          // Clear chart data if there are no events
-          if (!data.events || data.events.length === 0) {
+          // Clear chart data if there are no events or if events is not an array
+          if (!data.events || !Array.isArray(data.events) || data.events.length === 0) {
             setChartData([]);
+            updateState('dealTimeline.activities', { events: [], start_date: '', end_date: '' });
+            updateState('dealTimeline.lastFetched', Date.now());
+            return;
           }
           
           updateState('dealTimeline.activities', data);

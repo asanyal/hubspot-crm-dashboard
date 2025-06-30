@@ -15,6 +15,7 @@ export interface Deal {
   stage?: string;
   startDate?: string;
   endDate?: string;
+  activities?: number;
 }
 
 interface TimelineEvent {

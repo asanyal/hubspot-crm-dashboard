@@ -2847,6 +2847,13 @@ useEffect(() => {
                       }`}>
                         Created: {formatDate(deal.createdate)}
                       </div>
+                      <div className={`text-xs ${
+                        isSelected ? 'text-blue-600' : 'text-gray-500'
+                      }`}>
+                        Activities: <span className={deal.activities && deal.activities >= 15 ? 'text-orange-600 font-medium' : ''}>
+                          {deal.activities || 0}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {deal.stage && (

@@ -230,7 +230,7 @@ const DealTimeline: React.FC = () => {
   const [bookmarkedDeals, setBookmarkedDeals] = useState<Set<string>>(new Set());
 
   // Add state for active tab and selected owners
-  const [activeFilterTab, setActiveFilterTab] = useState<'stages' | 'owners'>('stages');
+  const [activeFilterTab, setActiveFilterTab] = useState<'stages' | 'owners' | 'bookmarks'>('stages');
   const [selectedOwners, setSelectedOwners] = useState<Set<string>>(new Set());
 
   // Add this with other state declarations at the top of DealTimeline component
@@ -257,6 +257,28 @@ const DealTimeline: React.FC = () => {
       setIsInitialized(true);
     }
   }, []);
+
+  // Load bookmarks from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedBookmarks = localStorage.getItem('bookmarkedDeals');
+      if (savedBookmarks) {
+        try {
+          const bookmarksArray = JSON.parse(savedBookmarks);
+          setBookmarkedDeals(new Set(bookmarksArray));
+        } catch (error) {
+          console.error('Error loading bookmarks from localStorage:', error);
+        }
+      }
+    }
+  }, []);
+
+  // Save bookmarks to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bookmarkedDeals', JSON.stringify(Array.from(bookmarkedDeals)));
+    }
+  }, [bookmarkedDeals]);
 
   // Get unique stages from all deals
   const uniqueStages = useMemo(() => {
@@ -285,20 +307,25 @@ const DealTimeline: React.FC = () => {
   const filteredDeals = useMemo(() => {
     let filtered = allDeals;
 
-    // Apply stage filter
-    if (selectedStages.size > 0) {
-      filtered = filtered.filter(deal => {
-        if (!deal.stage) return false;
-        return selectedStages.has(deal.stage);
-      });
-    }
+    // Apply bookmark filter when bookmarks tab is active
+    if (activeFilterTab === 'bookmarks') {
+      filtered = filtered.filter(deal => bookmarkedDeals.has(deal.id));
+    } else {
+      // Apply stage filter
+      if (selectedStages.size > 0) {
+        filtered = filtered.filter(deal => {
+          if (!deal.stage) return false;
+          return selectedStages.has(deal.stage);
+        });
+      }
 
-    // Apply owner filter
-    if (selectedOwners && selectedOwners.size > 0) {
-      filtered = filtered.filter(deal => {
-        if (!deal.owner) return false;
-        return selectedOwners.has(deal.owner);
-      });
+      // Apply owner filter
+      if (selectedOwners && selectedOwners.size > 0) {
+        filtered = filtered.filter(deal => {
+          if (!deal.owner) return false;
+          return selectedOwners.has(deal.owner);
+        });
+      }
     }
 
     // Apply search filter
@@ -319,7 +346,7 @@ const DealTimeline: React.FC = () => {
       }
     }
     return filtered;
-  }, [allDeals, selectedStages, selectedOwners, debouncedDealSearchTerm]);
+  }, [allDeals, selectedStages, selectedOwners, debouncedDealSearchTerm, activeFilterTab, bookmarkedDeals]);
 
   // Add debounce effect for search with increased delay
   useEffect(() => {
@@ -2739,6 +2766,16 @@ useEffect(() => {
             >
               Owners
             </button>
+            <button
+              onClick={() => setActiveFilterTab('bookmarks')}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeFilterTab === 'bookmarks'
+                  ? 'border-b-2 border-blue-500 text-blue-600'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Bookmarks
+            </button>
           </div>
 
           {/* Filter chips */}
@@ -2765,7 +2802,7 @@ useEffect(() => {
                   </div>
                 );
               })
-            ) : (
+            ) : activeFilterTab === 'owners' ? (
               // Owner filters
               uniqueOwners.map((owner) => {
                 const isSelected = selectedOwners.has(owner);
@@ -2787,6 +2824,15 @@ useEffect(() => {
                   </div>
                 );
               })
+            ) : (
+              // Bookmarks tab - show count
+              <div className="text-sm text-gray-600">
+                {bookmarkedDeals.size > 0 ? (
+                  <span>Showing {bookmarkedDeals.size} bookmarked deal{bookmarkedDeals.size !== 1 ? 's' : ''}</span>
+                ) : (
+                  <span className="text-gray-500 italic">No bookmarks yet. Click the star icon on any deal to bookmark it.</span>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -2795,12 +2841,13 @@ useEffect(() => {
         <div className="flex-1 overflow-y-auto">
           <div className="p-4">
             <h3 className="text-sm font-medium text-gray-500 mb-3">
-              All Deals ({filteredDeals.length})
+              {activeFilterTab === 'bookmarks' ? 'Bookmarked Deals' : 'All Deals'} ({filteredDeals.length})
             </h3>
             <div className="space-y-2">
               {filteredDeals.map(deal => {
                 const daysPassed = getDaysPassed(deal);
                 const isSelected = selectedDeal?.id === deal.id;
+                const isBookmarked = bookmarkedDeals.has(deal.id);
                 return (
                   <div
                     key={deal.id}
@@ -2856,6 +2903,30 @@ useEffect(() => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {/* Bookmark icon */}
+                      <button
+                        onClick={(e) => handleBookmarkToggle(e, deal.id)}
+                        className={`p-1 rounded hover:bg-gray-100 transition-colors ${
+                          isBookmarked ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'
+                        }`}
+                        title={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}
+                      >
+                        <svg 
+                          xmlns="http://www.w3.org/2000/svg" 
+                          className="h-4 w-4" 
+                          fill={isBookmarked ? 'currentColor' : 'none'} 
+                          viewBox="0 0 24 24" 
+                          stroke="currentColor"
+                        >
+                          <path 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round" 
+                            strokeWidth={2} 
+                            d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" 
+                          />
+                        </svg>
+                      </button>
+                      
                       {deal.stage && (
                         <div 
                           className="w-2 h-2 rounded-full"

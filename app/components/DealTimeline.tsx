@@ -2607,6 +2607,8 @@ const fetchConcerns = useCallback(async (dealName: string) => {
   
   setLoadingConcerns(true);
   try {
+    console.log("KETCHUP KETCHUP");
+    console.log(API_CONFIG.getApiPath('/get-concerns'));
     const response = await makeApiCall(
       `${API_CONFIG.getApiPath('/get-concerns')}?dealName=${encodeURIComponent(dealName)}`
     );

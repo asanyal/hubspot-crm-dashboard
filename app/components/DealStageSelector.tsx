@@ -42,6 +42,10 @@ interface DealInsights {
   using_competitor_no_data: string[];
 }
 
+interface ActivityCount {
+  count: number;
+}
+
 // Add color utility functions
 const generateColor = (str: string): string => {
   let hash = 0;
@@ -106,6 +110,8 @@ const DealStageSelector: React.FC = () => {
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsData, setInsightsData] = useState<DealInsights | null>(null);
   const [activeFilter, setActiveFilter] = useState<{type: keyof DealInsights, value: boolean} | null>(null);
+  const [activityCounts, setActivityCounts] = useState<Record<string, number | 'N/A'>>({});
+  const [activityCountsLoading, setActivityCountsLoading] = useState(false);
   const router = useRouter();
   
   // Track URL parameters
@@ -624,6 +630,11 @@ const DealStageSelector: React.FC = () => {
     return `insights_${stageName}`;
   }, []);
 
+  // Function to get storage key for activity counts
+  const getActivityCountsStorageKey = useCallback((stageName: string) => {
+    return `activity_counts_${stageName}`;
+  }, []);
+
   // Function to load insights from storage
   const loadInsightsFromStorage = useCallback((stageName: string) => {
     const storageKey = getInsightsStorageKey(stageName);
@@ -646,6 +657,29 @@ const DealStageSelector: React.FC = () => {
     const storageKey = getInsightsStorageKey(stageName);
     localStorage.setItem(storageKey, JSON.stringify(data));
   }, [getInsightsStorageKey]);
+
+  // Function to load activity counts from storage
+  const loadActivityCountsFromStorage = useCallback((stageName: string) => {
+    const storageKey = getActivityCountsStorageKey(stageName);
+    const storedData = localStorage.getItem(storageKey);
+    if (storedData) {
+      try {
+        const parsedData = JSON.parse(storedData);
+        setActivityCounts(parsedData);
+        return true;
+      } catch (error) {
+        console.error('Error parsing stored activity counts:', error);
+        localStorage.removeItem(storageKey);
+      }
+    }
+    return false;
+  }, [getActivityCountsStorageKey]);
+
+  // Function to save activity counts to storage
+  const saveActivityCountsToStorage = useCallback((stageName: string, data: Record<string, number | 'N/A'>) => {
+    const storageKey = getActivityCountsStorageKey(stageName);
+    localStorage.setItem(storageKey, JSON.stringify(data));
+  }, [getActivityCountsStorageKey]);
 
   // Fetch insights data
   const fetchInsights = useCallback(async (dealNames: string[]) => {
@@ -675,6 +709,46 @@ const DealStageSelector: React.FC = () => {
     }
   }, [makeApiCall, selectedStage, saveInsightsToStorage]);
 
+  // Fetch activity counts for all deals
+  const fetchActivityCounts = useCallback(async (dealNames: string[]) => {
+    if (!dealNames.length) return;
+    
+    setActivityCountsLoading(true);
+    try {
+      // Fetch all activity counts in parallel
+              const promises = dealNames.map(async (dealName) => {
+          try {
+            const response = await makeApiCall(`/api/hubspot/deal-activities-count?dealName=${encodeURIComponent(dealName)}`);
+            if (response) {
+              const data = await response.json();
+            return { dealName, count: data.count };
+          }
+        } catch (error) {
+          console.error(`Error fetching activity count for ${dealName}:`, error);
+          return { dealName, count: 'N/A' as const };
+        }
+      });
+
+      const results = await Promise.all(promises);
+      const countsMap: Record<string, number | 'N/A'> = {};
+      
+      results.forEach((result) => {
+        if (result) {
+          countsMap[result.dealName] = result.count;
+        }
+      });
+
+      setActivityCounts(countsMap);
+      if (selectedStage) {
+        saveActivityCountsToStorage(selectedStage, countsMap);
+      }
+    } catch (error) {
+      console.error('Error fetching activity counts:', error);
+    } finally {
+      setActivityCountsLoading(false);
+    }
+  }, [makeApiCall, selectedStage, saveActivityCountsToStorage]);
+
   // Effect to fetch insights after deals load
   useEffect(() => {
     if (!selectedStage || !dealsByStage[selectedStage]) return;
@@ -693,6 +767,25 @@ const DealStageSelector: React.FC = () => {
 
     return () => clearTimeout(timeoutId);
   }, [selectedStage, dealsByStage, fetchInsights, loadInsightsFromStorage]);
+
+  // Effect to fetch activity counts after deals load
+  useEffect(() => {
+    if (!selectedStage || !dealsByStage[selectedStage]) return;
+
+    // Try to load from storage first
+    if (loadActivityCountsFromStorage(selectedStage)) {
+      return;
+    }
+
+    const dealNames = dealsByStage[selectedStage].map(deal => deal.Deal_Name);
+    
+    // Clear any existing timeout
+    const timeoutId = setTimeout(() => {
+      fetchActivityCounts(dealNames);
+    }, 1500); // 1.5 second delay to avoid overwhelming the API
+
+    return () => clearTimeout(timeoutId);
+  }, [selectedStage, dealsByStage, fetchActivityCounts, loadActivityCountsFromStorage]);
 
   // Function to handle bar click
   const handleBarClick = (type: keyof DealInsights, value: boolean) => {
@@ -839,13 +932,15 @@ const DealStageSelector: React.FC = () => {
 
     // Clear insights data and storage
     setInsightsData(null);
+    setActivityCounts({});
     if (selectedStage) {
       localStorage.removeItem(getInsightsStorageKey(selectedStage));
+      localStorage.removeItem(getActivityCountsStorageKey(selectedStage));
     }
     
     // Fetch stages (which will trigger the rest of the initialization flow)
     fetchStages();
-  }, [updateState, fetchStages, getSearchParams, selectedStage, getInsightsStorageKey]);
+  }, [updateState, fetchStages, getSearchParams, selectedStage, getInsightsStorageKey, getActivityCountsStorageKey]);
 
   // Function to render sort indicator
   const renderSortIndicator = (column: any) => {
@@ -907,6 +1002,33 @@ const DealStageSelector: React.FC = () => {
             {formatStageAbbr(stageName)}
           </span>
         );
+      },
+    }),
+    columnHelper.accessor('Deal_Name', {
+      id: 'activity_count',
+      header: 'Activity Count',
+      cell: info => {
+        const dealName = info.getValue();
+        const count = activityCounts[dealName];
+        
+        if (activityCountsLoading) {
+          return (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
+              <span className="text-gray-500 text-xs">Loading...</span>
+            </div>
+          );
+        }
+        
+        if (count === undefined) {
+          return <span className="text-gray-400">-</span>;
+        }
+        
+        if (count === 'N/A') {
+          return <span className="text-gray-500">N/A</span>;
+        }
+        
+        return <span>{count}</span>;
       },
     }),
     columnHelper.accessor('Owner', {
@@ -1000,7 +1122,7 @@ const DealStageSelector: React.FC = () => {
         );
       },
     }),
-  ], [columnHelper, navigateToDealTimeline, selectedStage, insightsData]);
+  ], [columnHelper, navigateToDealTimeline, selectedStage, insightsData, activityCounts, activityCountsLoading]);
 
   // Create the table instance
   const table = useReactTable({

@@ -43,6 +43,13 @@ export async function makeApiCall(endpoint: string, options: RequestInit = {}) {
   }
 }
 
-export const getBackendUrl = (path: string) => {
-  return `${path}`;
+export const getBackendUrl = (url: string) => {
+  // If the URL already contains the backend host, return it as-is
+  if (url.includes('localhost:8000') || url.includes('http://')) {
+    return url;
+  }
+  
+  // Otherwise, prepend the backend URL
+  const backendUrl = process.env.NEXT_PUBLIC_API_ROOT_URL || 'http://localhost:8000';
+  return `${backendUrl}${url}`;
 }; 

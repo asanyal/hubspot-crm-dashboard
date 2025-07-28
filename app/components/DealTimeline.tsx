@@ -112,6 +112,91 @@ interface Concerns {
   } | string;
 }
 
+// New interface for the array format
+interface ConcernsItem {
+  pricing_concerns: {
+    has_concerns: boolean;
+    explanation: string;
+  } | string;
+  no_decision_maker: {
+    is_issue: boolean;
+    explanation: string;
+  } | string;
+  already_has_vendor: {
+    has_vendor: boolean;
+    explanation: string;
+  } | string;
+}
+
+// Helper functions to process concerns array
+const processConcernsArray = (concernsArray: ConcernsItem[] | null): {
+  hasPricingConcerns: boolean;
+  pricingConcernsExplanation: string;
+  hasNoDecisionMaker: boolean;
+  noDecisionMakerExplanation: string;
+  hasCompetitor: boolean;
+  competitorExplanation: string;
+} => {
+  if (!concernsArray || !Array.isArray(concernsArray) || concernsArray.length === 0) {
+    return {
+      hasPricingConcerns: false,
+      pricingConcernsExplanation: '',
+      hasNoDecisionMaker: false,
+      noDecisionMakerExplanation: '',
+      hasCompetitor: false,
+      competitorExplanation: ''
+    };
+  }
+
+  let hasPricingConcerns = false;
+  let pricingConcernsExplanations: string[] = [];
+  let hasNoDecisionMaker = false;
+  let noDecisionMakerExplanations: string[] = [];
+  let hasCompetitor = false;
+  let competitorExplanations: string[] = [];
+
+  concernsArray.forEach(item => {
+    // Process pricing concerns
+    if (typeof item.pricing_concerns === 'object') {
+      if (item.pricing_concerns?.has_concerns) {
+        hasPricingConcerns = true;
+      }
+      if (item.pricing_concerns?.explanation && typeof item.pricing_concerns.explanation === 'string') {
+        pricingConcernsExplanations.push(item.pricing_concerns.explanation);
+      }
+    }
+
+    // Process decision maker
+    if (typeof item.no_decision_maker === 'object') {
+      if (item.no_decision_maker?.is_issue) {
+        hasNoDecisionMaker = true;
+      }
+      if (item.no_decision_maker?.explanation && typeof item.no_decision_maker.explanation === 'string') {
+        noDecisionMakerExplanations.push(item.no_decision_maker.explanation);
+      }
+    }
+
+    // Process competitor
+    if (typeof item.already_has_vendor === 'object') {
+      if (item.already_has_vendor?.has_vendor) {
+        hasCompetitor = true;
+      }
+      if (item.already_has_vendor?.explanation && typeof item.already_has_vendor.explanation === 'string') {
+        competitorExplanations.push(item.already_has_vendor.explanation);
+      }
+    }
+  });
+
+  return {
+    hasPricingConcerns,
+    pricingConcernsExplanation: pricingConcernsExplanations.join(' '),
+    hasNoDecisionMaker,
+    noDecisionMakerExplanation: noDecisionMakerExplanations.join(' '),
+    hasCompetitor,
+    competitorExplanation: competitorExplanations.join(' ')
+  };
+};
+
 interface ChartDataPoint {
   date: string;
   Meeting: number;
@@ -172,6 +257,7 @@ const DealTimeline: React.FC = () => {
   // Drawer state
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedConcern, setSelectedConcern] = useState<string | null>(null);
   const [currentSection, setCurrentSection] = useState<number>(0);
 
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -223,7 +309,7 @@ const DealTimeline: React.FC = () => {
   const [loadingOverview, setLoadingOverview] = useState<boolean>(false);
   
   // Add new state for concerns
-  const [concerns, setConcerns] = useState<Concerns | null>(null);
+  const [concerns, setConcerns] = useState<ConcernsItem[] | null>(null);
   const [loadingConcerns, setLoadingConcerns] = useState<boolean>(false);
 
   // Add this near the top of the component with other state declarations
@@ -880,8 +966,16 @@ const DealTimeline: React.FC = () => {
     if (data && data.activePayload && data.activePayload.length > 0) {
       const clickedDate = data.activePayload[0].payload.date;
       setSelectedDate(clickedDate);
+      setSelectedConcern(null);
       setIsDrawerOpen(true);
     }
+  };
+
+  // Handle concern click to open drawer
+  const handleConcernClick = (concernType: string) => {
+    setSelectedConcern(concernType);
+    setSelectedDate(null);
+    setIsDrawerOpen(true);
   };
 
   // Clean content from special characters
@@ -1389,7 +1483,7 @@ const EventDrawer = () => {
     }));
   };
 
-  if (!selectedDate || !timelineData) return null;
+  if ((!selectedDate && !selectedConcern) || !timelineData) return null;
   
   // const eventsForDate = timelineData.events.filter(event => event.date_str === selectedDate) || [];
 
@@ -1559,11 +1653,18 @@ const EventDrawer = () => {
       <div className="p-4 border-b border-gray-200 sticky top-0 bg-white z-10 flex justify-between items-center">
         <div>
           <h3 className="text-xl font-bold">
-            {selectedDeal?.name || 'Events'}
+            {selectedConcern ? 'Concern Analysis' : (selectedDeal?.name || 'Events')}
           </h3>
           {selectedDate && (
             <p className="text-sm text-gray-500 mt-1">
               {formatDateDetailed(selectedDate)}
+            </p>
+          )}
+          {selectedConcern && (
+            <p className="text-sm text-gray-500 mt-1">
+              {selectedConcern === 'pricing_concerns' ? 'Pricing Concerns' :
+               selectedConcern === 'no_decision_maker' ? 'Decision Maker' :
+               selectedConcern === 'already_has_vendor' ? 'Using a Competitor' : 'Unknown Concern'}
             </p>
           )}
         </div>
@@ -1578,7 +1679,70 @@ const EventDrawer = () => {
       </div>
       
       <div className="p-4">
-        {eventsForDate.length > 0 ? (
+        {selectedConcern ? (
+          <div>
+            {(() => {
+              const processedConcerns = processConcernsArray(concerns);
+              let concernTitle = '';
+              let concernExplanation = '';
+              let concernStatus = '';
+              let concernColor = '';
+              
+              switch (selectedConcern) {
+                case 'pricing_concerns':
+                  concernTitle = 'Pricing Concerns';
+                  concernExplanation = processedConcerns.pricingConcernsExplanation;
+                  concernStatus = processedConcerns.hasPricingConcerns ? 'Yes' : 'No';
+                  concernColor = processedConcerns.hasPricingConcerns ? 'text-red-600' : 'text-green-600';
+                  break;
+                case 'no_decision_maker':
+                  concernTitle = 'Decision Maker';
+                  concernExplanation = processedConcerns.noDecisionMakerExplanation;
+                  concernStatus = processedConcerns.hasNoDecisionMaker ? 'No' : 'Yes';
+                  concernColor = processedConcerns.hasNoDecisionMaker ? 'text-red-600' : 'text-green-600';
+                  break;
+                case 'already_has_vendor':
+                  concernTitle = 'Using a Competitor';
+                  concernExplanation = processedConcerns.competitorExplanation;
+                  concernStatus = processedConcerns.hasCompetitor ? 'Yes' : 'No';
+                  concernColor = processedConcerns.hasCompetitor ? 'text-red-600' : 'text-green-600';
+                  break;
+                default:
+                  concernTitle = 'Unknown Concern';
+                  concernExplanation = 'No explanation available';
+                  concernStatus = 'N/A';
+                  concernColor = 'text-gray-600';
+              }
+              
+              return (
+                <div>
+                  <div className="mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">{concernTitle}</h2>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xl font-bold ${concernColor}`}>
+                        {concernStatus}
+                      </span>
+                      <span className="text-sm text-gray-500">
+                        {concernStatus === 'Yes' ? 'Issue detected' : 'No issues found'}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Analysis</h3>
+                    {concernExplanation ? (
+                      <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                        {concernExplanation}
+                      </p>
+                    ) : (
+                      <p className="text-gray-500 italic">No detailed analysis available.</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        ) : eventsForDate.length > 0 ? (
           <div>
             <p className="text-gray-600 mb-4">Total events: {eventsForDate.length}</p>
             
@@ -3194,137 +3358,131 @@ useEffect(() => {
           {timelineData && timelineData.events && (
             <div className="mb-6 grid grid-cols-3 gap-4">
               {/* Pricing Concerns */}
-              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+              <div 
+                className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500 cursor-pointer hover:shadow-lg transition-shadow"
+                onClick={() => handleConcernClick('pricing_concerns')}
+              >
                 <div className="flex items-center">
-                  <div className={`p-2 rounded-lg ${
-                    concerns?.pricing_concerns === "No data" ? 'bg-gray-100' : 
-                    typeof concerns?.pricing_concerns === 'object' && concerns?.pricing_concerns?.has_concerns ? 'bg-orange-100' : 'bg-green-100'
-                  }`}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                      concerns?.pricing_concerns === "No data" ? 'text-gray-400' :
-                      typeof concerns?.pricing_concerns === 'object' && concerns?.pricing_concerns?.has_concerns ? 'text-orange-600' : 'text-green-600'
-                    }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div className="ml-4">
-                    <h4 className="text-sm font-medium text-gray-600">Pricing Concerns</h4>
-                    {loadingConcerns ? (
-                      <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                    ) : concerns?.pricing_concerns === "No data" ? (
-                      <span className="text-gray-400">N/A</span>
-                    ) : typeof concerns?.pricing_concerns === 'object' && concerns?.pricing_concerns ? (
-                      <div className="group relative">
-                        <span className={`text-lg font-bold ${
-                          concerns.pricing_concerns.has_concerns ? 'text-red-600' : 'text-green-600'
+                  {(() => {
+                    const processedConcerns = processConcernsArray(concerns);
+                    return (
+                      <>
+                        <div className={`p-2 rounded-lg ${
+                          !concerns || concerns.length === 0 ? 'bg-gray-100' : 
+                          processedConcerns.hasPricingConcerns ? 'bg-orange-100' : 'bg-green-100'
                         }`}>
-                          {String(concerns.pricing_concerns.has_concerns ? 'Yes' : 'No')}
-                        </span>
-                        {concerns.pricing_concerns.explanation && 
-                         concerns.pricing_concerns.explanation !== "No data available" && 
-                         typeof concerns.pricing_concerns.explanation === 'string' && (
-                          <div className="absolute z-10 invisible group-hover:visible hover:visible left-0 top-full">
-                            <div className="h-2 w-full"></div>
-                            <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
-                              <p className="text-sm text-gray-700">{String(concerns.pricing_concerns.explanation)}</p>
+                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
+                            !concerns || concerns.length === 0 ? 'text-gray-400' :
+                            processedConcerns.hasPricingConcerns ? 'text-orange-600' : 'text-green-600'
+                          }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <div className="ml-4">
+                          <h4 className="text-sm font-medium text-gray-600">Pricing Concerns</h4>
+                          {loadingConcerns ? (
+                            <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
+                          ) : !concerns || concerns.length === 0 ? (
+                            <span className="text-gray-400">N/A</span>
+                          ) : (
+                            <div className="relative">
+                              <span className={`text-lg font-bold ${
+                                processedConcerns.hasPricingConcerns ? 'text-red-600' : 'text-green-600'
+                              }`}>
+                                {processedConcerns.hasPricingConcerns ? 'Yes' : 'No'}
+                              </span>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-gray-400">N/A</span>
-                    )}
-                  </div>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
               {/* Decision Maker */}
-              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+              <div 
+                className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500 cursor-pointer hover:shadow-lg transition-shadow"
+                onClick={() => handleConcernClick('no_decision_maker')}
+              >
                 <div className="flex items-center">
-                  <div className={`p-2 rounded-lg ${
-                    concerns?.no_decision_maker === "No data" ? 'bg-gray-100' :
-                    typeof concerns?.no_decision_maker === 'object' && concerns?.no_decision_maker?.is_issue ? 'bg-orange-100' : 'bg-green-100'
-                  }`}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                      concerns?.no_decision_maker === "No data" ? 'text-gray-400' :
-                      typeof concerns?.no_decision_maker === 'object' && concerns?.no_decision_maker?.is_issue ? 'text-orange-600' : 'text-green-600'
-                    }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                    </svg>
-                  </div>
-                  <div className="ml-4">
-                    <h4 className="text-sm font-medium text-gray-600">Decision Maker</h4>
-                    {loadingConcerns ? (
-                      <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                    ) : concerns?.no_decision_maker === "No data" ? (
-                      <span className="text-gray-400">N/A</span>
-                    ) : typeof concerns?.no_decision_maker === 'object' && concerns?.no_decision_maker ? (
-                      <div className="group relative">
-                        <span className={`text-lg font-bold ${
-                          concerns.no_decision_maker.is_issue ? 'text-red-600' : 'text-green-600'
+                  {(() => {
+                    const processedConcerns = processConcernsArray(concerns);
+                    return (
+                      <>
+                        <div className={`p-2 rounded-lg ${
+                          !concerns || concerns.length === 0 ? 'bg-gray-100' :
+                          processedConcerns.hasNoDecisionMaker ? 'bg-orange-100' : 'bg-green-100'
                         }`}>
-                          {String(concerns.no_decision_maker.is_issue ? 'No' : 'Yes')}
-                        </span>
-                        {concerns.no_decision_maker.explanation && 
-                         concerns.no_decision_maker.explanation !== "No data available" && 
-                         typeof concerns.no_decision_maker.explanation === 'string' && (
-                          <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
-                            <div className="h-2 w-full"></div>
-                            <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
-                              <p className="text-sm text-gray-700">{String(concerns.no_decision_maker.explanation)}</p>
+                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
+                            !concerns || concerns.length === 0 ? 'text-gray-400' :
+                            processedConcerns.hasNoDecisionMaker ? 'text-orange-600' : 'text-green-600'
+                          }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                          </svg>
+                        </div>
+                        <div className="ml-4">
+                          <h4 className="text-sm font-medium text-gray-600">Decision Maker</h4>
+                          {loadingConcerns ? (
+                            <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
+                          ) : !concerns || concerns.length === 0 ? (
+                            <span className="text-gray-400">N/A</span>
+                          ) : (
+                            <div className="relative">
+                              <span className={`text-lg font-bold ${
+                                processedConcerns.hasNoDecisionMaker ? 'text-red-600' : 'text-green-600'
+                              }`}>
+                                {processedConcerns.hasNoDecisionMaker ? 'No' : 'Yes'}
+                              </span>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-gray-400">N/A</span>
-                    )}
-                  </div>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
               {/* Existing Vendor */}
-              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500">
+              <div 
+                className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500 cursor-pointer hover:shadow-lg transition-shadow"
+                onClick={() => handleConcernClick('already_has_vendor')}
+              >
                 <div className="flex items-center">
-                  <div className={`p-2 rounded-lg ${
-                    concerns?.already_has_vendor === "No data" ? 'bg-gray-100' :
-                    typeof concerns?.already_has_vendor === 'object' && concerns?.already_has_vendor?.has_vendor ? 'bg-orange-100' : 'bg-green-100'
-                  }`}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                      concerns?.already_has_vendor === "No data" ? 'text-gray-400' :
-                      typeof concerns?.already_has_vendor === 'object' && concerns?.already_has_vendor?.has_vendor ? 'text-orange-600' : 'text-green-600'
-                    }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                  </div>
-                  <div className="ml-4">
-                    <h4 className="text-sm font-medium text-gray-600">Using a Competitor?</h4>
-                    {loadingConcerns ? (
-                      <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                    ) : concerns?.already_has_vendor === "No data" ? (
-                      <span className="text-gray-400">N/A</span>
-                    ) : typeof concerns?.already_has_vendor === 'object' && concerns?.already_has_vendor ? (
-                      <div className="group relative">
-                        <span className={`text-lg font-bold ${
-                          concerns.already_has_vendor.has_vendor ? 'text-red-600' : 'text-green-600'
+                  {(() => {
+                    const processedConcerns = processConcernsArray(concerns);
+                    return (
+                      <>
+                        <div className={`p-2 rounded-lg ${
+                          !concerns || concerns.length === 0 ? 'bg-gray-100' :
+                          processedConcerns.hasCompetitor ? 'bg-orange-100' : 'bg-green-100'
                         }`}>
-                          {String(concerns.already_has_vendor.has_vendor ? 'Yes' : 'No')}
-                        </span>
-                        {concerns.already_has_vendor.explanation && 
-                         concerns.already_has_vendor.explanation !== "No data available" && 
-                         typeof concerns.already_has_vendor.explanation === 'string' && (
-                          <div className="absolute z-10 invisible group-hover:visible hover:visible right-0 top-full">
-                            <div className="h-2 w-full"></div>
-                            <div className="bg-white p-3 rounded-md shadow-lg border border-gray-200 w-72">
-                              <p className="text-sm text-gray-700">{String(concerns.already_has_vendor.explanation)}</p>
+                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
+                            !concerns || concerns.length === 0 ? 'text-gray-400' :
+                            processedConcerns.hasCompetitor ? 'text-orange-600' : 'text-green-600'
+                          }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                          </svg>
+                        </div>
+                        <div className="ml-4">
+                          <h4 className="text-sm font-medium text-gray-600">Using a Competitor?</h4>
+                          {loadingConcerns ? (
+                            <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
+                          ) : !concerns || concerns.length === 0 ? (
+                            <span className="text-gray-400">N/A</span>
+                          ) : (
+                            <div className="relative">
+                              <span className={`text-lg font-bold ${
+                                processedConcerns.hasCompetitor ? 'text-red-600' : 'text-green-600'
+                              }`}>
+                                {processedConcerns.hasCompetitor ? 'Yes' : 'No'}
+                              </span>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-gray-400">N/A</span>
-                    )}
-                  </div>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

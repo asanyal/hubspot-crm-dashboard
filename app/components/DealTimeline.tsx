@@ -1475,6 +1475,7 @@ const EventDrawer = () => {
   const [eventContents, setEventContents] = useState<Record<string, string>>({});
   const [loadingContents, setLoadingContents] = useState<Record<string, boolean>>({});
   const [expandedSections, setExpandedSections] = useState<Record<number, boolean>>({});
+  const [copyFeedback, setCopyFeedback] = useState<boolean>(false);
 
   const toggleSection = (index: number) => {
     setExpandedSections(prev => ({
@@ -1653,7 +1654,7 @@ const EventDrawer = () => {
       <div className="p-4 border-b border-gray-200 sticky top-0 bg-white z-10 flex justify-between items-center">
         <div>
           <h3 className="text-xl font-bold">
-            {selectedConcern ? 'Concern Analysis' : (selectedDeal?.name || 'Events')}
+            {selectedDeal?.name || 'Events'}
           </h3>
           {selectedDate && (
             <p className="text-sm text-gray-500 mt-1">
@@ -1708,7 +1709,7 @@ const EventDrawer = () => {
                   concernColor = processedConcerns.hasCompetitor ? 'text-red-600' : 'text-green-600';
                   break;
                 default:
-                  concernTitle = 'Unknown Concern';
+                  concernTitle = 'Unknown';
                   concernExplanation = 'No explanation available';
                   concernStatus = 'N/A';
                   concernColor = 'text-gray-600';
@@ -1722,14 +1723,42 @@ const EventDrawer = () => {
                       <span className={`text-xl font-bold ${concernColor}`}>
                         {concernStatus}
                       </span>
-                      <span className="text-sm text-gray-500">
-                        {concernStatus === 'Yes' ? 'Issue detected' : 'No issues found'}
-                      </span>
                     </div>
                   </div>
                   
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Analysis</h3>
+                  <div className="bg-gray-50 rounded-lg p-4 relative">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-lg font-semibold text-gray-900">Analysis</h3>
+                      {concernExplanation && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(concernExplanation);
+                              setCopyFeedback(true);
+                              setTimeout(() => setCopyFeedback(false), 2000);
+                            } catch (err) {
+                              console.error('Failed to copy text: ', err);
+                            }
+                          }}
+                          className={`p-2 rounded-lg transition-colors ${
+                            copyFeedback 
+                              ? 'text-green-600 bg-green-100' 
+                              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                          }`}
+                          title={copyFeedback ? "Copied!" : "Copy analysis to clipboard"}
+                        >
+                          {copyFeedback ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          )}
+                        </button>
+                      )}
+                    </div>
                     {concernExplanation ? (
                       <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
                         {concernExplanation}
@@ -2606,6 +2635,30 @@ const handleDealChange = useCallback(async (selectedOption: any) => {
   }
 }, [updateState, fetchDealInfo, handleGetTimeline, cleanupState, currentDealId]);
 
+// Add new function to fetch concerns
+const fetchConcerns = useCallback(async (dealName: string) => {
+  if (!dealName) return;
+  
+  setLoadingConcerns(true);
+  try {
+    console.log(`Fetching concerns for: ${dealName}`);
+    const response = await makeApiCall(
+      `${API_CONFIG.getApiPath('/get-concerns')}?dealName=${encodeURIComponent(dealName)}`
+    );
+    
+    if (response) {
+      const data = await response.json();
+      console.log(`Concerns data received for ${dealName}:`, data);
+      setConcerns(data);
+    }
+  } catch (error) {
+    console.error('Error fetching concerns:', error);
+    setConcerns(null);
+  } finally {
+    setLoadingConcerns(false);
+  }
+}, [makeApiCall]);
+
 // Update handleRefresh to refresh all data including champions
 const handleRefresh = useCallback(() => {
   if (selectedDealRef.current) {
@@ -2637,9 +2690,15 @@ const handleRefresh = useCallback(() => {
     
     // Force a fresh fetch of all data by passing true as second argument
     handleGetTimeline(selectedDealRef.current, true).then(() => {
-      // After timeline loads, explicitly refresh champions
-      console.log('[Refresh] Timeline loaded, refreshing champions...');
-      setLoadingMessage(`Timeline data loaded for ${selectedDealRef.current?.name}, finalizing display...`);
+      // After timeline loads, explicitly refresh champions and concerns
+      console.log('[Refresh] Timeline loaded, REFRESHING CONCERNS...');
+      setLoadingMessage(`Timeline data loaded for ${selectedDealRef.current?.name}, loading concerns...`);
+      
+      // Explicitly fetch concerns after timeline loads
+      if (selectedDealRef.current?.name) {
+        console.log('[Refresh] Fetching concerns after timeline load...');
+        fetchConcerns(selectedDealRef.current.name);
+      }
     }).catch(error => {
       console.error('[Refresh] Error during refresh sequence:', error);
       setLoadingMessage(`Error refreshing data for ${selectedDealRef.current?.name}: ${error.message}`);
@@ -2648,7 +2707,7 @@ const handleRefresh = useCallback(() => {
     setIsInitialLoad(true);
     setLoadingMessage('Initializing deal data...');
   }
-}, [handleGetTimeline, cleanupState, updateState]);
+}, [handleGetTimeline, cleanupState, updateState, fetchConcerns]);
 
 // Update the effect that fetches champions to be more robust
 // Effect to automatically fetch champions after timeline loads
@@ -2765,35 +2824,43 @@ useEffect(() => {
   }
 }, [selectedDeal?.name, fetchCompanyOverview, loading, timelineData]);
 
-// Add new function to fetch concerns
-const fetchConcerns = useCallback(async (dealName: string) => {
-  if (!dealName) return;
-  
-  setLoadingConcerns(true);
-  try {
-    console.log("KETCHUP KETCHUP");
-    console.log(API_CONFIG.getApiPath('/get-concerns'));
-    const response = await makeApiCall(
-      `${API_CONFIG.getApiPath('/get-concerns')}?dealName=${encodeURIComponent(dealName)}`
-    );
-    
-    if (response) {
-      const data = await response.json();
-      setConcerns(data);
-    }
-  } catch (error) {
-    console.error('Error fetching concerns:', error);
-  } finally {
-    setLoadingConcerns(false);
-  }
-}, [makeApiCall]);
-
 // Add effect to fetch concerns when timeline data changes
 useEffect(() => {
-  if (selectedDeal?.name) {
+  // Only fetch concerns after timeline data has loaded (similar to company overview pattern)
+  if (selectedDeal?.name && !loading && timelineData) {
+    console.log('Timeline loaded, now fetching concerns...');
     fetchConcerns(selectedDeal.name);
   }
-}, [selectedDeal?.name, fetchConcerns]);
+}, [selectedDeal?.name, fetchConcerns, loading, timelineData]);
+
+// Clear concerns when deal changes to prevent stale data
+useEffect(() => {
+  if (selectedDeal?.name) {
+    console.log(`Clearing concerns for deal change to: ${selectedDeal.name}`);
+    setConcerns(null);
+    setLoadingConcerns(false);
+  }
+}, [selectedDeal?.name]);
+
+// Fallback mechanism to ensure concerns are fetched after a delay if not loaded
+useEffect(() => {
+  if (selectedDeal?.name && !loading && timelineData && !concerns && !loadingConcerns) {
+    const timeoutId = setTimeout(() => {
+      console.log('Fallback: Fetching concerns after delay...');
+      fetchConcerns(selectedDeal.name);
+    }, 2000); // 2 second delay as fallback
+    
+    return () => clearTimeout(timeoutId);
+  }
+}, [selectedDeal?.name, loading, timelineData, concerns, loadingConcerns, fetchConcerns]);
+
+// Handle concerns loading for page refresh scenarios
+useEffect(() => {
+  if (selectedDeal?.name && !loading && timelineData && !concerns && !loadingConcerns && hasMounted) {
+    console.log('Page refresh detected, ensuring concerns are loaded...');
+    fetchConcerns(selectedDeal.name);
+  }
+}, [selectedDeal?.name, loading, timelineData, concerns, loadingConcerns, hasMounted, fetchConcerns]);
 
   // Get unique owners from all deals
   const uniqueOwners = useMemo(() => {
@@ -3638,6 +3705,7 @@ useEffect(() => {
                 onRowClick={(date, eventId) => {
                   setSelectedDate(date);
                   setSelectedEventId(eventId);
+                  setSelectedConcern(null); // Clear any selected concern to show events instead
                   setIsDrawerOpen(true);
                 }}
               />
@@ -3666,4 +3734,5 @@ useEffect(() => {
 };
 
 export default DealTimeline;
+
 

@@ -1,6 +1,6 @@
 export const API_CONFIG = {
   getApiPath: (endpoint: string) => {
-    const rootUrl = process.env.NEXT_PUBLIC_API_ROOT_URL || 'http://localhost:8000';
+    const rootUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
     
     // Remove any leading slashes if present
     const cleanEndpoint = endpoint

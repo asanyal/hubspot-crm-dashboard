@@ -50,6 +50,6 @@ export const getBackendUrl = (url: string) => {
   }
   
   // Otherwise, prepend the backend URL
-  const backendUrl = process.env.NEXT_PUBLIC_API_ROOT_URL || 'http://localhost:8000';
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   return `${backendUrl}${url}`;
 }; 

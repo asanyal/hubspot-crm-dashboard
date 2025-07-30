@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppState } from '../context/AppContext';
+import { API_CONFIG } from '../utils/config';
 import { 
   useReactTable, 
   getCoreRowModel, 
@@ -273,7 +274,7 @@ const DealStageSelector: React.FC = () => {
     
     try {
       console.log('Fetching pipeline stages...');
-      const response = await makeApiCall('/api/hubspot/stages');
+      const response = await makeApiCall(`${API_CONFIG.getApiPath('/stages')}`);
       
       console.log(`Stages response status: ${response?.status}`);
       
@@ -380,7 +381,7 @@ const DealStageSelector: React.FC = () => {
     
     try {
       console.log(`Fetching deals for stage: ${stageName}`);
-      const response = await makeApiCall(`/api/hubspot/deals?stage=${encodeURIComponent(stageName)}`);
+      const response = await makeApiCall(`${API_CONFIG.getApiPath('/deals')}?stage=${encodeURIComponent(stageName)}`);
       
       // Log the entire response for debugging
       console.log(`Response status: ${response?.status}`);
@@ -687,7 +688,7 @@ const DealStageSelector: React.FC = () => {
     
     setInsightsLoading(true);
     try {
-      const response = await makeApiCall('/api/hubspot/v2/deal-insights-aggregate', {
+      const response = await makeApiCall(`${API_CONFIG.getApiPath('/deal-insights-aggregate')}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -718,7 +719,7 @@ const DealStageSelector: React.FC = () => {
       // Fetch all activity counts in parallel
               const promises = dealNames.map(async (dealName) => {
           try {
-            const response = await makeApiCall(`/api/hubspot/deal-activities-count?dealName=${encodeURIComponent(dealName)}`);
+            const response = await makeApiCall(`${API_CONFIG.getApiPath('/deal-activities-count')}?dealName=${encodeURIComponent(dealName)}`);
             if (response) {
               const data = await response.json();
             return { dealName, count: data.count };

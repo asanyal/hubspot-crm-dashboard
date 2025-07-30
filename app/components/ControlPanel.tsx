@@ -5,6 +5,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { useRouter } from 'next/navigation';
 import { useAppState } from '../context/AppContext';
+import { API_CONFIG } from '../utils/config';
 
 interface StageData {
   stage: string;
@@ -140,7 +141,7 @@ const ControlPanel: React.FC = () => {
       console.log('Fetching pipeline data...');
       
       // Make the API call
-      const response = await makeApiCall('/api/hubspot/pipeline-summary');
+      const response = await makeApiCall(`${API_CONFIG.getApiPath('/pipeline-summary')}`);
       
       if (response) {
         const data = await response.json();

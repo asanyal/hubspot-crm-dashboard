@@ -338,7 +338,6 @@ const DealTimeline: React.FC = () => {
         id = crypto.randomUUID();
         localStorage.setItem('browserId', id);
       }
-      console.log('Initializing browser ID:', id); // Debug log
       setBrowserId(id);
       setIsInitialized(true);
     }
@@ -368,7 +367,6 @@ const DealTimeline: React.FC = () => {
 
   // Get unique stages from all deals
   const uniqueStages = useMemo(() => {
-    console.log('Recalculating uniqueStages, allDeals length:', allDeals.length);
     const stages = new Set<string>();
     allDeals.forEach(deal => {
       if (deal.stage) {
@@ -383,7 +381,6 @@ const DealTimeline: React.FC = () => {
   useEffect(() => {
     // Initialize only once when component first mounts and uniqueStages are loaded
     if (uniqueStages.length > 0 && !selectedStagesInitialized) {
-      console.log('Initializing selectedStages with all stages:', uniqueStages);
       setSelectedStages(new Set(uniqueStages));
       setSelectedStagesInitialized(true);
     }
@@ -490,14 +487,12 @@ const DealTimeline: React.FC = () => {
 
   // Handle stage filter toggle with new behavior
   const toggleStageFilter = (stage: string) => {
-    console.log('Toggle stage filter:', stage, 'Current state:', Array.from(selectedStages));
     setSelectedStages(prev => {
       const newSet = new Set(prev);
       
       // If this is the only selected stage, deselect it to show all stages
       if (newSet.size === 1 && newSet.has(stage)) {
         newSet.clear();
-        console.log('Clearing all filters');
         return newSet;
       }
       
@@ -505,17 +500,14 @@ const DealTimeline: React.FC = () => {
       if (newSet.size === uniqueStages.length) {
         newSet.clear();
         newSet.add(stage);
-        console.log('Selecting only:', stage);
         return newSet;
       }
       
       // Otherwise, toggle this stage
       if (newSet.has(stage)) {
         newSet.delete(stage);
-        console.log('Removing stage:', stage);
       } else {
         newSet.add(stage);
-        console.log('Adding stage:', stage);
       }
       
       return newSet;
@@ -551,8 +543,6 @@ const DealTimeline: React.FC = () => {
 
   // Update refs when values change - this prevents infinite loops
   useEffect(() => {
-    console.log('Selected deal changed:', selectedDeal?.name, 
-                'Current stage filters:', Array.from(selectedStages));
     selectedDealRef.current = selectedDeal;
   }, [selectedDeal, selectedStages]);
 
@@ -668,7 +658,6 @@ const DealTimeline: React.FC = () => {
   // Utility function for making API calls with session management
   const makeApiCall = useCallback(async (url: string, options: RequestInit = {}) => {
     if (!isInitialized) {
-      console.log('Waiting for browser ID initialization...');
       return null;
     }
 
@@ -686,16 +675,6 @@ const DealTimeline: React.FC = () => {
     };
 
     try {
-      console.log('Making API call:', {
-        url,
-        method: options.method || 'GET',
-        headers,
-        browserId,
-        localStorage: {
-          browserId: localStorage.getItem('browserId'),
-          sessionId: localStorage.getItem('sessionId')
-        }
-      });
       
       const response = await fetch(url, {
         ...options,
@@ -770,7 +749,6 @@ const DealTimeline: React.FC = () => {
   // Function to fetch company overview
   const fetchCompanyOverview = useCallback(async (dealName: string) => {
     try {
-      console.log(`Fetching company overview for: ${dealName}`);
       setLoadingOverview(true);
       const apiPath = API_CONFIG.getApiPath('/company-overview');
       const response = await makeApiCall(`${apiPath}?dealName=${encodeURIComponent(dealName)}`);
@@ -790,7 +768,6 @@ const DealTimeline: React.FC = () => {
   // Update fetchDealInfo to use API_CONFIG
   const fetchDealInfo = useCallback(async (dealName: string) => {
     try {
-      console.log(`Fetching deal info for: ${dealName}`);
       const response = await makeApiCall(`${API_CONFIG.getApiPath('/deal-info')}?dealName=${encodeURIComponent(dealName)}`);
       
       if (response) {
@@ -869,7 +846,6 @@ const DealTimeline: React.FC = () => {
       await fetchDealInfo(dealName);
       
       // Then fetch timeline data
-      console.log(`[Timeline] Fetching timeline data for: ${dealName} from URL`);
       setLoadingMessage(`Fetching timeline data for ${dealName}...`);
       const response = await makeApiCall(`/api/hubspot/deal-timeline?dealName=${encodeURIComponent(dealName)}`);
       
@@ -1053,7 +1029,6 @@ const DealTimeline: React.FC = () => {
       
       if (dealName) {
         const decodedDealName = decodeURIComponent(dealName);
-        console.log(`Found deal name in URL: ${decodedDealName}, autoload: ${autoload}`);
         // store the deal name in local storage
         localStorage.setItem('dealName', decodedDealName);
         
@@ -1064,7 +1039,6 @@ const DealTimeline: React.FC = () => {
         const matchingDeal = allDeals.find(d => d.name === decodedDealName);
         
           if (matchingDeal) {
-            console.log(`Found matching deal in loaded deals: ${matchingDeal.name}`);
             updateState('dealTimeline.selectedDeal', matchingDeal);
             setSelectedOption({ value: matchingDeal.id, label: matchingDeal.name });
             setCurrentDealId(matchingDeal.id);
@@ -1079,7 +1053,6 @@ const DealTimeline: React.FC = () => {
           }
         
           if (autoload) {
-            console.log(`Autoloading timeline for: ${decodedDealName}`);
             loadTimelineDirectly(decodedDealName);
           }
         }
@@ -1103,7 +1076,7 @@ const DealTimeline: React.FC = () => {
             setDealsLoading(true);
           }
           
-          const response = await makeApiCall('/api/hubspot/all-deals');
+          const response = await makeApiCall(`${API_CONFIG.getApiPath('/all-deals')}`);
           
           if (!response) {
             throw new Error('No response from server');
@@ -1172,18 +1145,7 @@ const DealTimeline: React.FC = () => {
 
   useEffect(() => {
     if (timelineData && timelineData.events && timelineData.events.length > 0) {
-      console.log("Timeline Data Received:", {
-        events: timelineData.events.map(event => ({
-          date: event.date_str,
-          type: event.type,
-          subject: event.subject,
-          sentiment: event.sentiment,
-          buyer_intent: event.buyer_intent,
-          buyer_intent_explanation: event.buyer_intent_explanation,
-          content_preview: event.content_preview?.slice(0, 100) + '...'
-        }))
-      });
-
+      
       try {
         // Find the earliest and latest dates from the events
         const eventDates = timelineData.events
@@ -1552,8 +1514,7 @@ const EventDrawer = () => {
             return;
           }
         } catch (fetchError) {
-          console.log('Fetch operation canceled or failed:', fetchError);
-          // Continue to fallback
+          console.error('Fetch operation canceled or failed:', fetchError);
         }
       }
       
@@ -2358,7 +2319,6 @@ useEffect(() => {
 // Update fetchMeetingContacts to use API_CONFIG
 const fetchMeetingContacts = useCallback(async (subject: string, date: string) => {
   if (!date) {
-    console.log('Skipping champion call - missing date');
     return null;
   }
 
@@ -2368,7 +2328,6 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
   today.setHours(0, 0, 0, 0);
   
   if (meetingDate > today) {
-    console.log(`Skipping champion call for future meeting on ${date}`);
     return null;
   }
   
@@ -2382,7 +2341,6 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
       try {
         const savedContacts = JSON.parse(saved);
         if (savedContacts[key]) {
-          console.log(`Using localStorage contacts for meeting: ${key}`);
           setLoadingMessage(`Loading stored contact data for "${subject || 'Meeting'}" on ${date}`);
           // Update state with saved data
           setMeetingContacts(prev => ({
@@ -2398,7 +2356,6 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
   }
   
   try {
-    console.log(`MAKING CHAMPION CALL for meeting: ${key}`);
     setLoadingMessage(`Analyzing transcripts for "${subject || 'Meeting'}" on ${date}...`);
     
     // Ensure we have a valid deal name
@@ -2408,18 +2365,12 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
     }
 
     const url = `${API_CONFIG.getApiPath('/contacts-and-champion')}?dealName=${encodeURIComponent(selectedDealRef.current.name)}&date=${encodeURIComponent(date)}`;
-    console.log('Champion API URL:', url);
     
     const response = await makeApiCall(url);
     
     if (response) {
       setLoadingMessage(`Processing contact data for "${subject || 'Meeting'}" on ${date}...`);
       const data = await response.json();
-      console.log(`Champion API Response for date: ${date}`, {
-        totalContacts: data.total_contacts,
-        championsCount: data.champions_count,
-        contactsWithPain: data.contacts.filter((c: any) => c.business_pain).length
-      });
       
       // Validate the response data
       if (!data || typeof data !== 'object') {
@@ -2454,7 +2405,6 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes('409')) {
-        console.log('Request was cancelled, skipping...');
         setLoadingMessage('Request was cancelled, proceeding with next step...');
       } else {
         console.error('Error fetching meeting contacts:', {
@@ -2483,7 +2433,6 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
       (selectedDealRef.current && dealToUse.name !== selectedDealRef.current.name);
 
     if (!shouldRefresh) {
-      console.log(`[Timeline] Using cached timeline for ${dealToUse.name}`);
       return;
     }
     
@@ -2501,7 +2450,6 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
     setLoadingMessage(`Initializing timeline data for ${dealToUse.name}...`);
     
     try {
-      console.log(`[Timeline] Getting timeline for deal: ${dealToUse.name}`);
       
       // Fetch activities count and deal info in parallel
       setLoadingMessage(`Fetching activities count and deal info for ${dealToUse.name}...`);
@@ -2534,7 +2482,6 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
           // Process meeting contacts sequentially
           const meetingEvents = data.events.filter((event: Event) => event.type === 'Meeting');
           if (meetingEvents.length > 0) {
-            console.log(`[Timeline] Found ${meetingEvents.length} meetings, will fetch contacts sequentially...`);
             setLoadingChampions(true);
             setLoadingMessage(`Found ${meetingEvents.length} meetings. Fetching contact details...`);
             
@@ -2550,7 +2497,6 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
                   await fetchMeetingContacts(event.subject || '', event.date_str);
                 } catch (error) {
                   if (error instanceof Error && error.message.includes('409')) {
-                    console.log('[Timeline] Request was cancelled, skipping...');
                   } else {
                     console.error('[Timeline] Error fetching meeting contacts:', error);
                     setLoadingMessage(`Error fetching contacts for meeting: ${event.subject || 'Untitled Meeting'}`);
@@ -2594,7 +2540,6 @@ const handleDealChange = useCallback(async (selectedOption: any) => {
     return;
   }
 
-  console.log('[DealChange] Changing to deal:', deal?.name);
   
   // Clean up previous state
   cleanupState();
@@ -2641,14 +2586,12 @@ const fetchConcerns = useCallback(async (dealName: string) => {
   
   setLoadingConcerns(true);
   try {
-    console.log(`Fetching concerns for: ${dealName}`);
     const response = await makeApiCall(
       `${API_CONFIG.getApiPath('/get-concerns')}?dealName=${encodeURIComponent(dealName)}`
     );
     
     if (response) {
       const data = await response.json();
-      console.log(`Concerns data received for ${dealName}:`, data);
       setConcerns(data);
     }
   } catch (error) {
@@ -2662,7 +2605,6 @@ const fetchConcerns = useCallback(async (dealName: string) => {
 // Update handleRefresh to refresh all data including champions
 const handleRefresh = useCallback(() => {
   if (selectedDealRef.current) {
-    console.log('Manual refresh triggered for:', selectedDealRef.current.name);
     setLoadingMessage(`Starting refresh for ${selectedDealRef.current.name}...`);
     
     // Reset all state
@@ -2691,12 +2633,10 @@ const handleRefresh = useCallback(() => {
     // Force a fresh fetch of all data by passing true as second argument
     handleGetTimeline(selectedDealRef.current, true).then(() => {
       // After timeline loads, explicitly refresh champions and concerns
-      console.log('[Refresh] Timeline loaded, REFRESHING CONCERNS...');
       setLoadingMessage(`Timeline data loaded for ${selectedDealRef.current?.name}, loading concerns...`);
       
       // Explicitly fetch concerns after timeline loads
       if (selectedDealRef.current?.name) {
-        console.log('[Refresh] Fetching concerns after timeline load...');
         fetchConcerns(selectedDealRef.current.name);
       }
     }).catch(error => {
@@ -2713,7 +2653,6 @@ const handleRefresh = useCallback(() => {
 // Effect to automatically fetch champions after timeline loads
 useEffect(() => {
   if (!timelineData?.events || !selectedDeal?.name || isUnmounting) {
-    console.log('[Timeline] No timeline data or selected deal available');
     return;
   }
   
@@ -2728,11 +2667,9 @@ useEffect(() => {
   });
   
   if (meetingEvents.length === 0) {
-    console.log('[Timeline] No past meeting events found in timeline data');
     return;
   }
   
-  console.log(`[Timeline] Found ${meetingEvents.length} past meetings, fetching contacts...`);
   setLoadingChampions(true);
   
   // Process meetings sequentially to avoid overwhelming the server
@@ -2745,7 +2682,6 @@ useEffect(() => {
     for (const event of meetingEvents) {
       if (event.date_str && !isUnmounting) {
         try {
-          console.log(`[Timeline] Processing meeting: ${event.subject} on ${event.date_str}`);
           
           // Skip if we already have the contacts for this meeting
           const url = new URL(window.location.href);
@@ -2756,10 +2692,8 @@ useEffect(() => {
           
           if (contactsData && contactsData.contacts) {
             completedRequests++;
-            console.log(`[Timeline] Successfully fetched contacts for meeting ${completedRequests}/${meetingEvents.length}`);
           } else {
             failedRequests++;
-            console.log(`[Timeline] Failed to fetch contacts for meeting on ${event.date_str}`);
           }
           
           // Add a small delay between requests to prevent overwhelming the server
@@ -2769,7 +2703,6 @@ useEffect(() => {
           if (error instanceof Error) {
             if (error.message.includes('409')) {
               cancelledRequests++;
-              console.log('[Timeline] Request was cancelled, skipping...');
             } else {
               failedRequests++;
               console.error('[Timeline] Error processing meeting:', {
@@ -2783,13 +2716,7 @@ useEffect(() => {
       }
     }
     
-    console.log('[Timeline] Completed fetching meeting contacts:', {
-      total: meetingEvents.length,
-      completed: completedRequests,
-      failed: failedRequests,
-      cancelled: cancelledRequests,
-      skippedFuture: skippedFutureMeetings
-    });
+    
     
     if (!isUnmounting) {
       setLoadingChampions(false);
@@ -2819,7 +2746,6 @@ useEffect(() => {
 useEffect(() => {
   // Only fetch company overview after everything else has loaded
   if (selectedDeal?.name && !loading && timelineData) {
-    console.log('Timeline loaded, now fetching company overview...');
     fetchCompanyOverview(selectedDeal.name);
   }
 }, [selectedDeal?.name, fetchCompanyOverview, loading, timelineData]);
@@ -2828,7 +2754,6 @@ useEffect(() => {
 useEffect(() => {
   // Only fetch concerns after timeline data has loaded (similar to company overview pattern)
   if (selectedDeal?.name && !loading && timelineData) {
-    console.log('Timeline loaded, now fetching concerns...');
     fetchConcerns(selectedDeal.name);
   }
 }, [selectedDeal?.name, fetchConcerns, loading, timelineData]);
@@ -2836,7 +2761,6 @@ useEffect(() => {
 // Clear concerns when deal changes to prevent stale data
 useEffect(() => {
   if (selectedDeal?.name) {
-    console.log(`Clearing concerns for deal change to: ${selectedDeal.name}`);
     setConcerns(null);
     setLoadingConcerns(false);
   }
@@ -2846,7 +2770,6 @@ useEffect(() => {
 useEffect(() => {
   if (selectedDeal?.name && !loading && timelineData && !concerns && !loadingConcerns) {
     const timeoutId = setTimeout(() => {
-      console.log('Fallback: Fetching concerns after delay...');
       fetchConcerns(selectedDeal.name);
     }, 2000); // 2 second delay as fallback
     
@@ -2857,7 +2780,6 @@ useEffect(() => {
 // Handle concerns loading for page refresh scenarios
 useEffect(() => {
   if (selectedDeal?.name && !loading && timelineData && !concerns && !loadingConcerns && hasMounted) {
-    console.log('Page refresh detected, ensuring concerns are loaded...');
     fetchConcerns(selectedDeal.name);
   }
 }, [selectedDeal?.name, loading, timelineData, concerns, loadingConcerns, hasMounted, fetchConcerns]);

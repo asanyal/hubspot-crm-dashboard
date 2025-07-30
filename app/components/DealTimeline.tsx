@@ -132,7 +132,7 @@ interface ConcernsItem {
 const processConcernsArray = (concernsArray: ConcernsItem[] | null): {
   hasPricingConcerns: boolean;
   pricingConcernsExplanation: string;
-  hasNoDecisionMaker: boolean;
+  hasDecisionMaker: boolean;
   noDecisionMakerExplanation: string;
   hasCompetitor: boolean;
   competitorExplanation: string;
@@ -141,7 +141,7 @@ const processConcernsArray = (concernsArray: ConcernsItem[] | null): {
     return {
       hasPricingConcerns: false,
       pricingConcernsExplanation: '',
-      hasNoDecisionMaker: false,
+      hasDecisionMaker: false,
       noDecisionMakerExplanation: '',
       hasCompetitor: false,
       competitorExplanation: ''
@@ -150,7 +150,7 @@ const processConcernsArray = (concernsArray: ConcernsItem[] | null): {
 
   let hasPricingConcerns = false;
   let pricingConcernsExplanations: string[] = [];
-  let hasNoDecisionMaker = false;
+  let hasDecisionMaker = false;
   let noDecisionMakerExplanations: string[] = [];
   let hasCompetitor = false;
   let competitorExplanations: string[] = [];
@@ -166,10 +166,10 @@ const processConcernsArray = (concernsArray: ConcernsItem[] | null): {
       }
     }
 
-    // Process decision maker
+    // Process decision maker - if ANY decision maker value is true, mark as Yes
     if (typeof item.no_decision_maker === 'object') {
-      if (item.no_decision_maker?.is_issue) {
-        hasNoDecisionMaker = true;
+      if (item.no_decision_maker?.is_issue === false) {
+        hasDecisionMaker = true;
       }
       if (item.no_decision_maker?.explanation && typeof item.no_decision_maker.explanation === 'string') {
         noDecisionMakerExplanations.push(item.no_decision_maker.explanation);
@@ -190,7 +190,7 @@ const processConcernsArray = (concernsArray: ConcernsItem[] | null): {
   return {
     hasPricingConcerns,
     pricingConcernsExplanation: pricingConcernsExplanations.join(' '),
-    hasNoDecisionMaker,
+    hasDecisionMaker,
     noDecisionMakerExplanation: noDecisionMakerExplanations.join(' '),
     hasCompetitor,
     competitorExplanation: competitorExplanations.join(' ')
@@ -319,6 +319,9 @@ const DealTimeline: React.FC = () => {
   const [activeFilterTab, setActiveFilterTab] = useState<'stages' | 'owners' | 'bookmarks'>('stages');
   const [selectedOwners, setSelectedOwners] = useState<Set<string>>(new Set());
 
+  // Add state for activities filter
+  const [showOnlyActiveDeals, setShowOnlyActiveDeals] = useState<boolean>(false);
+
   // Add this with other state declarations at the top of DealTimeline component
   const [activeEventFilters, setActiveEventFilters] = useState<Record<string, boolean>>({
     'Meeting': true,
@@ -411,6 +414,13 @@ const DealTimeline: React.FC = () => {
       }
     }
 
+    // Apply activities filter (only show deals with activities > 0)
+    if (showOnlyActiveDeals) {
+      filtered = filtered.filter(deal => {
+        return deal.activities && deal.activities > 0;
+      });
+    }
+
     // Apply search filter
     if (debouncedDealSearchTerm.trim()) {
       const searchLower = debouncedDealSearchTerm.toLowerCase();
@@ -429,7 +439,7 @@ const DealTimeline: React.FC = () => {
       }
     }
     return filtered;
-  }, [allDeals, selectedStages, selectedOwners, debouncedDealSearchTerm, activeFilterTab, bookmarkedDeals]);
+  }, [allDeals, selectedStages, selectedOwners, debouncedDealSearchTerm, activeFilterTab, bookmarkedDeals, showOnlyActiveDeals]);
 
   // Add debounce effect for search with increased delay
   useEffect(() => {
@@ -1660,8 +1670,8 @@ const EventDrawer = () => {
                 case 'no_decision_maker':
                   concernTitle = 'Decision Maker';
                   concernExplanation = processedConcerns.noDecisionMakerExplanation;
-                  concernStatus = processedConcerns.hasNoDecisionMaker ? 'No' : 'Yes';
-                  concernColor = processedConcerns.hasNoDecisionMaker ? 'text-red-600' : 'text-green-600';
+                  concernStatus = processedConcerns.hasDecisionMaker ? 'Yes' : 'No';
+                  concernColor = processedConcerns.hasDecisionMaker ? 'text-green-600' : 'text-red-600';
                   break;
                 case 'already_has_vendor':
                   concernTitle = 'Using a Competitor';
@@ -2995,9 +3005,24 @@ useEffect(() => {
         {/* Regular Deals Section - Scrollable */}
         <div className="flex-1 overflow-y-auto">
           <div className="p-4">
-            <h3 className="text-sm font-medium text-gray-500 mb-3">
-              {activeFilterTab === 'bookmarks' ? 'Bookmarked Deals' : 'All Deals'} ({filteredDeals.length})
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-500">
+                {activeFilterTab === 'bookmarks' ? 'Bookmarked Deals' : 'All Deals'} ({filteredDeals.length})
+              </h3>
+              {activeFilterTab !== 'bookmarks' && (
+                <button
+                  onClick={() => setShowOnlyActiveDeals(!showOnlyActiveDeals)}
+                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                    showOnlyActiveDeals 
+                      ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                      : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                  }`}
+                  title={showOnlyActiveDeals ? 'Show all deals' : 'Show only deals with activities'}
+                >
+                  {showOnlyActiveDeals ? 'All Deals' : 'Active Deals'}
+                </button>
+              )}
+            </div>
             <div className="space-y-2">
               {filteredDeals.map(deal => {
                 const daysPassed = getDaysPassed(deal);
@@ -3401,11 +3426,11 @@ useEffect(() => {
                       <>
                         <div className={`p-2 rounded-lg ${
                           !concerns || concerns.length === 0 ? 'bg-gray-100' :
-                          processedConcerns.hasNoDecisionMaker ? 'bg-orange-100' : 'bg-green-100'
+                          processedConcerns.hasDecisionMaker ? 'bg-green-100' : 'bg-orange-100'
                         }`}>
                           <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
                             !concerns || concerns.length === 0 ? 'text-gray-400' :
-                            processedConcerns.hasNoDecisionMaker ? 'text-orange-600' : 'text-green-600'
+                            processedConcerns.hasDecisionMaker ? 'text-green-600' : 'text-orange-600'
                           }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                           </svg>
@@ -3419,9 +3444,9 @@ useEffect(() => {
                           ) : (
                             <div className="relative">
                               <span className={`text-lg font-bold ${
-                                processedConcerns.hasNoDecisionMaker ? 'text-red-600' : 'text-green-600'
+                                processedConcerns.hasDecisionMaker ? 'text-green-600' : 'text-red-600'
                               }`}>
-                                {processedConcerns.hasNoDecisionMaker ? 'No' : 'Yes'}
+                                {processedConcerns.hasDecisionMaker ? 'Yes' : 'No'}
                               </span>
                             </div>
                           )}

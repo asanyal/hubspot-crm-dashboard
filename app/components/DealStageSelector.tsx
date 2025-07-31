@@ -43,6 +43,16 @@ interface DealInsights {
   using_competitor_no_data: string[];
 }
 
+interface DealSignals {
+  very_likely_to_buy: number;
+  likely_to_buy: number;
+  less_likely_to_buy: number;
+}
+
+interface DealSignalsData {
+  [dealName: string]: DealSignals;
+}
+
 interface ActivityCount {
   count: number;
 }
@@ -113,6 +123,9 @@ const DealStageSelector: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<{type: keyof DealInsights, value: boolean} | null>(null);
   const [activityCounts, setActivityCounts] = useState<Record<string, number | 'N/A'>>({});
   const [activityCountsLoading, setActivityCountsLoading] = useState(false);
+  const [signalsData, setSignalsData] = useState<DealSignalsData | null>(null);
+  const [signalsLoading, setSignalsLoading] = useState(false);
+  const [pinnedColumns, setPinnedColumns] = useState<Set<string>>(new Set(['deal_name']));
   const router = useRouter();
   
   // Track URL parameters
@@ -636,6 +649,11 @@ const DealStageSelector: React.FC = () => {
     return `activity_counts_${stageName}`;
   }, []);
 
+  // Function to get storage key for signals
+  const getSignalsStorageKey = useCallback((stageName: string) => {
+    return `signals_${stageName}`;
+  }, []);
+
   // Function to load insights from storage
   const loadInsightsFromStorage = useCallback((stageName: string) => {
     const storageKey = getInsightsStorageKey(stageName);
@@ -681,6 +699,29 @@ const DealStageSelector: React.FC = () => {
     const storageKey = getActivityCountsStorageKey(stageName);
     localStorage.setItem(storageKey, JSON.stringify(data));
   }, [getActivityCountsStorageKey]);
+
+  // Function to load signals from storage
+  const loadSignalsFromStorage = useCallback((stageName: string) => {
+    const storageKey = getSignalsStorageKey(stageName);
+    const storedData = localStorage.getItem(storageKey);
+    if (storedData) {
+      try {
+        const parsedData = JSON.parse(storedData);
+        setSignalsData(parsedData);
+        return true;
+      } catch (error) {
+        console.error('Error parsing stored signals:', error);
+        localStorage.removeItem(storageKey);
+      }
+    }
+    return false;
+  }, [getSignalsStorageKey]);
+
+  // Function to save signals to storage
+  const saveSignalsToStorage = useCallback((stageName: string, data: DealSignalsData) => {
+    const storageKey = getSignalsStorageKey(stageName);
+    localStorage.setItem(storageKey, JSON.stringify(data));
+  }, [getSignalsStorageKey]);
 
   // Fetch insights data
   const fetchInsights = useCallback(async (dealNames: string[]) => {
@@ -750,6 +791,47 @@ const DealStageSelector: React.FC = () => {
     }
   }, [makeApiCall, selectedStage, saveActivityCountsToStorage]);
 
+  // Fetch signals data for all deals
+  const fetchSignals = useCallback(async (dealNames: string[]) => {
+    if (!dealNames.length) return;
+    
+    setSignalsLoading(true);
+    try {
+      const response = await makeApiCall(`${API_CONFIG.getApiPath('/get-signals-group')}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ deal_names: dealNames }),
+      });
+      
+      if (response) {
+        const data = await response.json();
+        setSignalsData(data);
+        if (selectedStage) {
+          saveSignalsToStorage(selectedStage, data);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching signals:', error);
+    } finally {
+      setSignalsLoading(false);
+    }
+  }, [makeApiCall, selectedStage, saveSignalsToStorage]);
+
+  // Function to toggle column pinning
+  const toggleColumnPin = useCallback((columnId: string) => {
+    setPinnedColumns(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(columnId)) {
+        newSet.delete(columnId);
+      } else {
+        newSet.add(columnId);
+      }
+      return newSet;
+    });
+  }, []);
+
   // Effect to fetch insights after deals load
   useEffect(() => {
     if (!selectedStage || !dealsByStage[selectedStage]) return;
@@ -787,6 +869,25 @@ const DealStageSelector: React.FC = () => {
 
     return () => clearTimeout(timeoutId);
   }, [selectedStage, dealsByStage, fetchActivityCounts, loadActivityCountsFromStorage]);
+
+  // Effect to fetch signals after deals load
+  useEffect(() => {
+    if (!selectedStage || !dealsByStage[selectedStage]) return;
+
+    const dealNames = dealsByStage[selectedStage].map(deal => deal.Deal_Name);
+    
+    // Try to load from storage first
+    if (loadSignalsFromStorage(selectedStage)) {
+      return;
+    }
+
+    // Clear any existing timeout
+    const timeoutId = setTimeout(() => {
+      fetchSignals(dealNames);
+    }, 2000); // 2 second delay to avoid overwhelming the API
+
+    return () => clearTimeout(timeoutId);
+  }, [selectedStage, dealsByStage, fetchSignals, loadSignalsFromStorage]);
 
   // Function to handle bar click
   const handleBarClick = (type: keyof DealInsights, value: boolean) => {
@@ -934,14 +1035,16 @@ const DealStageSelector: React.FC = () => {
     // Clear insights data and storage
     setInsightsData(null);
     setActivityCounts({});
+    setSignalsData(null);
     if (selectedStage) {
       localStorage.removeItem(getInsightsStorageKey(selectedStage));
       localStorage.removeItem(getActivityCountsStorageKey(selectedStage));
+      localStorage.removeItem(getSignalsStorageKey(selectedStage));
     }
     
     // Fetch stages (which will trigger the rest of the initialization flow)
     fetchStages();
-  }, [updateState, fetchStages, getSearchParams, selectedStage, getInsightsStorageKey, getActivityCountsStorageKey]);
+  }, [updateState, fetchStages, getSearchParams, selectedStage, getInsightsStorageKey, getActivityCountsStorageKey, getSignalsStorageKey]);
 
   // Function to render sort indicator
   const renderSortIndicator = (column: any) => {
@@ -978,6 +1081,7 @@ const DealStageSelector: React.FC = () => {
   // Define columns
   const columns = useMemo(() => [
     columnHelper.accessor('Deal_Name', {
+      id: 'deal_name',
       header: 'Deal Name',
       cell: info => (
         <button
@@ -1033,6 +1137,7 @@ const DealStageSelector: React.FC = () => {
       },
     }),
     columnHelper.accessor('Owner', {
+      id: 'owner',
       header: 'Owner',
       cell: info => {
         const owner = info.getValue();
@@ -1123,7 +1228,103 @@ const DealStageSelector: React.FC = () => {
         );
       },
     }),
-  ], [columnHelper, navigateToDealTimeline, selectedStage, insightsData, activityCounts, activityCountsLoading]);
+    columnHelper.accessor('Deal_Name', {
+      id: 'strong_buy_signal',
+      header: 'Strong Buy Signal',
+      cell: info => {
+        const dealName = info.getValue();
+        const signals = signalsData?.[dealName];
+        
+        if (signalsLoading) {
+          return (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
+              <span className="text-gray-500 text-xs">Loading...</span>
+            </div>
+          );
+        }
+        
+        if (!signals) {
+          return <span className="text-gray-400">-</span>;
+        }
+        
+        const value = signals.very_likely_to_buy;
+        if (value === 0) {
+          return <span>{value}</span>;
+        }
+        
+        return (
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-600 text-white">
+            {value}
+          </span>
+        );
+      },
+    }),
+    columnHelper.accessor('Deal_Name', {
+      id: 'positive_signal',
+      header: 'Positive Signal',
+      cell: info => {
+        const dealName = info.getValue();
+        const signals = signalsData?.[dealName];
+        
+        if (signalsLoading) {
+          return (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
+              <span className="text-gray-500 text-xs">Loading...</span>
+            </div>
+          );
+        }
+        
+        if (!signals) {
+          return <span className="text-gray-400">-</span>;
+        }
+        
+        const value = signals.likely_to_buy;
+        if (value === 0) {
+          return <span>{value}</span>;
+        }
+        
+        return (
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-500 text-white">
+            {value}
+          </span>
+        );
+      },
+    }),
+    columnHelper.accessor('Deal_Name', {
+      id: 'negative_signal',
+      header: 'Negative Signal',
+      cell: info => {
+        const dealName = info.getValue();
+        const signals = signalsData?.[dealName];
+        
+        if (signalsLoading) {
+          return (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
+              <span className="text-gray-500 text-xs">Loading...</span>
+            </div>
+          );
+        }
+        
+        if (!signals) {
+          return <span className="text-gray-400">-</span>;
+        }
+        
+        const value = signals.less_likely_to_buy;
+        if (value === 0) {
+          return <span>{value}</span>;
+        }
+        
+        return (
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-700 text-white">
+            {value}
+          </span>
+        );
+      },
+    }),
+  ], [columnHelper, navigateToDealTimeline, selectedStage, insightsData, activityCounts, activityCountsLoading, signalsData, signalsLoading]);
 
   // Create the table instance
   const table = useReactTable({
@@ -1297,46 +1498,99 @@ const DealStageSelector: React.FC = () => {
             </div>
           )}
 
+          {/* Debug: Show pinned columns */}
+          <div className="mb-4 text-xs text-gray-500">
+            Pinned columns: {Array.from(pinnedColumns).join(', ')}
+          </div>
+
           {loading ? (
             <div className="text-center py-10">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
               <p className="mt-3">Loading deals for {selectedStage}...</p>
             </div>
           ) : getFilteredDeals().length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <div className="overflow-x-auto border border-gray-200 rounded-lg">
+              <table className="min-w-full bg-white" style={{ minWidth: '1200px' }}>
                 <thead className="bg-gray-100">
                   {table.getHeaderGroups().map(headerGroup => (
                     <tr key={headerGroup.id}>
-                      {headerGroup.headers.map(header => (
-                        <th 
-                          key={header.id}
-                          className="py-3 px-4 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors"
-                          onClick={header.column.getToggleSortingHandler()}
-                        >
-                          <div className="flex items-center">
-                            {flexRender(
-                              header.column.columnDef.header,
-                              header.getContext()
-                            )}
-                            {renderSortIndicator(header.column)}
-                          </div>
-                        </th>
-                      ))}
+                      {headerGroup.headers.map((header, index) => {
+                        const isPinned = pinnedColumns.has(header.id);
+                        const pinnedIndex = Array.from(pinnedColumns).indexOf(header.id);
+                        const leftPosition = pinnedIndex >= 0 ? `${pinnedIndex * 250}px` : 'auto';
+                        
+                        return (
+                          <th 
+                            key={header.id}
+                            className={`py-3 px-4 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors ${
+                              isPinned ? 'sticky z-20 bg-gray-100 shadow-sm' : ''
+                            }`}
+                            style={isPinned ? { left: leftPosition, minWidth: '200px' } : {}}
+                            onClick={header.column.getToggleSortingHandler()}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center">
+                                {flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext()
+                                )}
+                                {renderSortIndicator(header.column)}
+                                {isPinned && (
+                                  <span className="ml-1 text-xs text-sky-600 font-medium">📌</span>
+                                )}
+                              </div>
+                              {header.id === 'deal_name' && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    console.log('Toggling pin for column:', header.id, 'Current pinned:', Array.from(pinnedColumns));
+                                    toggleColumnPin(header.id);
+                                  }}
+                                  className={`ml-2 p-1 rounded hover:bg-gray-300 transition-colors ${
+                                    isPinned ? 'text-sky-600' : 'text-gray-400'
+                                  }`}
+                                  title={isPinned ? 'Unpin column' : 'Pin column'}
+                                >
+                                  <svg 
+                                    xmlns="http://www.w3.org/2000/svg" 
+                                    className="h-4 w-4" 
+                                    viewBox="0 0 20 20" 
+                                    fill="currentColor"
+                                  >
+                                    <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
                     </tr>
                   ))}
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {table.getRowModel().rows.map(row => (
                     <tr key={row.id} className="hover:bg-gray-50">
-                      {row.getVisibleCells().map(cell => (
-                        <td key={cell.id} className="py-3 px-4">
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </td>
-                      ))}
+                      {row.getVisibleCells().map((cell, index) => {
+                        const isPinned = pinnedColumns.has(cell.column.id);
+                        const pinnedIndex = Array.from(pinnedColumns).indexOf(cell.column.id);
+                        const leftPosition = pinnedIndex >= 0 ? `${pinnedIndex * 250}px` : 'auto';
+                        
+                        return (
+                          <td 
+                            key={cell.id} 
+                            className={`py-3 px-4 ${
+                              isPinned ? 'sticky z-20 bg-white shadow-sm' : ''
+                            }`}
+                            style={isPinned ? { left: leftPosition, minWidth: '200px' } : {}}
+                          >
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext()
+                            )}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>

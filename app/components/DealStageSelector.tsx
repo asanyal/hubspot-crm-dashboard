@@ -791,29 +791,58 @@ const DealStageSelector: React.FC = () => {
     }
   }, [makeApiCall, selectedStage, saveActivityCountsToStorage]);
 
-  // Fetch signals data for all deals
+  // Fetch signals data for all deals in batches of 10
   const fetchSignals = useCallback(async (dealNames: string[]) => {
     if (!dealNames.length) return;
     
     setSignalsLoading(true);
     try {
-      const response = await makeApiCall(`${API_CONFIG.getApiPath('/get-signals-group')}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ deal_names: dealNames }),
-      });
+      const BATCH_SIZE = 10;
+      const allSignalsData: DealSignalsData = {};
       
-      if (response) {
-        const data = await response.json();
-        setSignalsData(data);
-        if (selectedStage) {
-          saveSignalsToStorage(selectedStage, data);
+      // Process deals in batches
+      for (let i = 0; i < dealNames.length; i += BATCH_SIZE) {
+        const batch = dealNames.slice(i, i + BATCH_SIZE);
+        console.log(`Fetching signals for batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(dealNames.length / BATCH_SIZE)} (${batch.length} deals)`);
+        
+        try {
+          const response = await makeApiCall(`${API_CONFIG.getApiPath('/get-signals-group')}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ deal_names: batch }),
+          });
+          
+          if (response) {
+            const batchData = await response.json();
+            // Merge batch data into all signals data
+            Object.assign(allSignalsData, batchData);
+            
+            // Update state with partial data as it comes in
+            setSignalsData(prev => ({ ...prev, ...batchData }));
+            
+            console.log(`Batch ${Math.floor(i / BATCH_SIZE) + 1} completed - ${Object.keys(batchData).length} deals updated`);
+          }
+        } catch (error) {
+          console.error(`Error fetching signals for batch ${Math.floor(i / BATCH_SIZE) + 1}:`, error);
+          // Continue with next batch even if this one fails
+        }
+        
+        // Add a small delay between batches to avoid overwhelming the API
+        if (i + BATCH_SIZE < dealNames.length) {
+          await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay between batches
         }
       }
+      
+      // Save complete data to storage
+      if (selectedStage) {
+        saveSignalsToStorage(selectedStage, allSignalsData);
+      }
+      
+      console.log(`Completed fetching signals for ${dealNames.length} deals in ${Math.ceil(dealNames.length / BATCH_SIZE)} batches`);
     } catch (error) {
-      console.error('Error fetching signals:', error);
+      console.error('Error in fetchSignals:', error);
     } finally {
       setSignalsLoading(false);
     }
@@ -1163,7 +1192,8 @@ const DealStageSelector: React.FC = () => {
         const dealName = info.row.original.Deal_Name;
         const signals = signalsData?.[dealName];
         
-        if (signalsLoading) {
+        // Show loading only if we're still loading AND don't have data for this specific deal
+        if (signalsLoading && !signals) {
           return (
             <div className="flex items-center">
               <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
@@ -1198,7 +1228,8 @@ const DealStageSelector: React.FC = () => {
         const dealName = info.row.original.Deal_Name;
         const signals = signalsData?.[dealName];
         
-        if (signalsLoading) {
+        // Show loading only if we're still loading AND don't have data for this specific deal
+        if (signalsLoading && !signals) {
           return (
             <div className="flex items-center">
               <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
@@ -1233,7 +1264,8 @@ const DealStageSelector: React.FC = () => {
         const dealName = info.row.original.Deal_Name;
         const signals = signalsData?.[dealName];
         
-        if (signalsLoading) {
+        // Show loading only if we're still loading AND don't have data for this specific deal
+        if (signalsLoading && !signals) {
           return (
             <div className="flex items-center">
               <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>

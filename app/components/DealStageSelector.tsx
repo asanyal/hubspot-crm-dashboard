@@ -1109,6 +1109,23 @@ const DealStageSelector: React.FC = () => {
         );
       },
     }),
+    columnHelper.accessor('Owner', {
+      id: 'owner',
+      header: 'Owner',
+      cell: info => {
+        const owner = info.getValue();
+        const bgColor = generateColor(owner);
+        const textColor = getTextColor(bgColor);
+        return (
+          <span
+            className="px-2 py-1 rounded-full text-xs font-medium"
+            style={{ backgroundColor: bgColor, color: textColor }}
+          >
+            {formatOwnerInitials(owner)}
+          </span>
+        );
+      },
+    }),
     columnHelper.accessor('Deal_Name', {
       id: 'activity_count',
       header: 'Activity Count',
@@ -1136,19 +1153,132 @@ const DealStageSelector: React.FC = () => {
         return <span>{count}</span>;
       },
     }),
-    columnHelper.accessor('Owner', {
-      id: 'owner',
-      header: 'Owner',
+    columnHelper.accessor((row) => {
+      const signals = signalsData?.[row.Deal_Name];
+      return signals ? signals.likely_to_buy : 0;
+    }, {
+      id: 'positive_signal',
+      header: 'Positive Signal',
       cell: info => {
-        const owner = info.getValue();
-        const bgColor = generateColor(owner);
-        const textColor = getTextColor(bgColor);
+        const dealName = info.row.original.Deal_Name;
+        const signals = signalsData?.[dealName];
+        
+        if (signalsLoading) {
+          return (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
+              <span className="text-gray-500 text-xs">Loading...</span>
+            </div>
+          );
+        }
+        
+        if (!signals) {
+          return <span className="text-gray-400">-</span>;
+        }
+        
+        const value = signals.likely_to_buy;
+        if (value === 0) {
+          return <span>{value}</span>;
+        }
+        
         return (
-          <span
-            className="px-2 py-1 rounded-full text-xs font-medium"
-            style={{ backgroundColor: bgColor, color: textColor }}
-          >
-            {formatOwnerInitials(owner)}
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-lime-600 text-white">
+            {value}
+          </span>
+        );
+      },
+    }),
+    columnHelper.accessor((row) => {
+      const signals = signalsData?.[row.Deal_Name];
+      return signals ? signals.very_likely_to_buy : 0;
+    }, {
+      id: 'strong_buy_signal',
+      header: 'Strong Buy Signal',
+      cell: info => {
+        const dealName = info.row.original.Deal_Name;
+        const signals = signalsData?.[dealName];
+        
+        if (signalsLoading) {
+          return (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
+              <span className="text-gray-500 text-xs">Loading...</span>
+            </div>
+          );
+        }
+        
+        if (!signals) {
+          return <span className="text-gray-400">-</span>;
+        }
+        
+        const value = signals.very_likely_to_buy;
+        if (value === 0) {
+          return <span>{value}</span>;
+        }
+        
+        return (
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-emerald-500 text-white">
+            {value}
+          </span>
+        );
+      },
+    }),
+    columnHelper.accessor((row) => {
+      const signals = signalsData?.[row.Deal_Name];
+      return signals ? signals.less_likely_to_buy : 0;
+    }, {
+      id: 'negative_signal',
+      header: 'Negative Signal',
+      cell: info => {
+        const dealName = info.row.original.Deal_Name;
+        const signals = signalsData?.[dealName];
+        
+        if (signalsLoading) {
+          return (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
+              <span className="text-gray-500 text-xs">Loading...</span>
+            </div>
+          );
+        }
+        
+        if (!signals) {
+          return <span className="text-gray-400">-</span>;
+        }
+        
+        const value = signals.less_likely_to_buy;
+        if (value === 0) {
+          return <span>{value}</span>;
+        }
+        
+        return (
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-700 text-white">
+            {value}
+          </span>
+        );
+      },
+    }),
+    columnHelper.accessor('Deal_Name', {
+      id: 'using_competitor',
+      header: 'Using Competitor?',
+      cell: info => {
+        const dealName = info.getValue();
+        const hasNoData = insightsData?.using_competitor_no_data?.includes(dealName) || false;
+        const hasCompetitor = insightsData?.using_competitor?.includes(dealName) || false;
+        
+        if (hasNoData) {
+          return (
+            <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+              N/A
+            </span>
+          );
+        }
+        
+        return (
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+            hasCompetitor ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+          }`}>
+            {hasCompetitor ? 'Yes' : 'No'}
           </span>
         );
       },
@@ -1199,127 +1329,6 @@ const DealStageSelector: React.FC = () => {
             noDecisionMaker ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
           }`}>
             {noDecisionMaker ? 'No' : 'Yes'}
-          </span>
-        );
-      },
-    }),
-    columnHelper.accessor('Deal_Name', {
-      id: 'using_competitor',
-      header: 'Using Competitor?',
-      cell: info => {
-        const dealName = info.getValue();
-        const hasNoData = insightsData?.using_competitor_no_data?.includes(dealName) || false;
-        const hasCompetitor = insightsData?.using_competitor?.includes(dealName) || false;
-        
-        if (hasNoData) {
-          return (
-            <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-              N/A
-            </span>
-          );
-        }
-        
-        return (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-            hasCompetitor ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-          }`}>
-            {hasCompetitor ? 'Yes' : 'No'}
-          </span>
-        );
-      },
-    }),
-    columnHelper.accessor('Deal_Name', {
-      id: 'strong_buy_signal',
-      header: 'Strong Buy Signal',
-      cell: info => {
-        const dealName = info.getValue();
-        const signals = signalsData?.[dealName];
-        
-        if (signalsLoading) {
-          return (
-            <div className="flex items-center">
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
-              <span className="text-gray-500 text-xs">Loading...</span>
-            </div>
-          );
-        }
-        
-        if (!signals) {
-          return <span className="text-gray-400">-</span>;
-        }
-        
-        const value = signals.very_likely_to_buy;
-        if (value === 0) {
-          return <span>{value}</span>;
-        }
-        
-        return (
-          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-600 text-white">
-            {value}
-          </span>
-        );
-      },
-    }),
-    columnHelper.accessor('Deal_Name', {
-      id: 'positive_signal',
-      header: 'Positive Signal',
-      cell: info => {
-        const dealName = info.getValue();
-        const signals = signalsData?.[dealName];
-        
-        if (signalsLoading) {
-          return (
-            <div className="flex items-center">
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
-              <span className="text-gray-500 text-xs">Loading...</span>
-            </div>
-          );
-        }
-        
-        if (!signals) {
-          return <span className="text-gray-400">-</span>;
-        }
-        
-        const value = signals.likely_to_buy;
-        if (value === 0) {
-          return <span>{value}</span>;
-        }
-        
-        return (
-          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-500 text-white">
-            {value}
-          </span>
-        );
-      },
-    }),
-    columnHelper.accessor('Deal_Name', {
-      id: 'negative_signal',
-      header: 'Negative Signal',
-      cell: info => {
-        const dealName = info.getValue();
-        const signals = signalsData?.[dealName];
-        
-        if (signalsLoading) {
-          return (
-            <div className="flex items-center">
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
-              <span className="text-gray-500 text-xs">Loading...</span>
-            </div>
-          );
-        }
-        
-        if (!signals) {
-          return <span className="text-gray-400">-</span>;
-        }
-        
-        const value = signals.less_likely_to_buy;
-        if (value === 0) {
-          return <span>{value}</span>;
-        }
-        
-        return (
-          <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-700 text-white">
-            {value}
           </span>
         );
       },

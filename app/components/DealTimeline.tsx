@@ -869,12 +869,6 @@ const DealTimeline: React.FC = () => {
       if (response) {
         const data = await response.json();
         setActivitiesCount(data.count);
-        if (data.count === 0) {
-          updateState('dealTimeline.loading', false);
-          setLoadingStartTime(null);
-          setLoadingStage(1);
-          setLoadingError(false);
-        }
         return data.count;
       }
       return null;
@@ -892,6 +886,24 @@ const DealTimeline: React.FC = () => {
   const loadTimelineDirectly = useCallback(async (dealName: string) => {
     if (isUnmounting) return;
     
+    // Ensure browser ID is initialized before making API calls
+    if (!browserId || !isInitialized) {
+      console.warn('[Timeline] Browser ID not initialized, waiting...');
+      setLoadingMessage(`Initializing browser session for ${dealName}...`);
+      
+      // Wait a bit and try again
+      setTimeout(() => {
+        if (!isUnmounting && browserId && isInitialized) {
+          loadTimelineDirectly(dealName);
+        } else {
+          setLoadingMessage(`Failed to initialize browser session for ${dealName}. Please refresh the page.`);
+          updateState('dealTimeline.error', 'Failed to initialize browser session. Please refresh the page.');
+          updateState('dealTimeline.loading', false);
+        }
+      }, 1000);
+      return;
+    }
+    
     // Check if we already have cached data for this deal
     if (selectedDealRef.current?.name === dealName && timelineDataRef.current && lastFetched) {
       const currentTime = Date.now();
@@ -905,6 +917,29 @@ const DealTimeline: React.FC = () => {
       }
     }
 
+    // Clean up state before loading new data (similar to refresh button)
+    cleanupState();
+    setMeetingContacts({});
+    
+    // Clear localStorage meetingContacts
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('meetingContacts');
+    }
+    
+    // Clear any cached data and force refresh
+    updateState('dealTimeline.activities', null);
+    updateState('dealTimeline.lastFetched', null);
+    updateState('dealTimeline.error', null);
+    
+    // Reset loading states
+    updateState('dealTimeline.loading', false);
+    setLoadingStartTime(null);
+    setLoadingStage(1);
+    setLoadingError(false);
+    
+    // Clear chart data
+    setChartData([]);
+
     // Otherwise, fetch new data
     updateState('dealTimeline.loading', true);
     updateState('dealTimeline.error', null);
@@ -914,37 +949,66 @@ const DealTimeline: React.FC = () => {
     setLoadingMessage(`Initializing timeline data for ${dealName} from URL...`);
     
     try {
-      // First fetch activities count to inform the user
-      setLoadingMessage(`Counting activities for ${dealName}...`);
-      const count = await fetchActivitiesCount(dealName);
+      // Fetch all data in parallel for faster loading
+      setLoadingMessage(`Loading all data for ${dealName}...`);
       
-      // Fetch deal info
-      setLoadingMessage(`Fetching deal information for ${dealName}...`);
-      await fetchDealInfo(dealName);
+      // Run all API calls in parallel
+      const startTime = Date.now();
       
-      // Then fetch timeline data
-      setLoadingMessage(`Fetching timeline data for ${dealName}...`);
-      const response = await makeApiCall(`/api/hubspot/deal-timeline?dealName=${encodeURIComponent(dealName)}`);
+      const [count, dealInfoResult, timelineResponse] = await Promise.all([
+        fetchActivitiesCount(dealName).then(result => {
+          return result;
+        }),
+        fetchDealInfo(dealName).then(result => {
+          return result;
+        }),
+        (async () => {
+          const result = await makeApiCall(`${API_CONFIG.getApiPath('/deal-timeline')}?dealName=${encodeURIComponent(dealName)}`);
+          return result;
+        })()
+      ]);
       
-      if (response) {
+      if (timelineResponse) {
         setLoadingMessage(`Processing timeline data for ${dealName}...`);
-        const data = await response.json();
+        const data = await timelineResponse.json();
         
         // Verify the deal name matches before updating state
         if (selectedDealRef.current?.name === dealName) {
           updateState('dealTimeline.activities', data);
           updateState('dealTimeline.lastFetched', Date.now());
           setLoadingMessage(`Timeline data loaded successfully for ${dealName}!`);
+          
+          // After timeline loads, explicitly fetch concerns (similar to refresh button)
+          setLoadingMessage(`Timeline data loaded for ${dealName}, loading concerns...`);
+          // Note: fetchConcerns will be called by the useEffect that watches timelineData
         } else {
           console.warn(`Deal name mismatch: URL deal=${dealName}, current deal=${selectedDealRef.current?.name}`);
           setLoadingMessage(`Error: Deal name mismatch. Please refresh the page.`);
         }
+      } else {
+        console.warn('[Timeline] No response received from timeline API');
+        setLoadingMessage(`No response received for ${dealName}. Please try again.`);
       }
     } catch (error) {
       console.error('[Timeline] Error fetching timeline:', error);
       setLoadingError(true);
-      setLoadingMessage(`Error loading timeline data for ${dealName}.`);
-      updateState('dealTimeline.error', 'Failed to load timeline data. Please try again.');
+      
+      // Provide more specific error messages based on the error type
+      let errorMessage = 'Failed to load timeline data. Please try again.';
+      if (error instanceof Error) {
+        if (error.message.includes('Browser ID not initialized')) {
+          errorMessage = 'Browser session not initialized. Please refresh the page.';
+        } else if (error.message.includes('Server error')) {
+          errorMessage = 'Server error occurred. Please try again in a moment.';
+        } else if (error.message.includes('Request timed out')) {
+          errorMessage = 'Request timed out. Please try again.';
+        } else if (error.message.includes('Failed to fetch')) {
+          errorMessage = 'Network error. Please check your connection and try again.';
+        }
+      }
+      
+      setLoadingMessage(`Error loading timeline data for ${dealName}: ${errorMessage}`);
+      updateState('dealTimeline.error', errorMessage);
     } finally {
       updateState('dealTimeline.loading', false);
       setLoadingStartTime(null);
@@ -955,7 +1019,10 @@ const DealTimeline: React.FC = () => {
     fetchDealInfo,
     fetchActivitiesCount,
     isUnmounting,
-    makeApiCall
+    makeApiCall,
+    cleanupState,
+    browserId,
+    isInitialized
   ]);
 
   // Format dates for display
@@ -1100,43 +1167,40 @@ const DealTimeline: React.FC = () => {
   useEffect(() => {
     if (!hasMounted || isUrlProcessed) return;
     
-      const searchParams = new URLSearchParams(window.location.search);
-      const dealName = searchParams.get('dealName');
-      const autoload = searchParams.get('autoload') === 'true';
+    const searchParams = new URLSearchParams(window.location.search);
+    const dealName = searchParams.get('dealName');
+    const autoload = searchParams.get('autoload') === 'true';
+    
+    if (dealName) {
+      const decodedDealName = decodeURIComponent(dealName);
+      // store the deal name in local storage
+      localStorage.setItem('dealName', decodedDealName);
       
-      if (dealName) {
-        const decodedDealName = decodeURIComponent(dealName);
-        // store the deal name in local storage
-        localStorage.setItem('dealName', decodedDealName);
-        
-        // Only proceed if this is a different deal than what's currently loaded
-        if (!selectedDeal || selectedDeal.name !== decodedDealName) {
-          
-        // First, try to find the deal in allDeals
-        const matchingDeal = allDeals.find(d => d.name === decodedDealName);
-        
-          if (matchingDeal) {
-            updateState('dealTimeline.selectedDeal', matchingDeal);
-            setSelectedOption({ value: matchingDeal.id, label: matchingDeal.name });
-            setCurrentDealId(matchingDeal.id);
-          } else {
-            // If not found, create a temporary deal object
-            const tempDeal = {
-                  name: decodedDealName,
-              id: 'pending'
-            };
-            updateState('dealTimeline.selectedDeal', tempDeal);
-            setSelectedOption({ value: 'pending', label: decodedDealName });
-          }
-        
-          if (autoload) {
-            loadTimelineDirectly(decodedDealName);
-          }
-        }
+      // Always process URL parameters for navigation, regardless of current state
+      // First, try to find the deal in allDeals
+      const matchingDeal = allDeals.find(d => d.name === decodedDealName);
+      
+      if (matchingDeal) {
+        updateState('dealTimeline.selectedDeal', matchingDeal);
+        setSelectedOption({ value: matchingDeal.id, label: matchingDeal.name });
+        setCurrentDealId(matchingDeal.id);
+      } else {
+        // If not found, create a temporary deal object
+        const tempDeal = {
+          name: decodedDealName,
+          id: 'pending'
+        };
+        updateState('dealTimeline.selectedDeal', tempDeal);
+        setSelectedOption({ value: 'pending', label: decodedDealName });
       }
       
-      setIsUrlProcessed(true);
-  }, [hasMounted, isUrlProcessed, selectedDeal, allDeals, updateState, loadTimelineDirectly, currentDealId]);
+      if (autoload) {
+        loadTimelineDirectly(decodedDealName);
+      }
+    }
+    
+    setIsUrlProcessed(true);
+  }, [hasMounted, isUrlProcessed, allDeals, updateState, loadTimelineDirectly]);
 
 // Fetch all deals after component mounts and when needed
   useEffect(() => {
@@ -2530,14 +2594,13 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
       
       // Fetch activities count and deal info in parallel
       setLoadingMessage(`Fetching activities count and deal info for ${dealToUse.name}...`);
-      const [count, dealInfoResponse] = await Promise.all([
+      // Fetch all data in parallel for faster loading
+      setLoadingMessage(`Loading all data for ${dealToUse.name}...`);
+      const [count, dealInfoResponse, response] = await Promise.all([
         fetchActivitiesCount(dealToUse.name),
-        fetchDealInfo(dealToUse.name)
+        fetchDealInfo(dealToUse.name),
+        makeApiCall(`${API_CONFIG.getApiPath('/deal-timeline')}?dealName=${encodeURIComponent(dealToUse.name)}`)
       ]);
-      
-      // Fetch timeline data
-      setLoadingMessage(`Fetching timeline data for ${dealToUse.name}...`);
-      const response = await makeApiCall(`${API_CONFIG.getApiPath('/deal-timeline')}?dealName=${encodeURIComponent(dealToUse.name)}`);
       
       if (response) {
         setLoadingMessage(`Processing timeline data for ${dealToUse.name}...`);
@@ -2725,6 +2788,16 @@ const handleRefresh = useCallback(() => {
     setLoadingMessage('Initializing deal data...');
   }
 }, [handleGetTimeline, cleanupState, updateState, fetchConcerns]);
+
+// Effect to automatically fetch concerns after timeline loads
+useEffect(() => {
+  if (!timelineData?.events || !selectedDeal?.name || isUnmounting || loadingConcerns) {
+    return;
+  }
+  
+  // Fetch concerns after timeline data loads
+  fetchConcerns(selectedDeal.name);
+}, [timelineData?.events, selectedDeal?.name, isUnmounting, loadingConcerns, fetchConcerns]);
 
 // Update the effect that fetches champions to be more robust
 // Effect to automatically fetch champions after timeline loads

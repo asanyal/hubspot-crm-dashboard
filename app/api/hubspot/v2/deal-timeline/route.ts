@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { API_CONFIG } from '@/app/utils/config';
 import { getBackendUrl } from '@/app/utils/api';
 
 export async function GET(request: Request) {
@@ -19,12 +18,11 @@ export async function GET(request: Request) {
       );
     }
 
-    const apiPath = API_CONFIG.getApiPath('/deal-timeline');
-    const backendUrl = getBackendUrl(`${apiPath}?dealName=${encodeURIComponent(dealName)}`);
+    // Construct the backend URL directly for v2 endpoint
+    const backendUrl = getBackendUrl(`/api/hubspot/v2/deal-timeline?dealName=${encodeURIComponent(dealName)}`);
 
-    console.log('Deal timeline API call:', {
+    console.log('Deal timeline v2 API call:', {
       dealName,
-      apiPath,
       backendUrl,
       browserId: browserId ? 'present' : 'missing',
       sessionId: sessionId ? 'present' : 'missing'
@@ -85,7 +83,7 @@ export async function GET(request: Request) {
     const browserId = request.headers.get('X-Browser-ID');
     const sessionId = request.headers.get('X-Session-ID');
     
-    console.error('Error in deal-timeline route:', {
+    console.error('Error in deal-timeline v2 route:', {
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
       dealName,
@@ -100,4 +98,4 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
-}
+} 

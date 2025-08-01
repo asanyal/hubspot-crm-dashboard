@@ -740,16 +740,16 @@ const ControlPanel: React.FC = () => {
                     Overall Risk
                   </th>
                   <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Decision Maker
+                    Decision Maker Risk
                   </th>
                   <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Pricing Concerns
                   </th>
                   <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Competitor Presence
+                    Competitor Risk
                   </th>
                   <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Sentiment Trends
+                    Sentiment Trend
                   </th>
                 </tr>
               </thead>
@@ -785,7 +785,7 @@ const ControlPanel: React.FC = () => {
                     
                     if (percentage === 0) {
                       return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-                    } else if (percentage <= 50) {
+                    } else if (percentage <= 75) {
                       return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
                     } else if (percentage < 100) {
                       return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';

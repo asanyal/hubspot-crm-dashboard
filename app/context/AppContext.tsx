@@ -68,6 +68,31 @@ interface PipelineData {
   amount: number;
 }
 
+// ---- Deal Risk Analysis Types ----
+interface RiskFactor {
+  risk_score: number;
+  details: string[];
+  max_score: number;
+}
+
+interface DealRiskData {
+  risk_score: number;
+  risk_level: string;
+  explanation: string;
+  risk_factors: {
+    no_decision_maker: RiskFactor;
+    pricing_concerns: RiskFactor;
+    competitor_presence: RiskFactor;
+    champion_quality: RiskFactor;
+    activity_recency: RiskFactor;
+    sentiment_trends: RiskFactor;
+  };
+  last_calculated: string;
+  deal_name: string;
+  isLoading?: boolean;
+  hasError?: boolean;
+}
+
 // Define the shape of the application state
 interface AppState {
   dealTimeline: {
@@ -94,6 +119,13 @@ interface AppState {
     loading: boolean;
     error: string | null;
     lastFetched: number | null;
+    dealRiskAnalysis: {
+      selectedStage: string | null;
+      riskData: DealRiskData[];
+      loading: boolean;
+      error: string | null;
+      lastFetched: number | null;
+    };
   };
 }
 
@@ -122,7 +154,14 @@ const initialState: AppState = {
     pipelineData: [],
     loading: false,
     error: null,
-    lastFetched: null
+    lastFetched: null,
+    dealRiskAnalysis: {
+      selectedStage: null,
+      riskData: [],
+      loading: false,
+      error: null,
+      lastFetched: null
+    }
   },
 };
 

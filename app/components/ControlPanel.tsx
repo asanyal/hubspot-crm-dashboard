@@ -17,7 +17,7 @@ type SortOption = 'count' | 'amount';
 
 const ControlPanel: React.FC = () => {
   const { state, updateState } = useAppState();
-  const { sortBy, pipelineData, loading, error, lastFetched } = state.controlPanel;
+  const { sortBy, pipelineData, loading, error, lastFetched, dealRiskAnalysis } = state.controlPanel;
   const [showActivePipe, setShowActivePipe] = useState<boolean>(true);
   const router = useRouter();
 
@@ -49,6 +49,47 @@ const ControlPanel: React.FC = () => {
   // Add session management state
   const [browserId, setBrowserId] = useState<string>('');
   const [isInitialized, setIsInitialized] = useState(false);
+  
+  // Ref to track current risk data state for concurrent updates
+  const riskDataRef = useRef<any[]>([]);
+
+  // Function to save risk data to localStorage
+  const saveRiskDataToStorage = useCallback((stage: string, data: any[]) => {
+    try {
+      const key = `dealRiskData_${stage}`;
+      const storageData = {
+        data,
+        timestamp: Date.now(),
+        stage
+      };
+      localStorage.setItem(key, JSON.stringify(storageData));
+      console.log(`💾 Saved risk data to localStorage for stage: ${stage}`);
+    } catch (error) {
+      console.error('Error saving risk data to localStorage:', error);
+    }
+  }, []);
+
+  // Function to load risk data from localStorage
+  const loadRiskDataFromStorage = useCallback((stage: string) => {
+    try {
+      const key = `dealRiskData_${stage}`;
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        const storageData = JSON.parse(stored);
+        const isExpired = Date.now() - storageData.timestamp > 300000; // 5 minutes
+        if (!isExpired) {
+          console.log(`📂 Loaded risk data from localStorage for stage: ${stage}`);
+          return storageData.data;
+        } else {
+          console.log(`⏰ Cached risk data expired for stage: ${stage}`);
+          localStorage.removeItem(key);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading risk data from localStorage:', error);
+    }
+    return null;
+  }, []);
 
   // Utility function for making API calls with session management
   const makeApiCall = useCallback(async (url: string, options: RequestInit = {}) => {
@@ -161,6 +202,138 @@ const ControlPanel: React.FC = () => {
     }
   }, [updateState, makeApiCall]);
 
+  // Function to fetch deal risk data with progressive loading
+  const fetchDealRiskData = useCallback(async (stage: string, forceRefresh = false) => {
+    try {
+      // Set loading state
+      updateState('controlPanel.dealRiskAnalysis.loading', true);
+      updateState('controlPanel.dealRiskAnalysis.error', null);
+      
+      console.log('Fetching deal risk data for stage:', stage, forceRefresh ? '(forced refresh)' : '');
+      
+      // Check localStorage first (unless force refresh)
+      if (!forceRefresh) {
+        const cachedData = loadRiskDataFromStorage(stage);
+        if (cachedData && cachedData.length > 0) {
+          console.log('Using cached data for stage:', stage);
+          updateState('controlPanel.dealRiskAnalysis.riskData', cachedData);
+          riskDataRef.current = cachedData;
+          updateState('controlPanel.dealRiskAnalysis.loading', false);
+          updateState('controlPanel.dealRiskAnalysis.lastFetched', Date.now());
+          return;
+        }
+      }
+      
+      // First get deals for the selected stage
+      const dealsResponse = await makeApiCall(`${API_CONFIG.getApiPath('/deals')}?stage=${encodeURIComponent(stage)}`);
+      
+      if (!dealsResponse) {
+        updateState('controlPanel.dealRiskAnalysis.loading', false);
+        return;
+      }
+      
+      const dealsData = await dealsResponse.json();
+      console.log('Deals data fetched:', dealsData ? `${dealsData.length} deals` : 'no deals');
+      
+      if (!Array.isArray(dealsData) || dealsData.length === 0) {
+        updateState('controlPanel.dealRiskAnalysis.riskData', []);
+        updateState('controlPanel.dealRiskAnalysis.loading', false);
+        return;
+      }
+      
+      // Initialize the table with deal names and loading placeholders
+      const initialRiskData = dealsData.map((deal: any) => ({
+        deal_name: deal.Deal_Name,
+        risk_score: 0,
+        risk_level: 'Loading...',
+        explanation: '',
+        risk_factors: {
+          no_decision_maker: { risk_score: 0, details: ['Loading...'], max_score: 25 },
+          pricing_concerns: { risk_score: 0, details: ['Loading...'], max_score: 20 },
+          competitor_presence: { risk_score: 0, details: ['Loading...'], max_score: 20 },
+          sentiment_trends: { risk_score: 0, details: ['Loading...'], max_score: 10 }
+        },
+        last_calculated: '',
+        isLoading: true
+      }));
+      
+      // Set initial data immediately
+      updateState('controlPanel.dealRiskAnalysis.riskData', initialRiskData);
+      riskDataRef.current = initialRiskData;
+      
+      // Fetch risk data for each deal independently and update as they come in
+      dealsData.forEach((deal: any, index: number) => {
+        // Start each API call independently
+        const fetchRiskData = async () => {
+          console.log(`🚀 Starting risk score API call for deal: ${deal.Deal_Name} (index: ${index})`);
+          try {
+            const riskResponse = await makeApiCall(`${API_CONFIG.getApiPath('/deal-risk-score')}?deal_name=${encodeURIComponent(deal.Deal_Name)}`);
+            if (riskResponse) {
+              const riskData = await riskResponse.json();
+              
+              console.log(`✅ Risk score API call completed for deal: ${deal.Deal_Name} (index: ${index}) - Risk Level: ${riskData.risk_level}, Score: ${riskData.risk_score}/100`);
+              
+              // Update the ref first, then update state
+              const currentData = [...riskDataRef.current];
+              currentData[index] = {
+                ...riskData,
+                isLoading: false
+              };
+              riskDataRef.current = currentData;
+              
+              // Update the state with the new array
+              updateState('controlPanel.dealRiskAnalysis.riskData', currentData);
+              console.log(`📊 Updated row ${index} for deal: ${deal.Deal_Name} - Total rows: ${currentData.length}`);
+              
+              // Check if all rows are loaded (no more loading states)
+              const allLoaded = currentData.every((item: any) => !item.isLoading);
+              if (allLoaded) {
+                console.log('All risk data loaded, saving to localStorage');
+                saveRiskDataToStorage(stage, currentData);
+              }
+            }
+          } catch (error) {
+            console.error(`❌ Error fetching risk data for deal ${deal.Deal_Name} (index: ${index}):`, error);
+            
+            // Update the ref first, then update state for errors
+            const currentData = [...riskDataRef.current];
+            currentData[index] = {
+              ...currentData[index],
+              risk_level: 'Error',
+              explanation: 'Failed to load risk data',
+              isLoading: false,
+              hasError: true
+            };
+            riskDataRef.current = currentData;
+            
+            // Update the state with the new array
+            updateState('controlPanel.dealRiskAnalysis.riskData', currentData);
+            console.log(`⚠️ Updated row ${index} for deal: ${deal.Deal_Name} with error - Total rows: ${currentData.length}`);
+            
+            // Check if all rows are loaded (including errors)
+            const allLoaded = currentData.every((item: any) => !item.isLoading);
+            if (allLoaded) {
+              console.log('All risk data loaded (including errors), saving to localStorage');
+              saveRiskDataToStorage(stage, currentData);
+            }
+          }
+        };
+        
+        // Start the API call immediately
+        fetchRiskData();
+      });
+      
+      // Set last fetched timestamp
+      updateState('controlPanel.dealRiskAnalysis.lastFetched', Date.now());
+      
+    } catch (error) {
+      console.error('Error fetching deal risk data:', error);
+      updateState('controlPanel.dealRiskAnalysis.error', 'Failed to load deal risk data');
+    } finally {
+      updateState('controlPanel.dealRiskAnalysis.loading', false);
+    }
+  }, [updateState, makeApiCall]);
+
   // ULTRA SIMPLIFIED APPROACH
   // Initialize browser ID only once on component mount
   useEffect(() => {
@@ -194,6 +367,20 @@ const ControlPanel: React.FC = () => {
       loadData();
     }
   }, [isInitialized, pipelineData.length, loading]); // Removed fetchPipelineData
+
+  // Effect to handle deal risk analysis data fetching
+  useEffect(() => {
+    // Only proceed if initialized and we have a selected stage
+    if (!isInitialized || !dealRiskAnalysis.selectedStage) return;
+    
+    console.log('Deal risk analysis effect running for stage:', dealRiskAnalysis.selectedStage);
+    
+    // Check if we need to load risk data
+    if ((dealRiskAnalysis.riskData || []).length === 0 && !dealRiskAnalysis.loading) {
+      console.log('No risk data and not loading - fetching risk data');
+      fetchDealRiskData(dealRiskAnalysis.selectedStage, false);
+    }
+  }, [isInitialized, dealRiskAnalysis.selectedStage, dealRiskAnalysis.riskData.length, dealRiskAnalysis.loading, fetchDealRiskData]);
 
   // Check dark mode on component mount and when it changes
 
@@ -471,6 +658,244 @@ const ControlPanel: React.FC = () => {
 
       {/* Stat Boxes */}
       <StatBoxes />
+
+      {/* Deal Risk Analysis Section */}
+      <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow transition-colors mb-8">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Deal Risk Analysis</h2>
+          <div className="flex items-center space-x-4">
+            <select
+              className="bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md py-2 px-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-colors"
+              value={dealRiskAnalysis.selectedStage || ''}
+              onChange={(e) => {
+                const selectedStage = e.target.value;
+                updateState('controlPanel.dealRiskAnalysis.selectedStage', selectedStage);
+                if (selectedStage) {
+                  fetchDealRiskData(selectedStage);
+                }
+              }}
+            >
+              <option value="">Select a stage</option>
+              {pipelineData
+                .filter(item => 
+                  showActivePipe ? 
+                    item.stage !== "Closed Marketing Nurture" && 
+                    item.stage !== "Closed Lost" &&
+                    item.stage !== "Closed Won" &&
+                    item.stage !== "0. Identification"
+                  : true
+                )
+                .map((item, index) => (
+                  <option key={index} value={item.stage}>
+                    {item.stage} ({item.count} deals)
+                  </option>
+                ))}
+            </select>
+            <button
+              onClick={() => {
+                if (dealRiskAnalysis.selectedStage) {
+                  console.log('Manual refresh triggered for stage:', dealRiskAnalysis.selectedStage);
+                  // Force fresh fetch from backend
+                  fetchDealRiskData(dealRiskAnalysis.selectedStage, true);
+                }
+              }}
+              disabled={!dealRiskAnalysis.selectedStage}
+              className={`px-3 py-1 rounded transition-colors text-sm flex items-center ${
+                dealRiskAnalysis.selectedStage 
+                  ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white' 
+                  : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+              }`}
+              title={dealRiskAnalysis.selectedStage ? "Refresh risk data" : "Select a stage first"}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {dealRiskAnalysis.loading && (
+          <div className="flex justify-center items-center h-32">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 dark:border-indigo-400"></div>
+            <span className="ml-2 text-gray-600 dark:text-gray-300">Loading risk data...</span>
+          </div>
+        )}
+
+        {dealRiskAnalysis.error && (
+          <div className="text-center text-red-500 dark:text-red-400 p-4">
+            <p>{dealRiskAnalysis.error}</p>
+          </div>
+        )}
+
+        {dealRiskAnalysis.selectedStage && (
+          <div className="overflow-x-auto max-h-96 overflow-y-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="sticky top-0 z-10">
+                <tr>
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Deal Name
+                  </th>
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Overall Risk
+                  </th>
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Decision Maker
+                  </th>
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Pricing Concerns
+                  </th>
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Competitor Presence
+                  </th>
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Sentiment Trends
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {(dealRiskAnalysis.riskData || []).map((deal, index) => {
+                  const getRiskLevelColor = (level: string) => {
+                    switch (level.toLowerCase()) {
+                      case 'low': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+                      case 'medium': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+                      case 'high': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+                      case 'error': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+                      case 'loading...': return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
+                      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
+                    }
+                  };
+
+                  const getRiskScoreDisplay = (factor: any) => {
+                    if (deal.isLoading) {
+                      return 'Loading...';
+                    }
+                    if (deal.hasError) {
+                      return 'Error';
+                    }
+                    return `${factor.risk_score}/${factor.max_score}`;
+                  };
+
+                  const getRiskScoreColor = (factor: any) => {
+                    if (deal.isLoading || deal.hasError) {
+                      return 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400';
+                    }
+                    
+                    const percentage = (factor.risk_score / factor.max_score) * 100;
+                    
+                    if (percentage === 0) {
+                      return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+                    } else if (percentage <= 50) {
+                      return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+                    } else if (percentage < 100) {
+                      return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+                    } else {
+                      return 'bg-red-800 text-red-100 dark:bg-red-950 dark:text-red-100';
+                    }
+                  };
+
+                  const getTooltipContent = (factor: any) => {
+                    if (deal.isLoading) {
+                      return 'Loading risk data...';
+                    }
+                    if (deal.hasError) {
+                      return 'Failed to load risk data';
+                    }
+                    if (factor.risk_score === 'N/A' || factor.max_score === 'N/A') {
+                      return 'No data available';
+                    }
+                    // Concatenate details array into a single string
+                    return factor.details && factor.details.length > 0 
+                      ? factor.details.join(' • ')
+                      : 'No details available';
+                  };
+
+                  const renderRiskFactor = (factor: any, factorKey: string) => {
+                    if (deal.isLoading) {
+                      return (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                          Loading...
+                        </span>
+                      );
+                    }
+                    
+                    if (deal.hasError) {
+                      return (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                          Error
+                        </span>
+                      );
+                    }
+
+                    return (
+                      <div className="relative group">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRiskScoreColor(factor)} cursor-help`}>
+                          {getRiskScoreDisplay(factor)}
+                        </span>
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10 max-w-xs">
+                          {getTooltipContent(factor)}
+                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                        </div>
+                      </div>
+                    );
+                  };
+
+                  return (
+                    <tr key={index} className="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                        <button 
+                          onClick={() => {
+                            const encodedDealName = encodeURIComponent(deal.deal_name);
+                            router.push(`/deal-timeline?dealName=${encodedDealName}&autoload=true`);
+                          }}
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-left"
+                        >
+                          {deal.deal_name}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-center">
+                        {deal.isLoading ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                            Loading...
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRiskLevelColor(deal.risk_level)}`}>
+                            {deal.risk_level}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-center">
+                        {renderRiskFactor(deal.risk_factors.no_decision_maker, 'no_decision_maker')}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-center">
+                        {renderRiskFactor(deal.risk_factors.pricing_concerns, 'pricing_concerns')}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-center">
+                        {renderRiskFactor(deal.risk_factors.competitor_presence, 'competitor_presence')}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-center">
+                        {renderRiskFactor(deal.risk_factors.sentiment_trends, 'sentiment_trends')}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!dealRiskAnalysis.selectedStage && (
+          <div className="text-center text-gray-500 dark:text-gray-400 p-8">
+            <p>Select a stage to view deal risk analysis</p>
+          </div>
+        )}
+
+        {dealRiskAnalysis.selectedStage && (dealRiskAnalysis.riskData || []).length === 0 && !dealRiskAnalysis.loading && (
+          <div className="text-center text-gray-500 dark:text-gray-400 p-8">
+            <p>No deals found for the selected stage</p>
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Custom Funnel Stacked Bar Chart */}

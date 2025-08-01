@@ -3387,7 +3387,7 @@ useEffect(() => {
           {/* Stakeholders Section */}
           {loadingStakeholders ? (
             <div className="mb-4 p-3 bg-blue-50 rounded-md">
-              <h3 className="font-semibold text-gray-700 mb-3">Stakeholders</h3>
+              <h3 className="font-semibold text-gray-700 mb-3">Stakeholders by Title</h3>
               <div className="flex items-center text-gray-500">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
                 Loading stakeholders...
@@ -3395,7 +3395,7 @@ useEffect(() => {
             </div>
           ) : stakeholders.length > 0 ? (
             <div className="mb-4 p-3 bg-blue-50 rounded-md">
-              <h3 className="font-semibold text-gray-700 mb-3">Stakeholders</h3>
+              <h3 className="font-semibold text-gray-700 mb-3">Stakeholders by Title</h3>
               <div className="flex flex-wrap gap-3">
                 {stakeholders.map((stakeholder, index) => (
                   <div

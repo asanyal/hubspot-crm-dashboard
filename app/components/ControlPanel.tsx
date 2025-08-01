@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, LabelList } from 'recharts';
 import { useRouter } from 'next/navigation';
 import { useAppState } from '../context/AppContext';
 import { API_CONFIG } from '../utils/config';
@@ -13,12 +13,13 @@ interface StageData {
   amount: number;
 }
 
-type SortOption = 'count' | 'amount' | 'funnel';
+type SortOption = 'count' | 'amount';
 
 const ControlPanel: React.FC = () => {
   const { state, updateState } = useAppState();
   const { sortBy, pipelineData, loading, error, lastFetched } = state.controlPanel;
   const [isDark, setIsDark] = useState<boolean>(false);
+  const [showActivePipe, setShowActivePipe] = useState<boolean>(true);
   const router = useRouter();
 
   console.log('ControlPanel rendered:', {
@@ -238,6 +239,17 @@ const ControlPanel: React.FC = () => {
     }).format(amount);
   };
 
+  // Format number as abbreviated currency (e.g., $7.5M, $155K)
+  const formatAbbreviatedCurrency = (amount: number): string => {
+    if (amount >= 1000000) {
+      return `$${(amount / 1000000).toFixed(1)}M`;
+    } else if (amount >= 1000) {
+      return `$${(amount / 1000).toFixed(0)}K`;
+    } else {
+      return `$${amount.toFixed(0)}`;
+    }
+  };
+
   // Navigate to deals-by-stage with the stage pre-selected
   const navigateToStageDetails = (stageName: string) => {
     // Encode the stage name for URL
@@ -245,9 +257,9 @@ const ControlPanel: React.FC = () => {
     router.push(`/deals-by-stage?stage=${encodedStageName}&autoload=true`);
   };
 
-  // Format and sort the data for the stack chart
+  // Format and sort the data for the funnel stacked bar chart
   const getStackData = () => {
-    const data = pipelineData.map((item) => ({
+    let data = pipelineData.map((item) => ({
       name: item.stage,
       value: sortBy === 'count' ? item.count : item.amount,
       count: item.count,
@@ -258,29 +270,33 @@ const ControlPanel: React.FC = () => {
       funnelOrder: funnelOrder.indexOf(item.stage)
     }));
 
-    // Sort the data based on selected option
-    if (sortBy === 'funnel') {
-      // Custom sort for funnel view
-      return data.sort((a, b) => {
-        // If both items are in the funnel order, sort by their position
-        if (a.funnelOrder >= 0 && b.funnelOrder >= 0) {
-          return a.funnelOrder - b.funnelOrder;
-        }
-        // If only a is in the funnel order, put it first
-        if (a.funnelOrder >= 0) {
-          return -1;
-        }
-        // If only b is in the funnel order, put it first
-        if (b.funnelOrder >= 0) {
-          return 1;
-        }
-        // If neither is in the funnel order, sort by name
-        return a.name.localeCompare(b.name);
-      });
-    } else {
-      // Standard sorting by count or amount (descending)
-      return data.sort((a, b) => b.value - a.value);
+    // Filter out closed stages if showActivePipe is enabled
+    if (showActivePipe) {
+      data = data.filter(item => 
+        item.name !== "Closed Marketing Nurture" && 
+        item.name !== "Closed Lost" &&
+        item.name !== "Closed Won" &&
+        item.name !== "0. Identification"
+      );
     }
+
+    // Always sort by funnel order for the stacked bar chart
+    return data.sort((a, b) => {
+      // If both items are in the funnel order, sort by their position
+      if (a.funnelOrder >= 0 && b.funnelOrder >= 0) {
+        return a.funnelOrder - b.funnelOrder;
+      }
+      // If only a is in the funnel order, put it first
+      if (a.funnelOrder >= 0) {
+        return -1;
+      }
+      // If only b is in the funnel order, put it first
+      if (b.funnelOrder >= 0) {
+        return 1;
+      }
+      // If neither is in the funnel order, sort by name
+      return a.name.localeCompare(b.name);
+    });
   };
 
   // Define colors for the chart
@@ -289,16 +305,34 @@ const ControlPanel: React.FC = () => {
   // Dark mode colors - slightly adjusted for better visibility in dark mode
   const DARK_COLORS = ['#5C9CFF', '#4ACA6B', '#FFC926', '#FF6B5B', '#7C58C7', '#42A1F5', '#25C7E0', '#5FC269'];
 
-  // Custom tooltip for the stack chart
+  // Custom tooltip for the funnel stacked bar chart
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
-      return (
-        <div className="bg-white dark:bg-slate-800 p-4 shadow-lg rounded border border-gray-200 dark:border-gray-700">
-          <p className="font-bold text-gray-900 dark:text-white">{payload[0].payload.name}</p>
-          <p className="text-gray-700 dark:text-gray-300">{payload[0].payload.count} deals</p>
-          <p className="text-gray-700 dark:text-gray-300">{payload[0].payload.formattedAmount}</p>
-        </div>
-      );
+      const barData = payload[0];
+      const stageName = barData.name;
+      
+      if (stageName && stageName !== 'Pipeline') {
+        const currentValue = barData.value;
+        const displayValue = sortBy === 'amount' ? formatAbbreviatedCurrency(currentValue) : currentValue;
+        const displayLabel = sortBy === 'count' ? 'deals' : 'pipeline value';
+        
+        // Find the stage data by name
+        const stageData = getStackData().find(item => item.name === stageName);
+        
+        if (stageData) {
+          return (
+            <div className="bg-white dark:bg-slate-800 p-4 shadow-lg rounded border border-gray-200 dark:border-gray-700">
+              <p className="font-bold text-gray-900 dark:text-white">{stageName}</p>
+              <p className="text-gray-700 dark:text-gray-300">
+                {displayValue} {displayLabel}
+              </p>
+              <p className="text-gray-700 dark:text-gray-300">
+                {stageData.count} deals • {stageData.formattedAmount}
+              </p>
+            </div>
+          );
+        }
+      }
     }
     return null;
   };
@@ -470,72 +504,135 @@ const ControlPanel: React.FC = () => {
       <StatBoxes />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Stack Chart - Replacing Funnel */}
-        <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow transition-colors">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Pipeline Stack</h2>
-            <div className="relative">
+        {/* Custom Funnel Stacked Bar Chart */}
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow transition-colors h-[900px]">
+                      <div className="flex justify-between items-center mb-0">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Pipeline Funnel</h2>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="showActivePipe"
+                  checked={showActivePipe}
+                  onChange={(e) => setShowActivePipe(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                />
+                <label htmlFor="showActivePipe" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Show active pipe
+                </label>
+              </div>
               <select
                 className="bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-md py-1 px-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-colors"
                 value={sortBy}
                 onChange={handleSortChange}
               >
-                <option value="funnel">Show Funnel</option>
                 <option value="count">Sort by Deals Count</option>
                 <option value="amount">Sort by Pipeline Amount</option>
               </select>
             </div>
           </div>
-          <div className="h-[600px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                layout="vertical"
-                data={getStackData()}
-                margin={{ top: 20, right: 30, bottom: 20, left: 150 }}
-              >
-                <XAxis 
-                  type="number"
-                  tickFormatter={sortBy === 'amount' ? (value) => formatCurrency(value) : undefined}
-                  label={{ 
-                    value: sortBy === 'count' ? 'Number of Deals' : 
-                           sortBy === 'amount' ? 'Pipeline Amount' : 'Number of Deals',
-                    position: 'insideBottom',
-                    offset: -10,
-                    style: { fill: textColor }
-                  }}
-                  tick={{ fill: textColor }}
-                />
-                <YAxis 
-                  type="category" 
-                  dataKey="name" 
-                  tick={{ 
-                    fontSize: 12, 
-                    fill: textColor
-                  }}
-                  width={140}
-                  interval={0}
-                  tickMargin={5}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Bar 
-                  dataKey="value" 
-                  fill="#8884d8"
-                  barSize={30}
-                  isAnimationActive
-                >
-                  {getStackData().map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={isDark ? 
-                        DARK_COLORS[index % DARK_COLORS.length] : 
-                        COLORS[index % COLORS.length]} 
+          <div className="h-[800px] flex items-center justify-center">
+            <div className="relative w-full max-w-md">
+              {/* Custom Stacked Bar */}
+              <div className="relative h-[600px]">
+                {getStackData().map((entry, index) => {
+                  const stackData = getStackData();
+                  const totalValue = stackData.reduce((sum, item) => sum + item.value, 0);
+                  
+                  // Calculate minimum height needed for text (approximately 40px for two lines of text)
+                  const minHeight = 40;
+                  const totalMinHeight = stackData.length * minHeight;
+                  
+                  // Calculate proportional heights with minimum
+                  const proportionalHeight = (entry.value / totalValue) * 600;
+                  const adjustedHeight = Math.max(proportionalHeight, minHeight);
+                  
+                  // Recalculate positions with adjusted heights
+                  let adjustedYPosition = 0;
+                  for (let i = 0; i < index; i++) {
+                    const prevEntry = stackData[i];
+                    const prevProportionalHeight = (prevEntry.value / totalValue) * 600;
+                    const prevAdjustedHeight = Math.max(prevProportionalHeight, minHeight);
+                    adjustedYPosition += prevAdjustedHeight;
+                  }
+                  
+                  return (
+                    <div
+                      key={`segment-${index}`}
+                      className="absolute left-0 right-0 cursor-pointer transition-all duration-200 hover:opacity-90 rounded-sm"
+                      style={{
+                        top: `${adjustedYPosition}px`,
+                        height: `${adjustedHeight}px`,
+                        backgroundColor: isDark ? 
+                          DARK_COLORS[index % DARK_COLORS.length] : 
+                          COLORS[index % COLORS.length],
+                        zIndex: 1
+                      }}
                       onClick={() => navigateToStageDetails(entry.name)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+                      onMouseEnter={(e) => {
+                        const tooltip = e.currentTarget.querySelector('.segment-tooltip');
+                        if (tooltip) {
+                          (tooltip as HTMLElement).style.display = 'block';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        const tooltip = e.currentTarget.querySelector('.segment-tooltip');
+                        if (tooltip) {
+                          (tooltip as HTMLElement).style.display = 'none';
+                        }
+                      }}
+                    >
+                      {/* Segment Content */}
+                      <div className="h-full flex flex-col justify-center items-center text-center px-2">
+                        <div className="font-semibold text-xs text-white drop-shadow-sm">
+                          {entry.name}
+                        </div>
+                        <div className="text-xs text-white drop-shadow-sm">
+                          ({sortBy === 'amount' ? formatAbbreviatedCurrency(entry.value) : entry.value})
+                        </div>
+                      </div>
+                      
+                      {/* Custom Tooltip */}
+                      <div 
+                        className="segment-tooltip absolute hidden bg-white dark:bg-slate-800 p-3 shadow-xl rounded-lg border border-gray-200 dark:border-gray-700"
+                        style={{
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          bottom: '100%',
+                          marginBottom: '8px',
+                          minWidth: '200px',
+                          zIndex: 9999
+                        }}
+                      >
+                        <div className="text-sm">
+                          <div className="font-bold text-gray-900 dark:text-white mb-1">
+                            {entry.name}
+                          </div>
+                          <div className="text-gray-700 dark:text-gray-300">
+                            {sortBy === 'amount' ? formatAbbreviatedCurrency(entry.value) : entry.value} {sortBy === 'count' ? 'deals' : 'pipeline value'}
+                          </div>
+                          <div className="text-gray-700 dark:text-gray-300">
+                            {entry.count} deals • {entry.formattedAmount}
+                          </div>
+                        </div>
+                        {/* Tooltip Arrow */}
+                        <div 
+                          className="absolute top-full left-1/2 transform -translate-x-1/2"
+                          style={{
+                            borderLeft: '6px solid transparent',
+                            borderRight: '6px solid transparent',
+                            borderTop: '6px solid white',
+                            filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              
+
+            </div>
           </div>
         </div>
 

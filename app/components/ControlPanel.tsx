@@ -18,7 +18,6 @@ type SortOption = 'count' | 'amount';
 const ControlPanel: React.FC = () => {
   const { state, updateState } = useAppState();
   const { sortBy, pipelineData, loading, error, lastFetched } = state.controlPanel;
-  const [isDark, setIsDark] = useState<boolean>(false);
   const [showActivePipe, setShowActivePipe] = useState<boolean>(true);
   const router = useRouter();
 
@@ -197,37 +196,7 @@ const ControlPanel: React.FC = () => {
   }, [isInitialized, pipelineData.length, loading]); // Removed fetchPipelineData
 
   // Check dark mode on component mount and when it changes
-  useEffect(() => {
-    // Check initial state
-    const checkDarkMode = () => {
-      if (typeof window !== 'undefined') {
-        setIsDark(document.documentElement.classList.contains('dark'));
-      }
-    };
-    
-    checkDarkMode();
-    
-    // Set up observer to detect dark mode changes
-    if (typeof window !== 'undefined' && window.MutationObserver) {
-      const observer = new MutationObserver(mutations => {
-        mutations.forEach(mutation => {
-          if (
-            mutation.type === 'attributes' && 
-            mutation.attributeName === 'class'
-          ) {
-            checkDarkMode();
-          }
-        });
-      });
-      
-      observer.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ['class']
-      });
-      
-      return () => observer.disconnect();
-    }
-  }, []);
+
 
   // Format number as currency
   const formatCurrency = (amount: number): string => {
@@ -444,7 +413,7 @@ const ControlPanel: React.FC = () => {
     );
   }
 
-  const textColor = isDark ? '#e5e7eb' : '#000000';
+  const textColor = 'var(--foreground)';
   
   // Check if we have no data yet
   if (pipelineData.length === 0) {
@@ -563,9 +532,7 @@ const ControlPanel: React.FC = () => {
                       style={{
                         top: `${adjustedYPosition}px`,
                         height: `${adjustedHeight}px`,
-                        backgroundColor: isDark ? 
-                          DARK_COLORS[index % DARK_COLORS.length] : 
-                          COLORS[index % COLORS.length],
+                        backgroundColor: COLORS[index % COLORS.length],
                         zIndex: 1
                       }}
                       onClick={() => navigateToStageDetails(entry.name)}

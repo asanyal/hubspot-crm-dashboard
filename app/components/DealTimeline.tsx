@@ -3394,7 +3394,7 @@ useEffect(() => {
               </div>
             </div>
           ) : stakeholders.length > 0 ? (
-            <div className="mb-4 p-3 bg-blue-50 rounded-md relative z-[99999]">
+            <div className="mb-4 p-3 bg-blue-50 rounded-md">
               <h3 className="font-semibold text-gray-700 mb-3">Stakeholders</h3>
               <div className="flex flex-wrap gap-3">
                 {stakeholders.map((stakeholder, index) => (

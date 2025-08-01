@@ -128,6 +128,17 @@ interface ConcernsItem {
   } | string;
 }
 
+interface Stakeholder {
+  name: string;
+  email: string;
+  title: string;
+  potential_decision_maker: boolean;
+}
+
+interface StakeholdersData {
+  stakeholders: Stakeholder[];
+}
+
 // Helper functions to process concerns array
 const processConcernsArray = (concernsArray: ConcernsItem[] | null): {
   hasPricingConcerns: boolean;
@@ -329,6 +340,11 @@ const DealTimeline: React.FC = () => {
     'Outgoing Email': true,
     'Note': true
   });
+
+  // Add state for stakeholders
+  const [stakeholders, setStakeholders] = useState<Stakeholder[]>([]);
+  const [loadingStakeholders, setLoadingStakeholders] = useState<boolean>(false);
+  const [stakeholdersCache, setStakeholdersCache] = useState<Record<string, { data: Stakeholder[]; timestamp: number }>>({});
 
   // Add this with other state declarations at the top
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -772,6 +788,57 @@ const DealTimeline: React.FC = () => {
       setCompanyOverview(null);
     } finally {
       setLoadingOverview(false);
+    }
+  }, [makeApiCall]);
+
+  // Function to fetch stakeholders
+  const fetchStakeholders = useCallback(async (dealName: string) => {
+    try {
+      setLoadingStakeholders(true);
+      
+      // Check if we have cached data for this deal
+      const cacheKey = `stakeholders_${dealName}`;
+      const cachedData = localStorage.getItem(cacheKey);
+      
+      if (cachedData) {
+        try {
+          const parsed = JSON.parse(cachedData);
+          const now = Date.now();
+          const cacheAge = now - parsed.timestamp;
+          const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
+          
+          // Use cached data if it's less than 30 minutes old
+          if (cacheAge < CACHE_DURATION) {
+            setStakeholders(parsed.data);
+            setLoadingStakeholders(false);
+            return;
+          }
+        } catch (e) {
+          console.error('Error parsing cached stakeholders data:', e);
+        }
+      }
+      
+      // Fetch fresh data from API
+      const apiPath = API_CONFIG.getApiPath('/get-stakeholders');
+      const response = await makeApiCall(`${apiPath}?deal_name=${encodeURIComponent(dealName)}`);
+      
+      if (response) {
+        const data: StakeholdersData = await response.json();
+        const stakeholdersData = data.stakeholders || [];
+        setStakeholders(stakeholdersData);
+        
+        // Cache the data
+        const cacheData = {
+          data: stakeholdersData,
+          timestamp: Date.now()
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+      }
+    } catch (error) {
+      console.error('Error fetching stakeholders:', error);
+      setStakeholders([]);
+    } finally {
+      setLoadingStakeholders(false);
     }
   }, [makeApiCall]);
 
@@ -2760,6 +2827,14 @@ useEffect(() => {
   }
 }, [selectedDeal?.name, fetchCompanyOverview, loading, timelineData]);
 
+// Fetch stakeholders when the selected deal changes
+useEffect(() => {
+  // Only fetch stakeholders after everything else has loaded
+  if (selectedDeal?.name && !loading && timelineData) {
+    fetchStakeholders(selectedDeal.name);
+  }
+}, [selectedDeal?.name, fetchStakeholders, loading, timelineData]);
+
 // Add effect to fetch concerns when timeline data changes
 useEffect(() => {
   // Only fetch concerns after timeline data has loaded (similar to company overview pattern)
@@ -2775,6 +2850,33 @@ useEffect(() => {
     setLoadingConcerns(false);
   }
 }, [selectedDeal?.name]);
+
+// Clear stakeholders when deal changes to prevent stale data
+useEffect(() => {
+  if (selectedDeal?.name) {
+    setStakeholders([]);
+    setLoadingStakeholders(false);
+  }
+}, [selectedDeal?.name]);
+
+// Clear stakeholders cache on page refresh
+useEffect(() => {
+  const handleBeforeUnload = () => {
+    // Clear all stakeholders cache on page refresh
+    const keys = Object.keys(localStorage);
+    keys.forEach(key => {
+      if (key.startsWith('stakeholders_')) {
+        localStorage.removeItem(key);
+      }
+    });
+  };
+
+  window.addEventListener('beforeunload', handleBeforeUnload);
+  
+  return () => {
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+  };
+}, []);
 
 // Fallback mechanism to ensure concerns are fetched after a delay if not loaded
 useEffect(() => {
@@ -3281,6 +3383,47 @@ useEffect(() => {
               </div>
             </div>
           )}
+
+          {/* Stakeholders Section */}
+          {loadingStakeholders ? (
+            <div className="mb-4 p-3 bg-blue-50 rounded-md">
+              <h3 className="font-semibold text-gray-700 mb-3">Stakeholders</h3>
+              <div className="flex items-center text-gray-500">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                Loading stakeholders...
+              </div>
+            </div>
+          ) : stakeholders.length > 0 ? (
+            <div className="mb-4 p-3 bg-blue-50 rounded-md relative z-[99999]">
+              <h3 className="font-semibold text-gray-700 mb-3">Stakeholders</h3>
+              <div className="flex flex-wrap gap-3">
+                {stakeholders.map((stakeholder, index) => (
+                  <div
+                    key={index}
+                    className="relative group"
+                    title={`${stakeholder.name}${stakeholder.title ? ` - ${stakeholder.title}` : ''}\n${stakeholder.email}`}
+                  >
+                    <div
+                      className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:scale-110 ${
+                        stakeholder.potential_decision_maker 
+                          ? 'bg-blue-600 ring-2 ring-green-500' 
+                          : 'bg-gray-500 ring-2 ring-gray-300'
+                      }`}
+                    >
+                      {getInitials(stakeholder.name)}
+                    </div>
+                    {/* Tooltip */}
+                    <div className="absolute bottom-full left-0 transform mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap" style={{ zIndex: 999999 }}>
+                      <div className="font-semibold">{stakeholder.name}</div>
+                      {stakeholder.title && <div className="text-gray-300">{stakeholder.title}</div>}
+                      <div className="text-gray-300">{stakeholder.email}</div>
+                      <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {/* Last Touch Point Section */}
           {dealInfo && (

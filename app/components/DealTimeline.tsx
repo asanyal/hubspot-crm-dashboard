@@ -140,7 +140,7 @@ interface StakeholdersData {
 }
 
 // Helper functions to process concerns array
-const processConcernsArray = (concernsArray: ConcernsItem[] | null): {
+const processConcernsArray = (concernsArray: ConcernsItem[]): {
   hasPricingConcerns: boolean;
   pricingConcernsExplanation: string;
   hasDecisionMaker: boolean;
@@ -320,7 +320,7 @@ const DealTimeline: React.FC = () => {
   const [loadingOverview, setLoadingOverview] = useState<boolean>(false);
   
   // Add new state for concerns
-  const [concerns, setConcerns] = useState<ConcernsItem[] | null>(null);
+  const [concerns, setConcerns] = useState<ConcernsItem[]>([]);
   const [loadingConcerns, setLoadingConcerns] = useState<boolean>(false);
 
   // Add this near the top of the component with other state declarations
@@ -556,7 +556,7 @@ const DealTimeline: React.FC = () => {
     setStartIndex(0);
     setEndIndex(0);
     setCurrentDealId(null);
-    setConcerns(null); // Clear concerns state when changing deals
+    setConcerns([]); // Clear concerns state when changing deals
     // Deliberately NOT resetting selectedStages and selectedStagesInitialized
     // to preserve stage filter selections when changing deals
   }, []);
@@ -2732,11 +2732,15 @@ const fetchConcerns = useCallback(async (dealName: string) => {
     
     if (response) {
       const data = await response.json();
-      setConcerns(data);
+      // Handle empty responses properly - set to empty array if null/undefined
+      setConcerns(data || []);
+    } else {
+      // If no response, set to empty array
+      setConcerns([]);
     }
   } catch (error) {
     console.error('Error fetching concerns:', error);
-    setConcerns(null);
+    setConcerns([]); // Set to empty array instead of null to prevent infinite loops
   } finally {
     setLoadingConcerns(false);
   }
@@ -2795,9 +2799,11 @@ useEffect(() => {
     return;
   }
   
-  // Fetch concerns after timeline data loads
-  fetchConcerns(selectedDeal.name);
-}, [timelineData?.events, selectedDeal?.name, isUnmounting, loadingConcerns, fetchConcerns]);
+  // Only fetch concerns if we don't already have them (prevents infinite loops)
+  if (concerns.length === 0) {
+    fetchConcerns(selectedDeal.name);
+  }
+}, [timelineData?.events, selectedDeal?.name, isUnmounting, loadingConcerns, fetchConcerns, concerns]);
 
 // Update the effect that fetches champions to be more robust
 // Effect to automatically fetch champions after timeline loads
@@ -2908,18 +2914,12 @@ useEffect(() => {
   }
 }, [selectedDeal?.name, fetchStakeholders, loading, timelineData]);
 
-// Add effect to fetch concerns when timeline data changes
-useEffect(() => {
-  // Only fetch concerns after timeline data has loaded (similar to company overview pattern)
-  if (selectedDeal?.name && !loading && timelineData) {
-    fetchConcerns(selectedDeal.name);
-  }
-}, [selectedDeal?.name, fetchConcerns, loading, timelineData]);
+// Removed redundant useEffect to prevent infinite loops
 
 // Clear concerns when deal changes to prevent stale data
 useEffect(() => {
   if (selectedDeal?.name) {
-    setConcerns(null);
+    setConcerns([]); // Set to empty array instead of null to prevent infinite loops
     setLoadingConcerns(false);
   }
 }, [selectedDeal?.name]);
@@ -2951,23 +2951,7 @@ useEffect(() => {
   };
 }, []);
 
-// Fallback mechanism to ensure concerns are fetched after a delay if not loaded
-useEffect(() => {
-  if (selectedDeal?.name && !loading && timelineData && !concerns && !loadingConcerns) {
-    const timeoutId = setTimeout(() => {
-      fetchConcerns(selectedDeal.name);
-    }, 2000); // 2 second delay as fallback
-    
-    return () => clearTimeout(timeoutId);
-  }
-}, [selectedDeal?.name, loading, timelineData, concerns, loadingConcerns, fetchConcerns]);
-
-// Handle concerns loading for page refresh scenarios
-useEffect(() => {
-  if (selectedDeal?.name && !loading && timelineData && !concerns && !loadingConcerns && hasMounted) {
-    fetchConcerns(selectedDeal.name);
-  }
-}, [selectedDeal?.name, loading, timelineData, concerns, loadingConcerns, hasMounted, fetchConcerns]);
+// Removed redundant fallback useEffect hooks to prevent infinite loops
 
   // Get unique owners from all deals
   const uniqueOwners = useMemo(() => {

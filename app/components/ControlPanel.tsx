@@ -6,6 +6,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, LabelL
 import { useRouter } from 'next/navigation';
 import { useAppState } from '../context/AppContext';
 import { API_CONFIG } from '../utils/config';
+import LatestMeetings from './LatestMeetings';
 
 interface StageData {
   stage: string;
@@ -895,6 +896,11 @@ const ControlPanel: React.FC = () => {
             <p>No deals found for the selected stage</p>
           </div>
         )}
+      </div>
+
+      {/* Latest Meetings Section */}
+      <div className="mb-8">
+        <LatestMeetings browserId={browserId} isInitialized={isInitialized} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

@@ -2013,7 +2013,7 @@ const EventDrawer = () => {
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
-                          <h4 className="font-semibold text-blue-900">Intent Analysis</h4>
+                          <h4 className="font-semibold text-blue-900">Meeting Insights</h4>
                         </div>
                         <div className="space-y-6">
                           {(() => {
@@ -3445,9 +3445,8 @@ useEffect(() => {
           {loadingStakeholders ? (
             <div className="mb-4 p-3 bg-blue-50 rounded-md">
               <h3 className="font-semibold text-gray-700 mb-3">Stakeholders by Title</h3>
-              <div className="flex items-center text-gray-500">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                Loading stakeholders...
+              <div className="text-gray-500">
+                Loading...
               </div>
             </div>
           ) : stakeholders.length > 0 ? (

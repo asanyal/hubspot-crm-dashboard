@@ -23,8 +23,46 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [timeframe, setTimeframe] = useState<number>(3);
+  const [timeframe, setTimeframe] = useState<number>(1); // Changed default to 1 (Last 24h)
   const router = useRouter();
+
+  // Function to save meetings data to localStorage
+  const saveMeetingsToStorage = useCallback((days: number, data: Meeting[]) => {
+    try {
+      const key = `latestMeetings_${days}`;
+      const storageData = {
+        data,
+        timestamp: Date.now(),
+        days
+      };
+      localStorage.setItem(key, JSON.stringify(storageData));
+      console.log(`💾 Saved meetings data to localStorage for ${days} days`);
+    } catch (error) {
+      console.error('Error saving meetings data to localStorage:', error);
+    }
+  }, []);
+
+  // Function to load meetings data from localStorage
+  const loadMeetingsFromStorage = useCallback((days: number) => {
+    try {
+      const key = `latestMeetings_${days}`;
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        const storageData = JSON.parse(stored);
+        const isExpired = Date.now() - storageData.timestamp > 300000; // 5 minutes
+        if (!isExpired) {
+          console.log(`📂 Loaded meetings data from localStorage for ${days} days`);
+          return storageData.data;
+        } else {
+          console.log(`⏰ Cached meetings data expired for ${days} days`);
+          localStorage.removeItem(key);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading meetings data from localStorage:', error);
+    }
+    return null;
+  }, []);
 
   // Utility function for making API calls with session management
   const makeApiCall = useCallback(async (url: string, options: RequestInit = {}) => {
@@ -108,12 +146,23 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   }, [browserId, isInitialized]);
 
   // Function to fetch latest meetings
-  const fetchLatestMeetings = useCallback(async (days: number) => {
+  const fetchLatestMeetings = useCallback(async (days: number, forceRefresh = false) => {
     try {
       setLoading(true);
       setError(null);
       
-      console.log('Fetching latest meetings for days:', days);
+      console.log('Fetching latest meetings for days:', days, forceRefresh ? '(forced refresh)' : '');
+      
+      // Check localStorage first (unless force refresh)
+      if (!forceRefresh) {
+        const cachedData = loadMeetingsFromStorage(days);
+        if (cachedData && cachedData.length > 0) {
+          console.log('Using cached data for days:', days);
+          setMeetings(cachedData);
+          setLoading(false);
+          return;
+        }
+      }
       
       const response = await makeApiCall(`${API_CONFIG.getApiPath('/get-latest-meetings')}?days=${days}`);
       
@@ -127,6 +176,9 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
         ) : [];
         
         setMeetings(sortedMeetings);
+        
+        // Save to localStorage
+        saveMeetingsToStorage(days, sortedMeetings);
       }
     } catch (error) {
       console.error('Error fetching latest meetings:', error);
@@ -134,12 +186,12 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
     } finally {
       setLoading(false);
     }
-  }, [makeApiCall]);
+  }, [makeApiCall, loadMeetingsFromStorage, saveMeetingsToStorage]);
 
   // Fetch data when component mounts or timeframe changes
   useEffect(() => {
     if (isInitialized) {
-      fetchLatestMeetings(timeframe);
+      fetchLatestMeetings(timeframe, false);
     }
   }, [isInitialized, timeframe, fetchLatestMeetings]);
 
@@ -209,7 +261,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
 
   // Handle refresh
   const handleRefresh = () => {
-    fetchLatestMeetings(timeframe);
+    fetchLatestMeetings(timeframe, true); // Force refresh from backend
   };
 
   if (loading) {
@@ -345,7 +397,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                         <button 
                           onClick={() => navigateToDealTimeline(meeting.deal_id)}
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-left"
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-left cursor-pointer"
                         >
                           {meeting.deal_id}
                         </button>
@@ -377,7 +429,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                   <div className="flex justify-between items-start">
                     <button 
                       onClick={() => navigateToDealTimeline(meeting.deal_id)}
-                      className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-left font-medium text-sm"
+                      className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-left font-medium text-sm cursor-pointer"
                     >
                       {meeting.deal_id}
                     </button>

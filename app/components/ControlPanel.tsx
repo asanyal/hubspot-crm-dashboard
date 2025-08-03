@@ -660,6 +660,11 @@ const ControlPanel: React.FC = () => {
       {/* Stat Boxes */}
       <StatBoxes />
 
+      {/* Latest Meetings Section */}
+      <div className="mb-8">
+        <LatestMeetings browserId={browserId} isInitialized={isInitialized} />
+      </div>
+
       {/* Deal Risk Analysis Section */}
       <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow transition-colors mb-8">
         <div className="flex justify-between items-center mb-4">
@@ -849,7 +854,7 @@ const ControlPanel: React.FC = () => {
                             const encodedDealName = encodeURIComponent(deal.deal_name);
                             router.push(`/deal-timeline?dealName=${encodedDealName}&autoload=true`);
                           }}
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-left"
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-left cursor-pointer"
                         >
                           {deal.deal_name}
                         </button>
@@ -896,11 +901,6 @@ const ControlPanel: React.FC = () => {
             <p>No deals found for the selected stage</p>
           </div>
         )}
-      </div>
-
-      {/* Latest Meetings Section */}
-      <div className="mb-8">
-        <LatestMeetings browserId={browserId} isInitialized={isInitialized} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

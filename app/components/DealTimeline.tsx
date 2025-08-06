@@ -245,20 +245,7 @@ const DealTimeline: React.FC = () => {
   const [activitiesCount, setActivitiesCount] = useState<number | null>(null);
   const [hasMounted, setHasMounted] = useState<boolean>(false);
   const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
-  const [meetingContacts, setMeetingContacts] = useState<Record<string, ContactsData>>(() => {
-    // Try to load from localStorage on initial render
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('meetingContacts');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error('Error loading meeting contacts from localStorage:', e);
-        }
-      }
-    }
-    return {};
-  });
+  const [meetingContacts, setMeetingContacts] = useState<Record<string, ContactsData>>({});
   const [loadingChampions, setLoadingChampions] = useState<boolean>(false);
 
   // Add state for search term
@@ -372,6 +359,21 @@ const DealTimeline: React.FC = () => {
           setBookmarkedDeals(new Set(bookmarksArray));
         } catch (error) {
           console.error('Error loading bookmarks from localStorage:', error);
+        }
+      }
+    }
+  }, []);
+
+  // Load meeting contacts from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('meetingContacts');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setMeetingContacts(parsed);
+        } catch (error) {
+          console.error('Error loading meeting contacts from localStorage:', error);
         }
       }
     }
@@ -2733,7 +2735,7 @@ const fetchConcerns = useCallback(async (dealName: string) => {
     if (response) {
       const data = await response.json();
       // Handle empty responses properly - set to empty array if null/undefined/empty object
-      if (data && Array.isArray(data)) {
+      if (Array.isArray(data)) {
         setConcerns(data);
       } else {
         setConcerns([]);
@@ -2804,8 +2806,7 @@ useEffect(() => {
   }
   
   // Only fetch concerns if we don't already have them (prevents infinite loops)
-  // Check if concerns is an array and has length, or if it's not an array (empty object)
-  if (!Array.isArray(concerns) || concerns.length === 0) {
+  if (concerns.length === 0) {
     fetchConcerns(selectedDeal.name);
   }
 }, [timelineData?.events, selectedDeal?.name, isUnmounting, loadingConcerns, fetchConcerns, concerns]);
@@ -3586,11 +3587,11 @@ useEffect(() => {
                     return (
                       <>
                         <div className={`p-2 rounded-lg ${
-                          !Array.isArray(concerns) || concerns.length === 0 ? 'bg-gray-100' : 
+                          !concerns || concerns.length === 0 ? 'bg-gray-100' : 
                           processedConcerns.hasPricingConcerns ? 'bg-orange-100' : 'bg-green-100'
                         }`}>
                           <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                            !Array.isArray(concerns) || concerns.length === 0 ? 'text-gray-400' :
+                            !concerns || concerns.length === 0 ? 'text-gray-400' :
                             processedConcerns.hasPricingConcerns ? 'text-orange-600' : 'text-green-600'
                           }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -3600,7 +3601,7 @@ useEffect(() => {
                           <h4 className="text-sm font-medium text-gray-600">Pricing Concerns</h4>
                           {loadingConcerns ? (
                             <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                          ) : !Array.isArray(concerns) || concerns.length === 0 ? (
+                          ) : !concerns || concerns.length === 0 ? (
                             <span className="text-gray-400">N/A</span>
                           ) : (
                             <div className="relative">
@@ -3629,11 +3630,11 @@ useEffect(() => {
                     return (
                       <>
                         <div className={`p-2 rounded-lg ${
-                          !Array.isArray(concerns) || concerns.length === 0 ? 'bg-gray-100' :
+                          !concerns || concerns.length === 0 ? 'bg-gray-100' :
                           processedConcerns.hasDecisionMaker ? 'bg-green-100' : 'bg-orange-100'
                         }`}>
                           <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                            !Array.isArray(concerns) || concerns.length === 0 ? 'text-gray-400' :
+                            !concerns || concerns.length === 0 ? 'text-gray-400' :
                             processedConcerns.hasDecisionMaker ? 'text-green-600' : 'text-orange-600'
                           }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
@@ -3643,7 +3644,7 @@ useEffect(() => {
                           <h4 className="text-sm font-medium text-gray-600">Decision Maker</h4>
                           {loadingConcerns ? (
                             <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                          ) : !Array.isArray(concerns) || concerns.length === 0 ? (
+                          ) : !concerns || concerns.length === 0 ? (
                             <span className="text-gray-400">N/A</span>
                           ) : (
                             <div className="relative">
@@ -3672,11 +3673,11 @@ useEffect(() => {
                     return (
                       <>
                         <div className={`p-2 rounded-lg ${
-                          !Array.isArray(concerns) || concerns.length === 0 ? 'bg-gray-100' :
+                          !concerns || concerns.length === 0 ? 'bg-gray-100' :
                           processedConcerns.hasCompetitor ? 'bg-orange-100' : 'bg-green-100'
                         }`}>
                           <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                            !Array.isArray(concerns) || concerns.length === 0 ? 'text-gray-400' :
+                            !concerns || concerns.length === 0 ? 'text-gray-400' :
                             processedConcerns.hasCompetitor ? 'text-orange-600' : 'text-green-600'
                           }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -3686,7 +3687,7 @@ useEffect(() => {
                           <h4 className="text-sm font-medium text-gray-600">Using a Competitor?</h4>
                           {loadingConcerns ? (
                             <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                          ) : !Array.isArray(concerns) || concerns.length === 0 ? (
+                          ) : !concerns || concerns.length === 0 ? (
                             <span className="text-gray-400">N/A</span>
                           ) : (
                             <div className="relative">

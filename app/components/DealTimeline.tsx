@@ -275,6 +275,7 @@ const DealTimeline: React.FC = () => {
   const timelineDataRef = useRef<TimelineData | null>(null);
   const selectedDealRef = useRef<Deal | null>(null);
   const allDealsRef = useRef<Deal[]>([]);
+  const concernsFetchedRef = useRef<Set<string>>(new Set());
 
   // Timer
   const [elapsedTime, setElapsedTime] = useState<number>(0);
@@ -2687,6 +2688,10 @@ const handleDealChange = useCallback(async (selectedOption: any) => {
   cleanupState();
   setMeetingContacts({}); // Clear meeting contacts when changing deals
   
+  // Clear concerns tracking when changing deals
+  console.log('Clearing concerns tracking for new deal selection');
+  concernsFetchedRef.current.clear();
+  
   updateState('dealTimeline.selectedDeal', deal);
   setSelectedOption(selectedOption);
   
@@ -2726,6 +2731,13 @@ const handleDealChange = useCallback(async (selectedOption: any) => {
 const fetchConcerns = useCallback(async (dealName: string) => {
   if (!dealName) return;
   
+  // Prevent multiple simultaneous calls for the same deal
+  if (loadingConcerns) {
+    console.log('Concerns already loading, skipping request for:', dealName);
+    return;
+  }
+  
+  console.log('Making API call to fetch concerns for:', dealName);
   setLoadingConcerns(true);
   try {
     const response = await makeApiCall(
@@ -2750,7 +2762,7 @@ const fetchConcerns = useCallback(async (dealName: string) => {
   } finally {
     setLoadingConcerns(false);
   }
-}, [makeApiCall]);
+}, [makeApiCall, loadingConcerns]);
 
 // Update handleRefresh to refresh all data including champions
 const handleRefresh = useCallback(() => {
@@ -2760,6 +2772,10 @@ const handleRefresh = useCallback(() => {
     // Reset all state
     cleanupState();
     setMeetingContacts({});
+    
+    // Clear concerns tracking for refresh
+    console.log('Clearing concerns tracking for refresh');
+    concernsFetchedRef.current.clear();
     
     // Clear localStorage meetingContacts
     if (typeof window !== 'undefined') {
@@ -2799,17 +2815,40 @@ const handleRefresh = useCallback(() => {
   }
 }, [handleGetTimeline, cleanupState, updateState, fetchConcerns]);
 
-// Effect to automatically fetch concerns after timeline loads
-useEffect(() => {
-  if (!timelineData?.events || !selectedDeal?.name || isUnmounting || loadingConcerns) {
-    return;
-  }
-  
-  // Only fetch concerns if we don't already have them (prevents infinite loops)
-  if (concerns.length === 0) {
-    fetchConcerns(selectedDeal.name);
-  }
-}, [timelineData?.events, selectedDeal?.name, isUnmounting, loadingConcerns, fetchConcerns, concerns]);
+  // Effect to automatically fetch concerns after timeline loads
+  useEffect(() => {
+    if (!timelineData?.events || !selectedDeal?.name || isUnmounting || loadingConcerns) {
+      console.log('Skipping concerns fetch - conditions not met:', {
+        hasEvents: !!timelineData?.events,
+        dealName: selectedDeal?.name,
+        isUnmounting,
+        loadingConcerns
+      });
+      return;
+    }
+    
+    // Check if we already have concerns data to prevent unnecessary API calls
+    if (concerns.length > 0) {
+      console.log('Concerns data already available, skipping fetch');
+      return;
+    }
+    
+    // Only fetch concerns if we haven't already fetched them for this deal (prevents infinite loops)
+    if (!concernsFetchedRef.current.has(selectedDeal.name)) {
+      console.log('Fetching concerns for deal:', selectedDeal.name);
+      concernsFetchedRef.current.add(selectedDeal.name);
+      fetchConcerns(selectedDeal.name);
+    } else {
+      console.log('Concerns already fetched for deal:', selectedDeal.name);
+    }
+  }, [timelineData?.events, selectedDeal?.name, isUnmounting, loadingConcerns, fetchConcerns]);
+
+  // Clean up concerns ref on unmount
+  useEffect(() => {
+    return () => {
+      concernsFetchedRef.current.clear();
+    };
+  }, []);
 
 // Update the effect that fetches champions to be more robust
 // Effect to automatically fetch champions after timeline loads

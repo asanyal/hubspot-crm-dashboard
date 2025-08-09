@@ -1808,7 +1808,7 @@ const EventDrawer = () => {
                   concernColor = processedConcerns.hasDecisionMaker ? 'text-green-600' : 'text-red-600';
                   break;
                 case 'already_has_vendor':
-                  concernTitle = 'Using a Competitor';
+                  concernTitle = 'Competitor Mentions';
                   concernExplanation = processedConcerns.competitorExplanation;
                   concernStatus = processedConcerns.hasCompetitor ? 'Yes' : 'No';
                   concernColor = processedConcerns.hasCompetitor ? 'text-red-600' : 'text-green-600';

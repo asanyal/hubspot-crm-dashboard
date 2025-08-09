@@ -1292,7 +1292,7 @@ const DealStageSelector: React.FC = () => {
     }),
     columnHelper.accessor('Deal_Name', {
       id: 'using_competitor',
-      header: 'Using Competitor?',
+      header: 'Competitor Mentions',
       cell: info => {
         const dealName = info.getValue();
         const hasNoData = insightsData?.using_competitor_no_data?.includes(dealName) || false;

@@ -2731,12 +2731,6 @@ const handleDealChange = useCallback(async (selectedOption: any) => {
 const fetchConcerns = useCallback(async (dealName: string) => {
   if (!dealName) return;
   
-  // Prevent multiple simultaneous calls for the same deal
-  if (loadingConcerns) {
-    console.log('Concerns already loading, skipping request for:', dealName);
-    return;
-  }
-  
   console.log('Making API call to fetch concerns for:', dealName);
   setLoadingConcerns(true);
   try {
@@ -2762,7 +2756,7 @@ const fetchConcerns = useCallback(async (dealName: string) => {
   } finally {
     setLoadingConcerns(false);
   }
-}, [makeApiCall, loadingConcerns]);
+}, [makeApiCall]);
 
 // Update handleRefresh to refresh all data including champions
 const handleRefresh = useCallback(() => {
@@ -2776,6 +2770,7 @@ const handleRefresh = useCallback(() => {
     // Clear concerns tracking for refresh
     console.log('Clearing concerns tracking for refresh');
     concernsFetchedRef.current.clear();
+    setConcerns([]); // Clear concerns state
     
     // Clear localStorage meetingContacts
     if (typeof window !== 'undefined') {
@@ -2798,13 +2793,8 @@ const handleRefresh = useCallback(() => {
     
     // Force a fresh fetch of all data by passing true as second argument
     handleGetTimeline(selectedDealRef.current, true).then(() => {
-      // After timeline loads, explicitly refresh champions and concerns
+      // After timeline loads, the useEffect will automatically fetch concerns
       setLoadingMessage(`Timeline data loaded for ${selectedDealRef.current?.name}, loading concerns...`);
-      
-      // Explicitly fetch concerns after timeline loads
-      if (selectedDealRef.current?.name) {
-        fetchConcerns(selectedDealRef.current.name);
-      }
     }).catch(error => {
       console.error('[Refresh] Error during refresh sequence:', error);
       setLoadingMessage(`Error refreshing data for ${selectedDealRef.current?.name}: ${error.message}`);
@@ -2813,23 +2803,16 @@ const handleRefresh = useCallback(() => {
     setIsInitialLoad(true);
     setLoadingMessage('Initializing deal data...');
   }
-}, [handleGetTimeline, cleanupState, updateState, fetchConcerns]);
+}, [handleGetTimeline, cleanupState, updateState]);
 
   // Effect to automatically fetch concerns after timeline loads
   useEffect(() => {
-    if (!timelineData?.events || !selectedDeal?.name || isUnmounting || loadingConcerns) {
+    if (!timelineData?.events || !selectedDeal?.name || isUnmounting) {
       console.log('Skipping concerns fetch - conditions not met:', {
         hasEvents: !!timelineData?.events,
         dealName: selectedDeal?.name,
-        isUnmounting,
-        loadingConcerns
+        isUnmounting
       });
-      return;
-    }
-    
-    // Check if we already have concerns data to prevent unnecessary API calls
-    if (concerns.length > 0) {
-      console.log('Concerns data already available, skipping fetch');
       return;
     }
     
@@ -2837,11 +2820,43 @@ const handleRefresh = useCallback(() => {
     if (!concernsFetchedRef.current.has(selectedDeal.name)) {
       console.log('Fetching concerns for deal:', selectedDeal.name);
       concernsFetchedRef.current.add(selectedDeal.name);
-      fetchConcerns(selectedDeal.name);
+      
+      // Inline the fetch concerns call to avoid circular dependencies
+      const fetchConcernsInline = async () => {
+        if (!selectedDeal.name) return;
+        
+        console.log('Making API call to fetch concerns for:', selectedDeal.name);
+        setLoadingConcerns(true);
+        try {
+          const response = await makeApiCall(
+            `${API_CONFIG.getApiPath('/get-concerns')}?dealName=${encodeURIComponent(selectedDeal.name)}`
+          );
+          
+          if (response) {
+            const data = await response.json();
+            // Handle empty responses properly - set to empty array if null/undefined/empty object
+            if (Array.isArray(data)) {
+              setConcerns(data);
+            } else {
+              setConcerns([]);
+            }
+          } else {
+            // If no response, set to empty array
+            setConcerns([]);
+          }
+        } catch (error) {
+          console.error('Error fetching concerns:', error);
+          setConcerns([]); // Set to empty array instead of null to prevent infinite loops
+        } finally {
+          setLoadingConcerns(false);
+        }
+      };
+      
+      fetchConcernsInline();
     } else {
       console.log('Concerns already fetched for deal:', selectedDeal.name);
     }
-  }, [timelineData?.events, selectedDeal?.name, isUnmounting, loadingConcerns, fetchConcerns]);
+  }, [timelineData?.events, selectedDeal?.name, isUnmounting]);
 
   // Clean up concerns ref on unmount
   useEffect(() => {

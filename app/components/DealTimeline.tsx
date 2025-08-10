@@ -1770,7 +1770,7 @@ const EventDrawer = () => {
             <p className="text-sm text-gray-500 mt-1">
               {selectedConcern === 'pricing_concerns' ? 'Pricing Concerns' :
                selectedConcern === 'no_decision_maker' ? 'Decision Maker' :
-               selectedConcern === 'already_has_vendor' ? 'Using a Competitor' : 'Unknown Concern'}
+               selectedConcern === 'already_has_vendor' ? 'Competitor Mentions' : 'Unknown Concern'}
             </p>
           )}
         </div>

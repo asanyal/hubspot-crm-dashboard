@@ -1494,7 +1494,7 @@ const DealStageSelector: React.FC = () => {
                 {[
                   { type: 'pricing_concerns' as const, title: 'Pricing Concerns' },
                   { type: 'no_decision_maker' as const, title: 'No Decision Maker' },
-                  { type: 'using_competitor' as const, title: 'Using Competitor' }
+                  { type: 'using_competitor' as const, title: 'Competitor Mentions' }
                 ].map(insight => (
                   <div key={insight.type}>
                     {renderInsightBar(insight.type, insight.title)}

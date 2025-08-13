@@ -3368,19 +3368,20 @@ useEffect(() => {
               <span className="text-2xl font-bold text-gray-600">{selectedDeal.name}</span>
               <div className="relative inline-block ml-2">
                 <div className="cursor-help group">
-                  <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 text-sm hover:bg-gray-300 transition-colors">
-                    ?
+                  <div className="w-28 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 text-xs hover:bg-gray-300 transition-colors relative px-2">
+                    <span className="font-medium">Latest Activity</span>
+                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
                   </div>
                   <div className="absolute z-10 invisible group-hover:visible hover:visible bg-white p-4 rounded-md shadow-lg border border-gray-200 w-72 sm:w-96 left-0 top-full mt-1">
                     {loadingOverview ? (
                       <div className="flex items-center justify-center py-2">
                         <div className="animate-spin h-4 w-4 border-2 border-sky-500 rounded-full border-t-transparent mr-2"></div>
-                        <p className="text-sm text-gray-500">Loading company overview...</p>
+                        <p className="text-sm text-gray-500">Loading latest activity...</p>
                       </div>
                     ) : companyOverview ? (
                       <p className="text-sm text-gray-700">{companyOverview}</p>
                     ) : (
-                      <p className="text-sm text-gray-500">No company information available</p>
+                      <p className="text-sm text-gray-500">No latest activity available</p>
                     )}
                   </div>
                 </div>

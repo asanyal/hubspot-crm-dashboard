@@ -1,12 +1,16 @@
 // app/components/Header.tsx
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 
 const Header: React.FC = () => {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Active link style
   const isActive = (path: string) => {
@@ -14,6 +18,24 @@ const Header: React.FC = () => {
       'bg-sky-50 text-sky-600 dark:bg-slate-700 dark:text-sky-300' : 
       'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700';
   };
+
+  const handleSignOut = async () => {
+    await signOut({ callbackUrl: '/auth/signin' });
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   return (
     <header className="bg-card border-b border-border shadow-sm transition-colors duration-200">
@@ -45,6 +67,59 @@ const Header: React.FC = () => {
               </Link>
             </nav>
           </div>
+          
+          {/* User Avatar and Dropdown */}
+          {session?.user && (
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors duration-200"
+              >
+                <img
+                  src={session.user.image || '/default-avatar.png'}
+                  alt={session.user.name || 'User'}
+                  className="w-8 h-8 rounded-full border-2 border-sky-200 dark:border-sky-600"
+                />
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300 hidden sm:block">
+                  {session.user.name}
+                </span>
+                <svg 
+                  className={`w-4 h-4 text-slate-500 dark:text-slate-400 transition-transform duration-200 ${
+                    isDropdownOpen ? 'rotate-180' : ''
+                  }`} 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {/* Dropdown Menu */}
+              {isDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-md shadow-lg border border-gray-200 dark:border-slate-700 py-1 z-50">
+                  <div className="px-4 py-2 border-b border-gray-200 dark:border-slate-700">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      {session.user.name}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                      {session.user.email}
+                    </p>
+                  </div>
+                  
+                  <button
+                    onClick={handleSignOut}
+                    className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors duration-200 flex items-center space-x-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    <span>Sign out</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           
         </div>
       </div>

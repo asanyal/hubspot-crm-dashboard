@@ -12,6 +12,7 @@
     "@tanstack/react-table": "^8.21.2",
     "chart.js": "^4.4.9",
     "next": "^15.3.2",
+    "next-auth": "^4.24.10",
     "react": "^19.0.0",
     "react-chartjs-2": "^5.3.0",
     "react-dom": "^19.0.0",

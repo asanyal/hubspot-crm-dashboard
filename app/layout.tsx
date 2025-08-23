@@ -2,7 +2,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppProvider } from './context/AppContext';
-import Header from './components/Header';
+import { Providers } from './providers';
+import ConditionalHeader from './components/ConditionalHeader';
 import DynamicTitle from './components/DynamicTitle';
 import "./globals.css";
 
@@ -31,13 +32,15 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="antialiased bg-background text-foreground">
-        <AppProvider>
-          <DynamicTitle />
-          <Header />
-          <main>
-            {children}
-          </main>
-        </AppProvider>
+        <Providers>
+          <AppProvider>
+            <DynamicTitle />
+            <ConditionalHeader />
+            <main>
+              {children}
+            </main>
+          </AppProvider>
+        </Providers>
       </body>
     </html>
   );

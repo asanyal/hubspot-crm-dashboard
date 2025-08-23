@@ -529,6 +529,7 @@ const DealTimeline: React.FC = () => {
       .split(' ')
       .map(word => word[0])
       .join('')
+      .replace(/[0-9]/g, '') // Remove any numbers
       .toUpperCase();
   };
 

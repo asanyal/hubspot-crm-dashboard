@@ -764,8 +764,10 @@ const ControlPanel: React.FC = () => {
                   const getRiskLevelColor = (level: string) => {
                     switch (level.toLowerCase()) {
                       case 'low': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-                      case 'medium': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-                      case 'high': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+                      case 'mild': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+                      case 'warn': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+                      case 'medium': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'; // fallback for old values
+                      case 'high': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'; // fallback for old values
                       case 'error': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
                       case 'loading...': return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
                       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
@@ -779,7 +781,17 @@ const ControlPanel: React.FC = () => {
                     if (deal.hasError) {
                       return 'Error';
                     }
-                    return `${factor.risk_score}/${factor.max_score}`;
+                    
+                    // Convert numeric score to risk level
+                    const percentage = (factor.risk_score / factor.max_score) * 100;
+                    
+                    if (percentage === 0) {
+                      return 'Low';
+                    } else if (percentage <= 75) {
+                      return 'Mild';
+                    } else {
+                      return 'Warn';
+                    }
                   };
 
                   const getRiskScoreColor = (factor: any) => {
@@ -790,13 +802,11 @@ const ControlPanel: React.FC = () => {
                     const percentage = (factor.risk_score / factor.max_score) * 100;
                     
                     if (percentage === 0) {
-                      return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+                      return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'; // Low
                     } else if (percentage <= 75) {
-                      return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-                    } else if (percentage < 100) {
-                      return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+                      return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'; // Mild
                     } else {
-                      return 'bg-red-800 text-red-100 dark:bg-red-950 dark:text-red-100';
+                      return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'; // Warn
                     }
                   };
 

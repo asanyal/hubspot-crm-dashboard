@@ -3455,9 +3455,23 @@ useEffect(() => {
               <span className="text-2xl font-bold text-gray-600">{selectedDeal.name}</span>
               <div className="relative inline-block ml-2">
                 <div className="cursor-help group">
-                  <div className="w-28 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 text-xs hover:bg-gray-300 transition-colors relative px-2">
-                    <span className="font-medium">Latest Activity</span>
-                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                  <div className={`w-28 h-6 rounded-full flex items-center justify-center text-xs transition-all duration-300 relative px-2 ${
+                    loadingOverview 
+                      ? 'bg-blue-100 text-blue-700 animate-pulse hover:bg-blue-200' 
+                      : companyOverview 
+                        ? 'bg-green-100 text-green-800 font-semibold hover:bg-green-200' 
+                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                  }`}>
+                    <span className={loadingOverview ? 'font-medium animate-pulse' : 'font-medium'}>
+                      Latest Activity
+                    </span>
+                    <div className={`absolute -top-1 -right-1 w-2 h-2 rounded-full transition-all duration-300 ${
+                      loadingOverview 
+                        ? 'bg-blue-500 animate-ping' 
+                        : companyOverview 
+                          ? 'bg-green-500 animate-pulse' 
+                          : 'bg-red-500 animate-pulse'
+                    }`}></div>
                   </div>
                   <div className="absolute z-10 invisible group-hover:visible hover:visible bg-white rounded-md shadow-lg border border-gray-200 w-72 sm:w-96 left-0 top-full mt-1">
                     <div className="relative">
@@ -3626,31 +3640,71 @@ useEffect(() => {
           ) : stakeholders.length > 0 ? (
             <div className="mb-4 p-3 bg-blue-50 rounded-md">
               <h3 className="font-semibold text-gray-700 mb-3">Stakeholders by Title</h3>
-              <div className="flex flex-wrap gap-3">
-                {stakeholders.map((stakeholder, index) => (
-                  <div
-                    key={index}
-                    className="relative group"
-                    title={`${stakeholder.name}${stakeholder.title ? ` - ${stakeholder.title}` : ''}\n${stakeholder.email}`}
-                  >
-                    <div
-                      className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:scale-110 ${
-                        stakeholder.potential_decision_maker 
-                          ? 'bg-blue-600 ring-2 ring-green-500' 
-                          : 'bg-gray-500 ring-2 ring-gray-300'
-                      }`}
-                    >
-                      {getInitials(stakeholder.name)}
-                    </div>
-                    {/* Tooltip */}
-                    <div className="absolute bottom-full left-0 transform mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap" style={{ zIndex: 999999 }}>
-                      <div className="font-semibold">{stakeholder.name}</div>
-                      {stakeholder.title && <div className="text-gray-300">{stakeholder.title}</div>}
-                      <div className="text-gray-300">{stakeholder.email}</div>
-                      <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
-                    </div>
+              <div className="grid grid-cols-2 gap-6">
+                {/* Decision Makers */}
+                <div>
+                  <h4 className="font-medium text-gray-600 mb-2 text-sm">
+                    Decision Makers ({stakeholders.filter(s => s.potential_decision_maker).length})
+                  </h4>
+                  <div className="flex flex-wrap gap-3">
+                    {stakeholders
+                      .filter(stakeholder => stakeholder.potential_decision_maker)
+                      .map((stakeholder, index) => (
+                        <div
+                          key={`dm-${index}`}
+                          className="relative group"
+                          title={`${stakeholder.name}${stakeholder.title ? ` - ${stakeholder.title}` : ''}\n${stakeholder.email}`}
+                        >
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:scale-110 bg-blue-600 ring-2 ring-green-500">
+                            {getInitials(stakeholder.name)}
+                          </div>
+                          {/* Tooltip */}
+                          <div className="absolute bottom-full left-0 transform mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap" style={{ zIndex: 999999 }}>
+                            <div className="font-semibold">{stakeholder.name}</div>
+                            {stakeholder.title && <div className="text-gray-300">{stakeholder.title}</div>}
+                            <div className="text-gray-300">{stakeholder.email}</div>
+                            <div className="text-xs text-green-300 mt-1">Decision Maker</div>
+                            <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+                          </div>
+                        </div>
+                      ))}
+                    {stakeholders.filter(s => s.potential_decision_maker).length === 0 && (
+                      <span className="text-gray-500 text-sm italic">No decision makers identified</span>
+                    )}
                   </div>
-                ))}
+                </div>
+
+                {/* Others */}
+                <div>
+                  <h4 className="font-medium text-gray-600 mb-2 text-sm">
+                    Others ({stakeholders.filter(s => !s.potential_decision_maker).length})
+                  </h4>
+                  <div className="flex flex-wrap gap-3">
+                    {stakeholders
+                      .filter(stakeholder => !stakeholder.potential_decision_maker)
+                      .map((stakeholder, index) => (
+                        <div
+                          key={`other-${index}`}
+                          className="relative group"
+                          title={`${stakeholder.name}${stakeholder.title ? ` - ${stakeholder.title}` : ''}\n${stakeholder.email}`}
+                        >
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:scale-110 bg-gray-500 ring-2 ring-gray-300">
+                            {getInitials(stakeholder.name)}
+                          </div>
+                          {/* Tooltip */}
+                          <div className="absolute bottom-full left-0 transform mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap" style={{ zIndex: 999999 }}>
+                            <div className="font-semibold">{stakeholder.name}</div>
+                            {stakeholder.title && <div className="text-gray-300">{stakeholder.title}</div>}
+                            <div className="text-gray-300">{stakeholder.email}</div>
+                            <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+                          </div>
+                        </div>
+                      ))}
+                    {stakeholders.filter(s => !s.potential_decision_maker).length === 0 && (
+                      <span className="text-gray-500 text-sm italic">No other stakeholders</span>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           ) : null}

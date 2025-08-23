@@ -1,6 +1,6 @@
 export const API_CONFIG = {
   getApiPath: (endpoint: string) => {
-    const rootUrl = process.env.NEXT_PUBLIC_API_ROOT_URL;
+    const rootUrl = process.env.NEXT_PUBLIC_API_URL;
     
     
     const cleanEndpoint = endpoint

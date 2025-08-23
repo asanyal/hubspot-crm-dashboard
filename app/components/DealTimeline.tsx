@@ -1582,12 +1582,56 @@ const EventDrawer = () => {
   const [loadingContents, setLoadingContents] = useState<Record<string, boolean>>({});
   const [expandedSections, setExpandedSections] = useState<Record<number, boolean>>({});
   const [copyFeedback, setCopyFeedback] = useState<boolean>(false);
+  const [meetingInsightsCopyFeedback, setMeetingInsightsCopyFeedback] = useState<Record<string, boolean>>({});
 
   const toggleSection = (index: number) => {
     setExpandedSections(prev => ({
       ...prev,
       [index]: !prev[index]
     }));
+  };
+
+  const copyMeetingInsightsToClipboard = async (eventId: string, explanation: any) => {
+    try {
+      let textToCopy = '';
+      
+      const isStructuredObject =
+        typeof explanation === 'object' &&
+        explanation !== null &&
+        !Array.isArray(explanation);
+
+      const sections = isStructuredObject
+        ? explanation
+        : {
+            Explanation: [
+              typeof explanation === 'string' ? explanation : 'N/A',
+            ],
+          };
+
+      // Build the text to copy
+      Object.entries(sections).forEach(([title, rawBulletPoints]) => {
+        const bulletPoints = Array.isArray(rawBulletPoints)
+          ? rawBulletPoints
+          : typeof rawBulletPoints === 'object' && rawBulletPoints !== null
+            ? Object.values(rawBulletPoints)
+            : [String(rawBulletPoints)];
+
+        textToCopy += `${title}:\n`;
+        bulletPoints.forEach((point) => {
+          textToCopy += `• ${String(point)}\n`;
+        });
+        textToCopy += '\n';
+      });
+
+      await navigator.clipboard.writeText(textToCopy.trim());
+      
+      setMeetingInsightsCopyFeedback(prev => ({ ...prev, [eventId]: true }));
+      setTimeout(() => {
+        setMeetingInsightsCopyFeedback(prev => ({ ...prev, [eventId]: false }));
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy meeting insights: ', err);
+    }
   };
 
   if ((!selectedDate && !selectedConcern) || !timelineData) return null;
@@ -2012,11 +2056,32 @@ const EventDrawer = () => {
                     {/* Buyer Intent Explanation for meetings */}
                     {event.type === 'Meeting' && event.buyer_intent_explanation && event.buyer_intent_explanation !== 'N/A' && (
                       <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                        <div className="flex items-center gap-2 mb-3">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <h4 className="font-semibold text-blue-900">Meeting Insights</h4>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <h4 className="font-semibold text-blue-900">Meeting Insights</h4>
+                          </div>
+                          <button
+                            onClick={() => copyMeetingInsightsToClipboard(event.id || '', event.buyer_intent_explanation)}
+                            className={`p-2 rounded-lg transition-colors ${
+                              meetingInsightsCopyFeedback[event.id || ''] 
+                                ? 'text-green-600 bg-green-100' 
+                                : 'text-blue-500 hover:text-blue-700 hover:bg-blue-100'
+                            }`}
+                            title={meetingInsightsCopyFeedback[event.id || ''] ? "Copied!" : "Copy meeting insights to clipboard"}
+                          >
+                            {meetingInsightsCopyFeedback[event.id || ''] ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                            )}
+                          </button>
                         </div>
                         <div className="space-y-6">
                           {(() => {

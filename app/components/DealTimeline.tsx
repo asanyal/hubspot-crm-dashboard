@@ -310,6 +310,9 @@ const DealTimeline: React.FC = () => {
   // Add new state for concerns
   const [concerns, setConcerns] = useState<ConcernsItem[]>([]);
   const [loadingConcerns, setLoadingConcerns] = useState<boolean>(false);
+  
+  // Add state for Latest Activity tooltip copy functionality
+  const [latestActivityCopyFeedback, setLatestActivityCopyFeedback] = useState<boolean>(false);
 
   // Add this near the top of the component with other state declarations
   const [bookmarkedDeals, setBookmarkedDeals] = useState<Set<string>>(new Set());
@@ -336,6 +339,21 @@ const DealTimeline: React.FC = () => {
 
   // Add this with other state declarations at the top
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+
+  // Copy function for Latest Activity tooltip
+  const copyLatestActivityToClipboard = async () => {
+    try {
+      const textToCopy = companyOverview || 'No latest activity available';
+      await navigator.clipboard.writeText(textToCopy);
+      
+      setLatestActivityCopyFeedback(true);
+      setTimeout(() => {
+        setLatestActivityCopyFeedback(false);
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy latest activity: ', err);
+    }
+  };
 
   // Initialize browser ID on component mount
   useEffect(() => {
@@ -1584,6 +1602,7 @@ const EventDrawer = () => {
   const [copyFeedback, setCopyFeedback] = useState<boolean>(false);
   const [meetingInsightsCopyFeedback, setMeetingInsightsCopyFeedback] = useState<Record<string, boolean>>({});
 
+
   const toggleSection = (index: number) => {
     setExpandedSections(prev => ({
       ...prev,
@@ -1633,6 +1652,8 @@ const EventDrawer = () => {
       console.error('Failed to copy meeting insights: ', err);
     }
   };
+
+
 
   if ((!selectedDate && !selectedConcern) || !timelineData) return null;
   
@@ -3437,17 +3458,43 @@ useEffect(() => {
                     <span className="font-medium">Latest Activity</span>
                     <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
                   </div>
-                  <div className="absolute z-10 invisible group-hover:visible hover:visible bg-white p-4 rounded-md shadow-lg border border-gray-200 w-72 sm:w-96 left-0 top-full mt-1">
-                    {loadingOverview ? (
-                      <div className="flex items-center justify-center py-2">
-                        <div className="animate-spin h-4 w-4 border-2 border-sky-500 rounded-full border-t-transparent mr-2"></div>
-                        <p className="text-sm text-gray-500">Loading latest activity...</p>
+                  <div className="absolute z-10 invisible group-hover:visible hover:visible bg-white rounded-md shadow-lg border border-gray-200 w-72 sm:w-96 left-0 top-full mt-1">
+                    <div className="relative">
+                      {/* Copy button in top right corner */}
+                      <button
+                        onClick={copyLatestActivityToClipboard}
+                        className={`absolute top-2 right-2 p-1.5 rounded-lg transition-colors z-20 ${
+                          latestActivityCopyFeedback 
+                            ? 'text-green-600 bg-green-100' 
+                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                        }`}
+                        title={latestActivityCopyFeedback ? "Copied!" : "Copy latest activity to clipboard"}
+                      >
+                        {latestActivityCopyFeedback ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                        )}
+                      </button>
+                      
+                      {/* Tooltip content */}
+                      <div className="p-4 pr-10">
+                        {loadingOverview ? (
+                          <div className="flex items-center justify-center py-2">
+                            <div className="animate-spin h-4 w-4 border-2 border-sky-500 rounded-full border-t-transparent mr-2"></div>
+                            <p className="text-sm text-gray-500">Loading latest activity...</p>
+                          </div>
+                        ) : companyOverview ? (
+                          <p className="text-sm text-gray-700">{companyOverview}</p>
+                        ) : (
+                          <p className="text-sm text-gray-500">No latest activity available</p>
+                        )}
                       </div>
-                    ) : companyOverview ? (
-                      <p className="text-sm text-gray-700">{companyOverview}</p>
-                    ) : (
-                      <p className="text-sm text-gray-500">No latest activity available</p>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>

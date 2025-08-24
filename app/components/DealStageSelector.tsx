@@ -34,14 +34,7 @@ interface Deal {
   Closed_Lost: boolean;
 }
 
-interface DealInsights {
-  pricing_concerns: string[];
-  pricing_concerns_no_data: string[];
-  no_decision_maker: string[];
-  no_decision_maker_no_data: string[];
-  using_competitor: string[];
-  using_competitor_no_data: string[];
-}
+
 
 interface DealSignals {
   very_likely_to_buy: number;
@@ -51,6 +44,15 @@ interface DealSignals {
 
 interface DealSignalsData {
   [dealName: string]: DealSignals;
+}
+
+interface DealInsights {
+  pricing_concerns: string[];
+  pricing_concerns_no_data: string[];
+  no_decision_maker: string[];
+  no_decision_maker_no_data: string[];
+  using_competitor: string[];
+  using_competitor_no_data: string[];
 }
 
 interface ActivityCount {
@@ -118,13 +120,13 @@ const DealStageSelector: React.FC = () => {
   ]);
   const [hasMounted, setHasMounted] = useState(false);
   const [failedStages, setFailedStages] = useState<Set<string>>(new Set());
-  const [insightsLoading, setInsightsLoading] = useState(false);
-  const [insightsData, setInsightsData] = useState<DealInsights | null>(null);
-  const [activeFilter, setActiveFilter] = useState<{type: keyof DealInsights, value: boolean} | null>(null);
+
   const [activityCounts, setActivityCounts] = useState<Record<string, number | 'N/A'>>({});
   const [activityCountsLoading, setActivityCountsLoading] = useState(false);
   const [signalsData, setSignalsData] = useState<DealSignalsData | null>(null);
   const [signalsLoading, setSignalsLoading] = useState(false);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsData, setInsightsData] = useState<DealInsights | null>(null);
   const [pinnedColumns, setPinnedColumns] = useState<Set<string>>(new Set(['deal_name']));
   const router = useRouter();
   
@@ -639,6 +641,8 @@ const DealStageSelector: React.FC = () => {
   }, [selectedStage, dealsByStage, searchTerm]);
   
 
+
+
   // Function to get storage key for insights
   const getInsightsStorageKey = useCallback((stageName: string) => {
     return `insights_${stageName}`;
@@ -653,6 +657,10 @@ const DealStageSelector: React.FC = () => {
   const getSignalsStorageKey = useCallback((stageName: string) => {
     return `signals_${stageName}`;
   }, []);
+
+
+
+
 
   // Function to load insights from storage
   const loadInsightsFromStorage = useCallback((stageName: string) => {
@@ -671,12 +679,6 @@ const DealStageSelector: React.FC = () => {
     return false;
   }, [getInsightsStorageKey]);
 
-  // Function to save insights to storage
-  const saveInsightsToStorage = useCallback((stageName: string, data: DealInsights) => {
-    const storageKey = getInsightsStorageKey(stageName);
-    localStorage.setItem(storageKey, JSON.stringify(data));
-  }, [getInsightsStorageKey]);
-
   // Function to load activity counts from storage
   const loadActivityCountsFromStorage = useCallback((stageName: string) => {
     const storageKey = getActivityCountsStorageKey(stageName);
@@ -693,6 +695,12 @@ const DealStageSelector: React.FC = () => {
     }
     return false;
   }, [getActivityCountsStorageKey]);
+
+  // Function to save insights to storage
+  const saveInsightsToStorage = useCallback((stageName: string, data: DealInsights) => {
+    const storageKey = getInsightsStorageKey(stageName);
+    localStorage.setItem(storageKey, JSON.stringify(data));
+  }, [getInsightsStorageKey]);
 
   // Function to save activity counts to storage
   const saveActivityCountsToStorage = useCallback((stageName: string, data: Record<string, number | 'N/A'>) => {
@@ -722,6 +730,8 @@ const DealStageSelector: React.FC = () => {
     const storageKey = getSignalsStorageKey(stageName);
     localStorage.setItem(storageKey, JSON.stringify(data));
   }, [getSignalsStorageKey]);
+
+
 
   // Fetch insights data
   const fetchInsights = useCallback(async (dealNames: string[]) => {
@@ -861,6 +871,8 @@ const DealStageSelector: React.FC = () => {
     });
   }, []);
 
+
+
   // Effect to fetch insights after deals load
   useEffect(() => {
     if (!selectedStage || !dealsByStage[selectedStage]) return;
@@ -918,121 +930,11 @@ const DealStageSelector: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [selectedStage, dealsByStage, fetchSignals, loadSignalsFromStorage]);
 
-  // Function to handle bar click
-  const handleBarClick = (type: keyof DealInsights, value: boolean) => {
-    if (!insightsData) return;
-    
-    const deals = insightsData[type];
-    setActiveFilter({ type, value });
-  };
 
-  // Function to clear filter
-  const clearFilter = () => {
-    setActiveFilter(null);
-  };
 
-  // Get filtered deals based on active filter
-  const getFilteredDeals = useCallback((): Deal[] => {
-    if (!activeFilter || !insightsData) return getCurrentDeals();
 
-    const deals = getCurrentDeals();
-    const filteredDeals = activeFilter.value
-      ? deals.filter(deal => insightsData[activeFilter.type].includes(deal.Deal_Name))
-      : deals.filter(deal => !insightsData[activeFilter.type].includes(deal.Deal_Name));
 
-    return filteredDeals;
-  }, [activeFilter, insightsData, getCurrentDeals]);
 
-  // Function to render insight bar
-  const renderInsightBar = (type: keyof DealInsights, title: string) => {
-    if (!insightsData || !insightsData[type]) return null;
-
-    const deals = insightsData[type] || [];
-    const noDataDeals = insightsData[`${type}_no_data` as keyof DealInsights] || [];
-    const stageDeals = selectedStage ? dealsByStage[selectedStage] || [] : [];
-    
-    // Filter out deals that have no data
-    const validDeals = stageDeals.filter(deal => !noDataDeals.includes(deal.Deal_Name));
-    const totalDeals = validDeals.length;
-    
-    if (totalDeals === 0) return null; // Don't show bar if no valid deals
-
-    const trueCount = deals.length;
-    const falseCount = totalDeals - trueCount;
-    const truePercentage = (trueCount / totalDeals) * 100;
-    const falsePercentage = (falseCount / totalDeals) * 100;
-
-    const falseDeals = validDeals
-      .map((deal: Deal) => deal.Deal_Name)
-      .filter((name: string) => !deals.includes(name));
-
-    return (
-      <div key={type} className="bg-white p-4 rounded-lg shadow">
-        <h3 className="text-sm font-medium text-gray-700 mb-3">{title}</h3>
-        <div className="space-y-4">
-          {/* True Bar */}
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-600">True</span>
-              <span className="font-medium">{trueCount}</span>
-            </div>
-            <div className="relative group">
-              <div 
-                className="h-6 bg-red-500 rounded cursor-pointer hover:opacity-80 transition-all"
-                style={{ width: `${truePercentage}%` }}
-                onClick={() => handleBarClick(type, true)}
-              ></div>
-              {/* Tooltip */}
-              <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block">
-                <div className="bg-gray-900 text-white text-xs rounded py-1 px-2 max-w-xs">
-                  <div className="font-medium mb-1">Deals:</div>
-                  <div className="max-h-32 overflow-y-auto">
-                    {deals.map((deal: string) => (
-                      <div key={deal} className="whitespace-nowrap">{deal}</div>
-                    ))}
-                  </div>
-                </div>
-                {/* Tooltip arrow */}
-                <div className="absolute left-4 bottom-0 transform translate-y-full">
-                  <div className="border-4 border-transparent border-t-gray-900"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* False Bar */}
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-600">False</span>
-              <span className="font-medium">{falseCount}</span>
-            </div>
-            <div className="relative group">
-              <div 
-                className="h-6 bg-green-700 rounded cursor-pointer hover:opacity-80 transition-all"
-                style={{ width: `${falsePercentage}%` }}
-                onClick={() => handleBarClick(type, false)}
-              ></div>
-              {/* Tooltip */}
-              <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block">
-                <div className="bg-gray-900 text-white text-xs rounded py-1 px-2 max-w-xs">
-                  <div className="font-medium mb-1">Deals:</div>
-                  <div className="max-h-32 overflow-y-auto">
-                    {falseDeals.map((deal: string) => (
-                      <div key={deal} className="whitespace-nowrap">{deal}</div>
-                    ))}
-                  </div>
-                </div>
-                {/* Tooltip arrow */}
-                <div className="absolute left-4 bottom-0 transform translate-y-full">
-                  <div className="border-4 border-transparent border-t-gray-900"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   // Update the handleRefresh function
   const handleRefresh = useCallback(() => {
@@ -1061,7 +963,7 @@ const DealStageSelector: React.FC = () => {
     updateState('dealsByStage.availableStages', []);
     updateState('dealsByStage.lastFetched', null);
 
-    // Clear insights data and storage
+    // Clear insights, activity counts and signals data and storage
     setInsightsData(null);
     setActivityCounts({});
     setSignalsData(null);
@@ -1468,41 +1370,7 @@ const DealStageSelector: React.FC = () => {
             </div>
           )}
 
-          {/* Insights Section */}
-          <div className="mb-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold">Deal Insights</h2>
-              {activeFilter && (
-                <button
-                  onClick={clearFilter}
-                  className="text-sm text-sky-600 hover:text-sky-800 flex items-center"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                  Clear Filter
-                </button>
-              )}
-            </div>
-            
-            {insightsLoading ? (
-              <div className="flex justify-center items-center h-32 text-gray-600">
-                Getting Insights for stage <span className="font-bold ml-1">{selectedStage}</span>...
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-4">
-                {[
-                  { type: 'pricing_concerns' as const, title: 'Pricing Concerns' },
-                  { type: 'no_decision_maker' as const, title: 'No Decision Maker' },
-                  { type: 'using_competitor' as const, title: 'Competitor Mentions' }
-                ].map(insight => (
-                  <div key={insight.type}>
-                    {renderInsightBar(insight.type, insight.title)}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+
 
           {!loading && selectedStage && dealsByStage[selectedStage] && (
             <div className="mb-4">
@@ -1549,7 +1417,7 @@ const DealStageSelector: React.FC = () => {
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
               <p className="mt-3">Loading deals for {selectedStage}...</p>
             </div>
-          ) : getFilteredDeals().length > 0 ? (
+          ) : filteredDeals.length > 0 ? (
             <div className="overflow-x-auto border border-gray-200 rounded-lg">
               <table className="min-w-full bg-white" style={{ minWidth: '1200px' }}>
                 <thead className="bg-gray-100">

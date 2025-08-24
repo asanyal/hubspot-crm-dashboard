@@ -1,7 +1,13 @@
 import NextAuth, { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 
+// Debug: Log environment variables (remove in production)
+console.log('NEXTAUTH_SECRET exists:', !!process.env.NEXTAUTH_SECRET)
+console.log('GOOGLE_CLIENT_ID exists:', !!process.env.GOOGLE_CLIENT_ID)
+console.log('NEXTAUTH_URL:', process.env.NEXTAUTH_URL)
+
 const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,

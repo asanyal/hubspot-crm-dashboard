@@ -14,8 +14,15 @@ const authOptions: NextAuthOptions = {
       if (user.email && user.email.endsWith('@galileo.ai')) {
         return true
       }
-      // Return false to display a default error message
-      return false
+      // Redirect to error page with specific message
+      return '/auth/error?error=AccessDenied'
+    },
+    async redirect({ url, baseUrl }) {
+      // Allows relative callback URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`
+      // Allows callback URLs on the same origin
+      else if (new URL(url).origin === baseUrl) return url
+      return baseUrl
     },
     async session({ session, token }) {
       return session
@@ -31,6 +38,7 @@ const authOptions: NextAuthOptions = {
   session: {
     strategy: 'jwt',
   },
+  debug: process.env.NODE_ENV === 'development',
 }
 
 const handler = NextAuth(authOptions)

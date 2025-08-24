@@ -259,6 +259,8 @@ const DealTimeline: React.FC = () => {
   const [currentSection, setCurrentSection] = useState<number>(0);
 
   const drawerRef = useRef<HTMLDivElement>(null);
+  const latestActivityTooltipRef = useRef<HTMLDivElement>(null);
+  const stakeholderTooltipsRef = useRef<HTMLDivElement>(null);
   
   const chartRef = useRef<any>(null);
 
@@ -313,6 +315,12 @@ const DealTimeline: React.FC = () => {
   
   // Add state for Latest Activity tooltip copy functionality
   const [latestActivityCopyFeedback, setLatestActivityCopyFeedback] = useState<boolean>(false);
+  
+  // Add state for Latest Activity tooltip visibility (for mobile)
+  const [isLatestActivityTooltipVisible, setIsLatestActivityTooltipVisible] = useState<boolean>(false);
+  
+  // Add state for stakeholder tooltips visibility (for mobile)
+  const [visibleStakeholderTooltips, setVisibleStakeholderTooltips] = useState<Set<string>>(new Set());
 
   // Add this near the top of the component with other state declarations
   const [bookmarkedDeals, setBookmarkedDeals] = useState<Set<string>>(new Set());
@@ -356,6 +364,25 @@ const DealTimeline: React.FC = () => {
     } catch (err) {
       console.error('Failed to copy latest activity: ', err);
     }
+  };
+
+  // Toggle Latest Activity tooltip visibility
+  const toggleLatestActivityTooltip = () => {
+    setIsLatestActivityTooltipVisible(!isLatestActivityTooltipVisible);
+  };
+
+  // Toggle stakeholder tooltip visibility
+  const toggleStakeholderTooltip = (stakeholderId: string) => {
+    setVisibleStakeholderTooltips(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(stakeholderId)) {
+        newSet.delete(stakeholderId);
+      } else {
+        newSet.clear(); // Only show one tooltip at a time
+        newSet.add(stakeholderId);
+      }
+      return newSet;
+    });
   };
 
   // Initialize browser ID on component mount
@@ -714,6 +741,40 @@ const DealTimeline: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isDrawerOpen]);
+
+  // Click outside Latest Activity tooltip to close
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (latestActivityTooltipRef.current && 
+          !latestActivityTooltipRef.current.contains(event.target as Node)) {
+        setIsLatestActivityTooltipVisible(false);
+      }
+    };
+
+    if (isLatestActivityTooltipVisible) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isLatestActivityTooltipVisible]);
+
+  // Click outside stakeholder tooltips to close
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (stakeholderTooltipsRef.current && 
+          !stakeholderTooltipsRef.current.contains(event.target as Node)) {
+        setVisibleStakeholderTooltips(new Set());
+      }
+    };
+
+    if (visibleStakeholderTooltips.size > 0) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [visibleStakeholderTooltips]);
 
   // =====================================================================
   // DEFINE ALL CALLBACK FUNCTIONS FIRST BEFORE USING THEM IN EFFECTS
@@ -3493,17 +3554,26 @@ useEffect(() => {
           {selectedDeal && (
             <div className="flex items-center">
               <span className="text-2xl font-bold text-gray-600">{selectedDeal.name}</span>
-              <div className="relative inline-block ml-2">
+              <div className="relative inline-block ml-2" ref={latestActivityTooltipRef}>
                 <div className="cursor-help group">
-                  <div className={`w-28 h-6 rounded-full flex items-center justify-center text-xs transition-all duration-300 relative px-2 ${
-                    loadingOverview 
-                      ? 'bg-blue-100 text-blue-700 animate-pulse hover:bg-blue-200' 
-                      : companyOverview 
-                        ? 'bg-green-100 text-green-800 font-semibold hover:bg-green-200' 
-                        : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                  }`}>
-                    <span className={loadingOverview ? 'font-medium animate-pulse' : 'font-medium'}>
-                      Latest Activity
+                  <div 
+                    className={`w-32 h-6 rounded-full flex items-center justify-center text-xs transition-all duration-300 relative px-2 cursor-pointer whitespace-nowrap ${
+                      isLatestActivityTooltipVisible 
+                        ? 'ring-2 ring-blue-500 ring-opacity-50' 
+                        : ''
+                    } ${
+                      loadingOverview 
+                        ? 'bg-blue-100 text-blue-700 animate-pulse hover:bg-blue-200' 
+                        : companyOverview 
+                          ? 'bg-green-100 text-green-800 font-semibold hover:bg-green-200' 
+                          : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                    }`}
+                    onClick={toggleLatestActivityTooltip}
+                  >
+                    <span className={`${loadingOverview ? 'font-medium animate-pulse' : 'font-medium'} flex items-center gap-1`}>
+                      <span>Latest Activity</span>
+                      <span className="hidden sm:inline text-xs">ⓘ</span>
+                      <span className="sm:hidden text-xs">👆</span>
                     </span>
                     <div className={`absolute -top-1 -right-1 w-2 h-2 rounded-full transition-all duration-300 ${
                       loadingOverview 
@@ -3513,11 +3583,16 @@ useEffect(() => {
                           : 'bg-red-500 animate-pulse'
                     }`}></div>
                   </div>
-                  <div className="absolute z-10 invisible group-hover:visible hover:visible bg-white rounded-md shadow-lg border border-gray-200 w-72 sm:w-96 left-0 top-full mt-1">
+                  <div className={`absolute z-10 bg-white rounded-md shadow-lg border border-gray-200 w-72 sm:w-96 left-0 sm:left-0 top-full mt-1 transition-all duration-200 ${
+                    isLatestActivityTooltipVisible ? 'visible opacity-100' : 'invisible opacity-0 group-hover:visible group-hover:opacity-100'
+                  } -translate-x-1/2 sm:translate-x-0`}>
                     <div className="relative">
                       {/* Copy button in top right corner */}
                       <button
-                        onClick={copyLatestActivityToClipboard}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyLatestActivityToClipboard();
+                        }}
                         className={`absolute top-2 right-2 p-1.5 rounded-lg transition-colors z-20 ${
                           latestActivityCopyFeedback 
                             ? 'text-green-600 bg-green-100' 
@@ -3678,7 +3753,7 @@ useEffect(() => {
               </div>
             </div>
           ) : stakeholders.length > 0 ? (
-            <div className="mb-4 p-3 bg-blue-50 rounded-md">
+            <div className="mb-4 p-3 bg-blue-50 rounded-md" ref={stakeholderTooltipsRef}>
               <h3 className="font-semibold text-gray-700 mb-3">Stakeholders by Title</h3>
               <div className="grid grid-cols-2 gap-6">
                 {/* Decision Makers */}
@@ -3689,25 +3764,37 @@ useEffect(() => {
                   <div className="flex flex-wrap gap-3">
                     {stakeholders
                       .filter(stakeholder => stakeholder.potential_decision_maker)
-                      .map((stakeholder, index) => (
-                        <div
-                          key={`dm-${index}`}
-                          className="relative group"
-                          title={`${stakeholder.name}${stakeholder.title ? ` - ${stakeholder.title}` : ''}\n${stakeholder.email}`}
-                        >
-                          <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:scale-110 bg-blue-600 ring-2 ring-green-500">
-                            {getInitials(stakeholder.name)}
+                      .map((stakeholder, index) => {
+                        const stakeholderId = `dm-${index}`;
+                        const isTooltipVisible = visibleStakeholderTooltips.has(stakeholderId);
+                        
+                        return (
+                          <div
+                            key={stakeholderId}
+                            className="relative group"
+                          >
+                            <div 
+                              className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:scale-110 bg-blue-600 ring-2 ring-green-500 ${
+                                isTooltipVisible ? 'ring-4 ring-blue-300 ring-opacity-50' : ''
+                              }`}
+                              onClick={() => toggleStakeholderTooltip(stakeholderId)}
+                              title="Click to see details"
+                            >
+                              {getInitials(stakeholder.name)}
+                            </div>
+                            {/* Tooltip */}
+                            <div className={`absolute bottom-full left-0 transform mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg transition-opacity duration-200 whitespace-nowrap pointer-events-auto ${
+                              isTooltipVisible ? 'opacity-100 visible' : 'opacity-0 invisible group-hover:opacity-100 group-hover:visible'
+                            } -translate-x-1/2 sm:translate-x-0`} style={{ zIndex: 999999 }}>
+                              <div className="font-semibold">{stakeholder.name}</div>
+                              {stakeholder.title && <div className="text-gray-300">{stakeholder.title}</div>}
+                              <div className="text-gray-300">{stakeholder.email}</div>
+                              <div className="text-xs text-green-300 mt-1">Decision Maker</div>
+                              <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+                            </div>
                           </div>
-                          {/* Tooltip */}
-                          <div className="absolute bottom-full left-0 transform mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap" style={{ zIndex: 999999 }}>
-                            <div className="font-semibold">{stakeholder.name}</div>
-                            {stakeholder.title && <div className="text-gray-300">{stakeholder.title}</div>}
-                            <div className="text-gray-300">{stakeholder.email}</div>
-                            <div className="text-xs text-green-300 mt-1">Decision Maker</div>
-                            <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     {stakeholders.filter(s => s.potential_decision_maker).length === 0 && (
                       <span className="text-gray-500 text-sm italic">No decision makers identified</span>
                     )}
@@ -3722,24 +3809,36 @@ useEffect(() => {
                   <div className="flex flex-wrap gap-3">
                     {stakeholders
                       .filter(stakeholder => !stakeholder.potential_decision_maker)
-                      .map((stakeholder, index) => (
-                        <div
-                          key={`other-${index}`}
-                          className="relative group"
-                          title={`${stakeholder.name}${stakeholder.title ? ` - ${stakeholder.title}` : ''}\n${stakeholder.email}`}
-                        >
-                          <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:scale-110 bg-gray-500 ring-2 ring-gray-300">
-                            {getInitials(stakeholder.name)}
+                      .map((stakeholder, index) => {
+                        const stakeholderId = `other-${index}`;
+                        const isTooltipVisible = visibleStakeholderTooltips.has(stakeholderId);
+                        
+                        return (
+                          <div
+                            key={stakeholderId}
+                            className="relative group"
+                          >
+                            <div 
+                              className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:scale-110 bg-gray-500 ring-2 ring-gray-300 ${
+                                isTooltipVisible ? 'ring-4 ring-blue-300 ring-opacity-50' : ''
+                              }`}
+                              onClick={() => toggleStakeholderTooltip(stakeholderId)}
+                              title="Click to see details"
+                            >
+                              {getInitials(stakeholder.name)}
+                            </div>
+                            {/* Tooltip */}
+                            <div className={`absolute bottom-full left-0 transform mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg transition-opacity duration-200 whitespace-nowrap pointer-events-auto ${
+                              isTooltipVisible ? 'opacity-100 visible' : 'opacity-0 invisible group-hover:opacity-100 group-hover:visible'
+                            } -translate-x-1/2 sm:translate-x-0`} style={{ zIndex: 999999 }}>
+                              <div className="font-semibold">{stakeholder.name}</div>
+                              {stakeholder.title && <div className="text-gray-300">{stakeholder.title}</div>}
+                              <div className="text-gray-300">{stakeholder.email}</div>
+                              <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+                            </div>
                           </div>
-                          {/* Tooltip */}
-                          <div className="absolute bottom-full left-0 transform mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap" style={{ zIndex: 999999 }}>
-                            <div className="font-semibold">{stakeholder.name}</div>
-                            {stakeholder.title && <div className="text-gray-300">{stakeholder.title}</div>}
-                            <div className="text-gray-300">{stakeholder.email}</div>
-                            <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     {stakeholders.filter(s => !s.potential_decision_maker).length === 0 && (
                       <span className="text-gray-500 text-sm italic">No other stakeholders</span>
                     )}

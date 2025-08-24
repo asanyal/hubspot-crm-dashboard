@@ -1479,6 +1479,9 @@ const DealTimeline: React.FC = () => {
           if (eventType === 'Meeting' && event.buyer_intent === 'Very likely to buy') {
             eventsByDate[event.date_str].hasVeryLikelyToBuy = true;
           }
+          if (eventType === 'Meeting' && event.buyer_intent === 'Likely to buy') {
+            eventsByDate[event.date_str].hasVeryLikelyToBuy = true; // Use same flag for both positive signals
+          }
           
           eventsByDate[event.date_str].totalEvents++;
         });
@@ -4150,7 +4153,32 @@ useEffect(() => {
 
                     <YAxis allowDecimals={false} />
                     <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(0,0,0,0.1)'}} />
-                    <Legend />
+                    <Legend 
+                      content={(props) => {
+                        const { payload } = props;
+                        return (
+                          <div className="flex flex-wrap items-center justify-center gap-4 mt-4">
+                            {payload?.map((entry, index) => (
+                              <div key={index} className="flex items-center gap-2">
+                                <div 
+                                  className="w-3 h-3 rounded-sm" 
+                                  style={{ backgroundColor: entry.color }}
+                                ></div>
+                                <span className="text-sm text-gray-600">{entry.value}</span>
+                              </div>
+                            ))}
+                            {/* Add explanation for positive signal indicator */}
+                            <div className="flex items-center gap-2 ml-4 px-2 py-1 bg-gray-50 rounded">
+                              <div className="flex flex-col items-center">
+                                <div className="w-3 h-3 bg-red-300 rounded-sm"></div>
+                                <div className="w-3 h-1 bg-green-500 rounded-sm -mt-0.5"></div>
+                              </div>
+                              <span className="text-xs text-gray-500">Meeting with Positive Signal</span>
+                            </div>
+                          </div>
+                        );
+                      }}
+                    />
                     
                         <Bar 
                           dataKey="Meeting" 
@@ -4159,14 +4187,32 @@ useEffect(() => {
                           name="Meeting" 
                           shape={(props: any) => {
                             const { x, y, width, height, payload } = props;
+                            const hasPositiveSignal = payload?.hasVeryLikelyToBuy || payload?.events?.some((event: Event) => 
+                              event.type === 'Meeting' && (event.buyer_intent === 'Likely to buy' || event.buyer_intent === 'Very likely to buy')
+                            );
+                            
                             return (
-                              <rect
-                                x={x}
-                                y={y}
-                                width={width}
-                                height={height}
-                                fill={payload?.hasLessLikelyToBuy ? "#6e0200" : "#f87171"}
-                              />
+                              <g>
+                                {/* Main bar */}
+                                <rect
+                                  x={x}
+                                  y={y}
+                                  width={width}
+                                  height={height}
+                                  fill={payload?.hasLessLikelyToBuy ? "#6e0200" : "#f87171"}
+                                />
+                                {/* Positive signal indicator - small green bar on top */}
+                                {hasPositiveSignal && height > 0 && (
+                                  <rect
+                                    x={x}
+                                    y={y - 6}
+                                    width={width}
+                                    height={5}
+                                    fill="#10b981"
+                                    rx={1}
+                                  />
+                                )}
+                              </g>
                             );
                           }}
                         />

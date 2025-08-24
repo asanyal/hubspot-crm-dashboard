@@ -128,6 +128,11 @@ const DealStageSelector: React.FC = () => {
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsData, setInsightsData] = useState<DealInsights | null>(null);
   const [pinnedColumns, setPinnedColumns] = useState<Set<string>>(new Set(['deal_name']));
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set([
+    'deal_name', 'stage', 'owner', 'activity_count', 'positive_signal', 
+    'strong_buy_signal', 'negative_signal', 'using_competitor', 'pricing_concerns', 'decision_maker'
+  ]));
+  const [isColumnMenuOpen, setIsColumnMenuOpen] = useState(false);
   const router = useRouter();
   
   // Track URL parameters
@@ -136,6 +141,7 @@ const DealStageSelector: React.FC = () => {
   
   // Loading timeout reference - used to track the automatic loading reset
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const columnMenuRef = useRef<HTMLDivElement>(null);
   
   // Timestamp for data expiration (5 minutes = 300000 milliseconds)
   const DATA_EXPIRY_TIME = 300000;
@@ -378,6 +384,22 @@ const DealStageSelector: React.FC = () => {
       lastFetched
     });
   }, [stagesLoading, availableStages.length, error, lastFetched]);
+
+  // Click outside column menu to close
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (columnMenuRef.current && !columnMenuRef.current.contains(event.target as Node)) {
+        setIsColumnMenuOpen(false);
+      }
+    };
+
+    if (isColumnMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isColumnMenuOpen]);
   
   // Update fetchDealsForStage to use makeApiCall
   const fetchDealsForStage = useCallback(async (stageName: string): Promise<void> => {
@@ -871,6 +893,46 @@ const DealStageSelector: React.FC = () => {
     });
   }, []);
 
+  // Function to toggle column visibility
+  const toggleColumnVisibility = useCallback((columnId: string) => {
+    setVisibleColumns(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(columnId)) {
+        newSet.delete(columnId);
+      } else {
+        newSet.add(columnId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  // Function to show all columns
+  const showAllColumns = useCallback(() => {
+    setVisibleColumns(new Set([
+      'deal_name', 'stage', 'owner', 'activity_count', 'positive_signal', 
+      'strong_buy_signal', 'negative_signal', 'using_competitor', 'pricing_concerns', 'decision_maker'
+    ]));
+  }, []);
+
+  // Function to hide all columns (except deal_name which is required)
+  const hideAllColumns = useCallback(() => {
+    setVisibleColumns(new Set(['deal_name']));
+  }, []);
+
+  // Column display names mapping
+  const columnDisplayNames = useMemo(() => ({
+    deal_name: 'Deal Name',
+    stage: 'Stage',
+    owner: 'Owner',
+    activity_count: 'Activity Count',
+    positive_signal: 'Positive Signal',
+    strong_buy_signal: 'Strong Buy Signal',
+    negative_signal: 'Negative Signal',
+    using_competitor: 'Competitor Mentions',
+    pricing_concerns: 'Pricing Concerns',
+    decision_maker: 'Decision Maker'
+  }), []);
+
 
 
   // Effect to fetch insights after deals load
@@ -1009,8 +1071,8 @@ const DealStageSelector: React.FC = () => {
   // Create column helper
   const columnHelper = createColumnHelper<Deal>();
 
-  // Define columns
-  const columns = useMemo(() => [
+  // Define all columns
+  const allColumns = useMemo(() => [
     columnHelper.accessor('Deal_Name', {
       id: 'deal_name',
       header: 'Deal Name',
@@ -1269,6 +1331,11 @@ const DealStageSelector: React.FC = () => {
     }),
   ], [columnHelper, navigateToDealTimeline, selectedStage, insightsData, activityCounts, activityCountsLoading, signalsData, signalsLoading]);
 
+  // Filter columns based on visibility
+  const columns = useMemo(() => {
+    return allColumns.filter(column => visibleColumns.has(column.id as string));
+  }, [allColumns, visibleColumns]);
+
   // Create the table instance
   const table = useReactTable({
     data: filteredDeals,
@@ -1407,10 +1474,67 @@ const DealStageSelector: React.FC = () => {
             </div>
           )}
 
-          {/* Debug: Show pinned columns */}
-          <div className="mb-4 text-xs text-gray-500">
-            Pinned columns: {Array.from(pinnedColumns).join(', ')}
-          </div>
+          {/* Column visibility control */}
+          {!loading && selectedStage && dealsByStage[selectedStage] && (
+            <div className="mb-4 flex justify-start">
+              <div className="relative" ref={columnMenuRef}>
+                <button
+                  onClick={() => setIsColumnMenuOpen(!isColumnMenuOpen)}
+                  className="px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  Columns
+                  <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-transform ${isColumnMenuOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {isColumnMenuOpen && (
+                  <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-50">
+                    <div className="p-3">
+                      <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-200">
+                        <span className="text-sm font-medium text-gray-900">Show/Hide Columns</span>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={showAllColumns}
+                            className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                          >
+                            Show All
+                          </button>
+                          <button
+                            onClick={hideAllColumns}
+                            className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                          >
+                            Hide All
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {Object.entries(columnDisplayNames).map(([columnId, displayName]) => (
+                          <label key={columnId} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                            <input
+                              type="checkbox"
+                              checked={visibleColumns.has(columnId)}
+                              onChange={() => toggleColumnVisibility(columnId)}
+                              disabled={columnId === 'deal_name'} // Deal Name is always required
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                            />
+                            <span className={`text-sm ${columnId === 'deal_name' ? 'text-gray-500' : 'text-gray-700'}`}>
+                              {displayName}
+                              {columnId === 'deal_name' && <span className="text-xs text-gray-400 ml-1">(required)</span>}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div className="text-center py-10">

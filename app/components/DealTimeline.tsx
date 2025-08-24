@@ -330,7 +330,7 @@ const DealTimeline: React.FC = () => {
   const [selectedOwners, setSelectedOwners] = useState<Set<string>>(new Set());
 
   // Add state for activities filter
-  const [showOnlyActiveDeals, setShowOnlyActiveDeals] = useState<boolean>(false);
+  const [showOnlyActiveDeals, setShowOnlyActiveDeals] = useState<boolean>(true);
 
   // Add state for sidebar collapse
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
@@ -3201,20 +3201,7 @@ useEffect(() => {
     setSelectedOwners(prev => {
       const newSet = new Set(prev);
       
-      // If this is the only selected owner, deselect it to show all owners
-      if (newSet.size === 1 && newSet.has(owner)) {
-        newSet.clear();
-        return newSet;
-      }
-      
-      // If all owners are selected, clear and select only this owner
-      if (newSet.size === uniqueOwners.length) {
-        newSet.clear();
-        newSet.add(owner);
-        return newSet;
-      }
-      
-      // Otherwise, toggle this owner
+      // Simple toggle: if owner is selected, remove it; if not selected, add it
       if (newSet.has(owner)) {
         newSet.delete(owner);
       } else {
@@ -3359,27 +3346,45 @@ useEffect(() => {
                 );
               })
             ) : activeFilterTab === 'owners' ? (
-              // Owner filters
-              uniqueOwners.map((owner) => {
-                const isSelected = selectedOwners.has(owner);
-                return (
-                  <div key={owner} className="relative inline-block group">
-                    <button
-                      onClick={() => toggleOwnerFilter(owner)}
-                      className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
-                        isSelected 
-                          ? `${getOwnerColor(owner).bg} ${getOwnerColor(owner).text} border ${getOwnerColor(owner).border}`
-                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                      } hover:opacity-90 transition-opacity`}
-                    >
-                      {getOwnerInitials(owner)}
-                    </button>
-                    <div className="invisible group-hover:visible absolute z-50 -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                      {owner}
+              <>
+                {/* Select All/None buttons */}
+                <div className="w-full flex gap-2 mb-2 pb-2 border-b border-gray-200">
+                  <button
+                    onClick={() => setSelectedOwners(new Set(uniqueOwners))}
+                    className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors font-medium"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={() => setSelectedOwners(new Set())}
+                    className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors font-medium"
+                  >
+                    None
+                  </button>
+                </div>
+                
+                {/* Owner filters */}
+                {uniqueOwners.map((owner) => {
+                  const isSelected = selectedOwners.has(owner);
+                  return (
+                    <div key={owner} className="relative inline-block group">
+                      <button
+                        onClick={() => toggleOwnerFilter(owner)}
+                        className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
+                          isSelected 
+                            ? `${getOwnerColor(owner).bg} ${getOwnerColor(owner).text} border ${getOwnerColor(owner).border}`
+                            : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                        } hover:opacity-90 transition-opacity`}
+                      >
+                        {getOwnerInitials(owner)}
+                      </button>
+                      <div className="invisible group-hover:visible absolute z-50 -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                        {owner}
+                      </div>
                     </div>
-                  </div>
-                );
-              })
+                  );
+                })}
+              </>
             ) : (
               // Bookmarks tab - show count
               <div className="text-sm text-gray-600">

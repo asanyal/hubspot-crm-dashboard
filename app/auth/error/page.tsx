@@ -8,6 +8,37 @@ function AuthErrorContent() {
   const searchParams = useSearchParams()
   const error = searchParams.get('error')
 
+  const getErrorMessage = (errorType: string | null) => {
+    switch (errorType) {
+      case 'AccessDenied':
+        return {
+          title: 'Access Denied',
+          message: 'Only Galileo members are allowed. Please use your @galileo.ai email address to sign in.',
+          suggestion: 'Make sure you\'re signed into the correct Google account with your @galileo.ai email.'
+        }
+      case 'NoEmail':
+        return {
+          title: 'Email Not Found',
+          message: 'We couldn\'t retrieve your email address from Google.',
+          suggestion: 'Please try signing in again or contact support.'
+        }
+      case 'Configuration':
+        return {
+          title: 'Configuration Error',
+          message: 'There\'s a problem with the authentication setup.',
+          suggestion: 'Please contact your administrator.'
+        }
+      default:
+        return {
+          title: 'Authentication Error',
+          message: 'There was a problem signing you in.',
+          suggestion: 'Please try again or contact support if the problem persists.'
+        }
+    }
+  }
+
+  const errorInfo = getErrorMessage(error)
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -29,10 +60,10 @@ function AuthErrorContent() {
             </svg>
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Authentication Error
+            {errorInfo.title}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            There was a problem signing you in
+            {errorInfo.message}
           </p>
         </div>
 
@@ -53,11 +84,16 @@ function AuthErrorContent() {
             </div>
             <div className="ml-3">
               <h3 className="text-sm font-medium text-red-800">
-                Access Denied
+                {errorInfo.title}
               </h3>
               <div className="mt-2 text-sm text-red-700">
-                Only Galileo members are allowed. Please use your @galileo.ai email address to sign in.
+                {errorInfo.suggestion}
               </div>
+              {process.env.NODE_ENV === 'development' && (
+                <div className="mt-2 text-xs text-gray-600">
+                  Debug: Error type = {error || 'unknown'}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -70,9 +106,27 @@ function AuthErrorContent() {
             Try Again
           </Link>
           
+          <button
+            onClick={() => {
+              // Clear all auth-related cookies and localStorage
+              document.cookie = 'next-auth.session-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+              document.cookie = 'next-auth.csrf-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+              document.cookie = '__Secure-next-auth.session-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+              localStorage.clear()
+              sessionStorage.clear()
+              window.location.href = '/auth/signin'
+            }}
+            className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+          >
+            Clear Data & Try Again
+          </button>
+          
           <div className="text-center">
             <p className="text-sm text-gray-500">
               Need help? Contact your administrator.
+            </p>
+            <p className="text-xs text-gray-400 mt-2">
+              Tip: Make sure you're using your @galileo.ai email in your mobile browser.
             </p>
           </div>
         </div>

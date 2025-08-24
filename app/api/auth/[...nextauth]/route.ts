@@ -10,10 +10,25 @@ const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user, account, profile }) {
-      // Check if user email ends with @galileo.ai
-      if (user.email && user.email.endsWith('@galileo.ai')) {
+      console.log('SignIn callback - User:', user?.email, 'Profile:', profile?.email)
+      
+      // Check user email first, then profile email as fallback
+      const email = user?.email || profile?.email
+      
+      if (!email) {
+        console.log('No email found in user or profile')
+        return '/auth/error?error=NoEmail'
+      }
+      
+      console.log('Checking email:', email)
+      
+      // Check if email ends with @galileo.ai (case insensitive)
+      if (email.toLowerCase().endsWith('@galileo.ai')) {
+        console.log('Email approved:', email)
         return true
       }
+      
+      console.log('Email rejected:', email)
       // Redirect to error page with specific message
       return '/auth/error?error=AccessDenied'
     },

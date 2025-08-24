@@ -324,6 +324,9 @@ const DealTimeline: React.FC = () => {
   // Add state for activities filter
   const [showOnlyActiveDeals, setShowOnlyActiveDeals] = useState<boolean>(false);
 
+  // Add state for sidebar collapse
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+
   // Add this with other state declarations at the top of DealTimeline component
   const [activeEventFilters, setActiveEventFilters] = useState<Record<string, boolean>>({
     'Meeting': true,
@@ -383,6 +386,20 @@ const DealTimeline: React.FC = () => {
     }
   }, []);
 
+  // Load sidebar state from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedSidebarState = localStorage.getItem('sidebarCollapsed');
+      if (savedSidebarState) {
+        try {
+          setIsSidebarCollapsed(JSON.parse(savedSidebarState));
+        } catch (error) {
+          console.error('Error loading sidebar state from localStorage:', error);
+        }
+      }
+    }
+  }, []);
+
   // Load meeting contacts from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -404,6 +421,13 @@ const DealTimeline: React.FC = () => {
       localStorage.setItem('bookmarkedDeals', JSON.stringify(Array.from(bookmarkedDeals)));
     }
   }, [bookmarkedDeals]);
+
+  // Save sidebar state to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sidebarCollapsed', JSON.stringify(isSidebarCollapsed));
+    }
+  }, [isSidebarCollapsed]);
 
   // Get unique stages from all deals
   const uniqueStages = useMemo(() => {
@@ -3183,7 +3207,7 @@ useEffect(() => {
   return (
     <div className="flex h-screen" suppressHydrationWarning>
       {/* Sidebar */}
-      <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+      <div className={`${isSidebarCollapsed ? 'w-0' : 'w-80'} bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0`}>
         {/* Search bar */}
         <div className="p-4 border-b border-gray-100">
           <div className="relative">
@@ -3449,6 +3473,22 @@ useEffect(() => {
         <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-4">
+          {/* Sidebar Toggle Button */}
+          <button
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors border border-gray-300 flex items-center justify-center"
+            title={isSidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+          >
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className={`h-5 w-5 text-gray-600 transition-transform duration-200 ${isSidebarCollapsed ? 'rotate-180' : ''}`} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            </svg>
+          </button>
           {/* <h1 className="text-2xl font-bold">Deal Timeline</h1> */}
           {selectedDeal && (
             <div className="flex items-center">

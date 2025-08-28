@@ -80,6 +80,7 @@ const formatStageAbbr = (stageName: string): string => {
     .split(' ')
     .map(word => word[0])
     .join('')
+    .replace(/[0-9]/g, '') // Remove any numbers
     .toUpperCase();
 };
 
@@ -1474,9 +1475,10 @@ const DealStageSelector: React.FC = () => {
             </div>
           )}
 
-          {/* Column visibility control */}
+          {/* Table controls - Column selector and row count */}
           {!loading && selectedStage && dealsByStage[selectedStage] && (
-            <div className="mb-4 flex justify-start">
+            <div className="mb-4 flex justify-between items-center">
+              {/* Column visibility control */}
               <div className="relative" ref={columnMenuRef}>
                 <button
                   onClick={() => setIsColumnMenuOpen(!isColumnMenuOpen)}
@@ -1531,6 +1533,21 @@ const DealStageSelector: React.FC = () => {
                       </div>
                     </div>
                   </div>
+                )}
+              </div>
+
+              {/* Row count display */}
+              <div className="inline-flex items-center px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <span className="text-sm font-medium text-gray-700">
+                  {filteredDeals.length} {filteredDeals.length === 1 ? 'deal' : 'deals'}
+                </span>
+                {searchTerm.trim() !== '' && (
+                  <span className="text-xs text-gray-500 ml-2">
+                    (filtered)
+                  </span>
                 )}
               </div>
             </div>

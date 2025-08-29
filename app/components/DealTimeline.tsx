@@ -1906,13 +1906,13 @@ const EventDrawer = () => {
   return (
     <div 
       ref={drawerRef}
-      className={`fixed top-0 right-0 h-full w-96 bg-white shadow-lg z-50 overflow-y-auto transform ${
+      className={`fixed top-0 right-0 h-full w-96 bg-white shadow-xl z-50 overflow-y-auto transform ${
         isDrawerOpen ? 'translate-x-0' : 'translate-x-full'
       } transition-transform duration-300 ease-in-out`}
     >
-      <div className="p-4 border-b border-gray-200 sticky top-0 bg-white z-10 flex justify-between items-center">
+      <div className="p-6 border-b border-gray-100 sticky top-0 bg-white z-10 flex justify-between items-center">
         <div>
-          <h3 className="text-xl font-bold">
+          <h3 className="text-lg font-semibold text-gray-800">
             {selectedDeal?.name || 'Events'}
           </h3>
           {selectedDate && (
@@ -1930,9 +1930,9 @@ const EventDrawer = () => {
         </div>
         <button 
           onClick={() => setIsDrawerOpen(false)}
-          className="text-gray-500 hover:text-gray-700"
+          className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
@@ -2406,20 +2406,20 @@ const DealLogs: React.FC<{
   };
 
 return (
-    <div className="mt-8 bg-white rounded-lg shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-1px_rgba(0,0,0,0.06)]">
-      <div className="p-4 border-b border-gray-200">
-        <h3 className="text-xl font-semibold">Deal Logs: {selectedDeal?.name}</h3>
+    <div className="p-6">
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold text-gray-800">Deal Logs</h3>
         
         {/* Filter controls */}
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           {Object.keys(activeFilters).map(eventType => (
             <button
               key={eventType}
               onClick={() => toggleFilter(eventType)}
-              className={`px-3 py-1 text-sm rounded-full transition-colors border ${
+              className={`px-3 py-1.5 text-sm rounded-full transition-colors border ${
                 activeFilters[eventType] 
                   ? `${getEventTypeBackgroundColor(eventType)} border-gray-300 font-medium` 
-                  : 'bg-gray-100 border-gray-200 text-gray-400'
+                  : 'bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100'
               }`}
             >
               <span className={activeFilters[eventType] ? getEventTypeColor(eventType) : ''}>
@@ -2434,9 +2434,9 @@ return (
       </div>
       
       {/* Fixed height container with scrolling */}
-      <div className="h-[400px] overflow-y-auto shadow-inner">
+      <div className="h-[400px] overflow-y-auto border border-gray-100 rounded-lg">
         {/* Header row */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 p-4 grid grid-cols-12 gap-4 font-semibold text-gray-600">
+        <div className="sticky top-0 bg-gray-50 border-b border-gray-200 p-4 grid grid-cols-12 gap-4 font-semibold text-gray-600">
           <div className="col-span-2">Date</div>
           <div className="col-span-2">Event</div>
           <div className="col-span-2">Sentiment</div>
@@ -2454,7 +2454,7 @@ return (
                 <div 
                   key={index} 
                   className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
-                    isSelected ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                    isSelected ? 'bg-blue-50 border-l-4 border-blue-400' : ''
                   }`}
                   onClick={() => handleRowClick(event, index)}
                   data-deal-log-row="true"
@@ -3009,14 +3009,18 @@ const handleRefresh = useCallback(() => {
           
           if (response) {
             const data = await response.json();
+            console.log('Concerns API response:', data);
             // Handle empty responses properly - set to empty array if null/undefined/empty object
             if (Array.isArray(data)) {
               setConcerns(data);
+              console.log('Set concerns to:', data);
             } else {
+              console.log('Concerns data is not an array, setting to empty array');
               setConcerns([]);
             }
           } else {
             // If no response, set to empty array
+            console.log('No response from concerns API, setting to empty array');
             setConcerns([]);
           }
         } catch (error) {
@@ -3031,7 +3035,52 @@ const handleRefresh = useCallback(() => {
     } else {
       console.log('Concerns already fetched for deal:', selectedDeal.name);
     }
-  }, [timelineData?.events, selectedDeal?.name, isUnmounting]);
+  }, [timelineData?.events, selectedDeal?.name, isUnmounting, makeApiCall]);
+
+  // Fallback effect to ensure concerns are fetched even if timeline data is not available
+  useEffect(() => {
+    if (!selectedDeal?.name || isUnmounting || concerns.length > 0) {
+      return;
+    }
+    
+    // If we have a selected deal but no concerns loaded, try to fetch them
+    if (!concernsFetchedRef.current.has(selectedDeal.name)) {
+      console.log('Fallback: Fetching concerns for deal:', selectedDeal.name);
+      concernsFetchedRef.current.add(selectedDeal.name);
+      
+      const fetchConcernsFallback = async () => {
+        if (!selectedDeal.name) return;
+        
+        console.log('Fallback: Making API call to fetch concerns for:', selectedDeal.name);
+        setLoadingConcerns(true);
+        try {
+          const response = await makeApiCall(
+            `${API_CONFIG.getApiPath('/get-concerns')}?dealName=${encodeURIComponent(selectedDeal.name)}`
+          );
+          
+          if (response) {
+            const data = await response.json();
+            console.log('Fallback: Concerns API response:', data);
+            if (Array.isArray(data)) {
+              setConcerns(data);
+              console.log('Fallback: Set concerns to:', data);
+            } else {
+              setConcerns([]);
+            }
+          } else {
+            setConcerns([]);
+          }
+        } catch (error) {
+          console.error('Fallback: Error fetching concerns:', error);
+          setConcerns([]);
+        } finally {
+          setLoadingConcerns(false);
+        }
+      };
+      
+      fetchConcernsFallback();
+    }
+  }, [selectedDeal?.name, isUnmounting, concerns.length, makeApiCall]);
 
   // Clean up concerns ref on unmount
   useEffect(() => {
@@ -3256,24 +3305,23 @@ useEffect(() => {
   };
 
   return (
-    <div className="flex h-screen" suppressHydrationWarning>
+    <div className="flex h-screen bg-gray-50" suppressHydrationWarning>
       {/* Sidebar */}
-      <div className={`${isSidebarCollapsed ? 'w-0' : 'w-80'} bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0`}>
+      <div className={`${isSidebarCollapsed ? 'w-0' : 'w-80'} bg-white border-r border-gray-100 flex flex-col transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0`}>
         {/* Search bar */}
-        <div className="p-4 border-b border-gray-100">
+        <div className="p-6 border-b border-gray-50">
           <div className="relative">
             <input
               type="text"
               placeholder="Search deals..."
               value={dealSearchTerm}
               onChange={(e) => {
-                // Update the input value immediately for smooth typing
                 setDealSearchTerm(e.target.value);
               }}
-              className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 bg-gray-50"
             />
             <svg
-              className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
+              className="absolute left-3 top-3 h-4 w-4 text-gray-400"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -3289,14 +3337,14 @@ useEffect(() => {
         </div>
 
         {/* Stage filter chips */}
-        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+        <div className="px-6 py-4 border-b border-gray-50 bg-white">
           {/* Tabs */}
-          <div className="flex border-b border-gray-200 mb-3">
+          <div className="flex border-b border-gray-100 mb-4">
             <button
               onClick={() => setActiveFilterTab('stages')}
-              className={`px-4 py-2 text-sm font-medium ${
+              className={`px-3 py-2 text-sm font-medium transition-colors ${
                 activeFilterTab === 'stages'
-                  ? 'border-b-2 border-blue-500 text-blue-600'
+                  ? 'border-b-2 border-blue-400 text-blue-600'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -3304,9 +3352,9 @@ useEffect(() => {
             </button>
             <button
               onClick={() => setActiveFilterTab('owners')}
-              className={`px-4 py-2 text-sm font-medium ${
+              className={`px-3 py-2 text-sm font-medium transition-colors ${
                 activeFilterTab === 'owners'
-                  ? 'border-b-2 border-blue-500 text-blue-600'
+                  ? 'border-b-2 border-blue-400 text-blue-600'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -3314,9 +3362,9 @@ useEffect(() => {
             </button>
             <button
               onClick={() => setActiveFilterTab('bookmarks')}
-              className={`px-4 py-2 text-sm font-medium ${
+              className={`px-3 py-2 text-sm font-medium transition-colors ${
                 activeFilterTab === 'bookmarks'
-                  ? 'border-b-2 border-blue-500 text-blue-600'
+                  ? 'border-b-2 border-blue-400 text-blue-600'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -3325,7 +3373,7 @@ useEffect(() => {
           </div>
 
           {/* Filter chips */}
-          <div className="flex flex-wrap gap-2 p-2 bg-gray-50">
+          <div className="flex flex-wrap gap-2">
             {activeFilterTab === 'stages' ? (
               // Stage filters
               uniqueStages.map((stage) => {
@@ -3403,26 +3451,26 @@ useEffect(() => {
 
         {/* Regular Deals Section - Scrollable */}
         <div className="flex-1 overflow-y-auto">
-          <div className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium text-gray-500">
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-600">
                 {activeFilterTab === 'bookmarks' ? 'Bookmarked Deals' : 'All Deals'} ({filteredDeals.length})
               </h3>
               {activeFilterTab !== 'bookmarks' && (
                 <button
                   onClick={() => setShowOnlyActiveDeals(!showOnlyActiveDeals)}
-                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                  className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
                     showOnlyActiveDeals 
-                      ? 'bg-blue-100 text-blue-700 border border-blue-200' 
-                      : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                      ? 'bg-blue-50 text-blue-600 border border-blue-200' 
+                      : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
                   }`}
                   title={showOnlyActiveDeals ? 'Show all deals' : 'Show only deals with activities'}
                 >
                   {showOnlyActiveDeals ? 'All Deals' : 'Active Deals'}
                 </button>
-              )}
+                  )}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {filteredDeals.map(deal => {
                 const daysPassed = getDaysPassed(deal);
                 const isSelected = selectedDeal?.id === deal.id;
@@ -3430,10 +3478,10 @@ useEffect(() => {
                 return (
                   <div
                     key={deal.id}
-                    className={`flex items-start justify-between p-3 rounded-lg transition-colors cursor-pointer border ${
+                    className={`flex items-start justify-between p-4 rounded-lg transition-all duration-200 cursor-pointer border ${
                       isSelected 
                         ? 'bg-blue-50 border-blue-200 shadow-sm' 
-                        : 'bg-white border-gray-100 hover:bg-gray-50'
+                        : 'bg-white border-gray-100 hover:bg-gray-50 hover:shadow-sm'
                     }`}
                     onClick={() => {
                       if (deal.name) {
@@ -3453,32 +3501,18 @@ useEffect(() => {
                     }}
                   >
                     <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-medium truncate ${
+                      <div className={`text-sm font-medium truncate mb-1 ${
                         isSelected ? 'text-blue-700' : 'text-gray-900'
                       }`}>
                         {deal.name}
                       </div>
-                      <div className={`text-xs ${
-                        isSelected ? 'text-blue-600' : 'text-gray-500'
-                      }`}>
-                        Stage: {deal.stage}
-                      </div>
-                      <div className={`text-xs ${
-                        isSelected ? 'text-blue-600' : 'text-gray-500'
-                      }`}>
-                        Owner: {deal.owner || 'NA'}
-                      </div>
-                      <div className={`text-xs ${
-                        isSelected ? 'text-blue-600' : 'text-gray-500'
-                      }`}>
-                        Created: {formatDate(deal.createdate)}
-                      </div>
-                      <div className={`text-xs ${
-                        isSelected ? 'text-blue-600' : 'text-gray-500'
-                      }`}>
-                        Activities: <span className={deal.activities && deal.activities >= 15 ? 'text-orange-600 font-medium' : ''}>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-500">
+                        <div>Stage: {deal.stage}</div>
+                        <div>Owner: {deal.owner || 'NA'}</div>
+                        <div>Created: {formatDate(deal.createdate)}</div>
+                        <div>Activities: <span className={deal.activities && deal.activities >= 15 ? 'text-orange-600 font-medium' : ''}>
                           {deal.activities || 0}
-                        </span>
+                        </span></div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -3539,18 +3573,18 @@ useEffect(() => {
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+        <div className="p-8">
+      <div className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-4">
           {/* Sidebar Toggle Button */}
           <button
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors border border-gray-300 flex items-center justify-center"
+            className="p-2 rounded-lg bg-white hover:bg-gray-50 transition-colors border border-gray-200 flex items-center justify-center shadow-sm"
             title={isSidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
           >
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
-              className={`h-5 w-5 text-gray-600 transition-transform duration-200 ${isSidebarCollapsed ? 'rotate-180' : ''}`} 
+              className={`h-4 w-4 text-gray-600 transition-transform duration-200 ${isSidebarCollapsed ? 'rotate-180' : ''}`} 
               fill="none" 
               viewBox="0 0 24 24" 
               stroke="currentColor"
@@ -3558,38 +3592,34 @@ useEffect(() => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
             </svg>
           </button>
-          {/* <h1 className="text-2xl font-bold">Deal Timeline</h1> */}
           {selectedDeal && (
             <div className="flex items-center">
-              <span className="text-2xl font-bold text-gray-600">{selectedDeal.name}</span>
-              <div className="relative inline-block ml-2" ref={latestActivityTooltipRef}>
+              <span className="text-2xl font-bold text-gray-800">{selectedDeal.name}</span>
+              <div className="relative inline-block ml-3" ref={latestActivityTooltipRef}>
                 <div className="cursor-help group">
                   <div 
-                    className={`w-32 h-6 rounded-full flex items-center justify-center text-xs transition-all duration-300 relative px-2 cursor-pointer whitespace-nowrap ${
+                    className={`px-3 py-1.5 rounded-full flex items-center justify-center text-xs transition-all duration-200 relative cursor-pointer whitespace-nowrap border ${
                       isLatestActivityTooltipVisible 
-                        ? 'ring-2 ring-blue-500 ring-opacity-50' 
+                        ? 'ring-1 ring-blue-400' 
                         : ''
                     } ${
                       loadingOverview 
-                        ? 'bg-blue-100 text-blue-700 animate-pulse hover:bg-blue-200' 
+                        ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100' 
                         : companyOverview 
-                          ? 'bg-green-100 text-green-800 font-semibold hover:bg-green-200' 
-                          : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                          ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' 
+                          : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
                     }`}
                     onClick={toggleLatestActivityTooltip}
                   >
-                    <span className={`${loadingOverview ? 'font-medium animate-pulse' : 'font-medium'} flex items-center gap-1`}>
+                    <span className="flex items-center gap-1.5">
                       <span>Latest Activity</span>
-                      <span className="hidden sm:inline text-xs">ⓘ</span>
-                      <span className="sm:hidden text-xs">👆</span>
+                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
                     </span>
-                    <div className={`absolute -top-1 -right-1 w-2 h-2 rounded-full transition-all duration-300 ${
-                      loadingOverview 
-                        ? 'bg-blue-500 animate-ping' 
-                        : companyOverview 
-                          ? 'bg-green-500 animate-pulse' 
-                          : 'bg-red-500 animate-pulse'
-                    }`}></div>
+                    {loadingOverview && (
+                      <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                    )}
                   </div>
                   <div className={`absolute z-10 bg-white rounded-md shadow-lg border border-gray-200 w-72 sm:w-96 left-0 sm:left-0 top-full mt-1 transition-all duration-200 ${
                     isLatestActivityTooltipVisible ? 'visible opacity-100' : 'invisible opacity-0 group-hover:visible group-hover:opacity-100'
@@ -3649,10 +3679,10 @@ useEffect(() => {
           )}
           <button
             onClick={handleRefresh}
-            className="px-3 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded transition-colors text-sm flex items-center"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm flex items-center shadow-sm"
             disabled={loading}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             Refresh
@@ -3662,25 +3692,25 @@ useEffect(() => {
       
       {/* Activity count message */}
       {selectedDeal && (
-        <div className="mb-6 bg-sky-50 p-3 rounded-md border border-sky-100">
+        <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-100">
           {fetchingActivities ? (
-            <p className="text-sky-700 font-medium flex items-center">
-              <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-sky-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <p className="text-blue-700 font-medium flex items-center">
+              <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-blue-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
               Counting activities for <span className="font-bold ml-1">{selectedDeal.name}</span>...
             </p>
           ) : activitiesCount !== null ? (
-            <p className="text-sky-800 font-medium">
+            <p className="text-blue-800 font-medium">
               <span className="font-bold text-lg">{activitiesCount}</span> activities found for this deal
             </p>
           ) : timelineData ? (
-            <p className="text-sky-800 font-medium">
+            <p className="text-blue-800 font-medium">
               <span className="font-bold text-lg">{timelineData.events.length}</span> activities found for this deal
             </p>
           ) : (
-            <p className="text-sky-800 font-medium">
+            <p className="text-blue-800 font-medium">
               Loading deal activities...
             </p>
           )}
@@ -3735,41 +3765,42 @@ useEffect(() => {
           </button>
         </div>
       ) : timelineData ? (
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="space-y-6">
           {dealInfo && (
-            <div className="mb-4 p-3 bg-gray-50 rounded-md">
-              <div className="flex flex-wrap gap-x-8">
-                <p className="text-gray-700">
-                  <span className="font-semibold">Started:</span> {formatDate(dealInfo.startDate)}
-                </p>
-                <p className="text-gray-700">
-                  <span className="font-semibold">Deal Owner:</span> <span className="text-red-600"><b>{dealInfo.dealOwner}</b></span>
-                </p>
-                <p className="text-gray-700">
-                  <span className="font-semibold">Stage:</span> <span className="text-red-600"><b>{dealInfo.dealStage}</b></span>
-                </p>
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="text-sm">
+                  <span className="text-gray-500">Started:</span>
+                  <div className="font-medium text-gray-900">{formatDate(dealInfo.startDate)}</div>
+                </div>
+                <div className="text-sm">
+                  <span className="text-gray-500">Deal Owner:</span>
+                  <div className="font-medium text-gray-900">{dealInfo.dealOwner}</div>
+                </div>
+                <div className="text-sm">
+                  <span className="text-gray-500">Stage:</span>
+                  <div className="font-medium text-gray-900">{dealInfo.dealStage}</div>
+                </div>
               </div>
             </div>
           )}
 
           {/* Stakeholders Section */}
           {loadingStakeholders ? (
-            <div className="mb-4 p-3 bg-blue-50 rounded-md">
-              <h3 className="font-semibold text-gray-700 mb-3">Stakeholders by Title</h3>
-              <div className="text-gray-500">
-                Loading...
-              </div>
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+              <h3 className="font-semibold text-gray-700 mb-4">Stakeholders</h3>
+              <div className="text-gray-500">Loading...</div>
             </div>
           ) : stakeholders.length > 0 ? (
-            <div className="mb-4 p-3 bg-blue-50 rounded-md" ref={stakeholderTooltipsRef}>
-              <h3 className="font-semibold text-gray-700 mb-3">Stakeholders by Title</h3>
-              <div className="grid grid-cols-2 gap-6">
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100" ref={stakeholderTooltipsRef}>
+              <h3 className="font-semibold text-gray-700 mb-4">Stakeholders</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Decision Makers */}
                 <div>
-                  <h4 className="font-medium text-gray-600 mb-2 text-sm">
+                  <h4 className="font-medium text-gray-600 mb-3 text-sm">
                     Decision Makers ({stakeholders.filter(s => s.potential_decision_maker).length})
                   </h4>
-                  <div className="flex flex-wrap gap-3">
+                  <div className="flex flex-wrap gap-2">
                     {stakeholders
                       .filter(stakeholder => stakeholder.potential_decision_maker)
                       .map((stakeholder, index) => {
@@ -3782,8 +3813,8 @@ useEffect(() => {
                             className="relative group"
                           >
                             <div 
-                              className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:scale-110 bg-blue-600 ring-2 ring-green-500 ${
-                                isTooltipVisible ? 'ring-4 ring-blue-300 ring-opacity-50' : ''
+                              className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:scale-105 bg-blue-500 ${
+                                isTooltipVisible ? 'ring-2 ring-blue-300' : ''
                               }`}
                               onClick={() => toggleStakeholderTooltip(stakeholderId)}
                               title="Click to see details"
@@ -3811,10 +3842,10 @@ useEffect(() => {
 
                 {/* Others */}
                 <div>
-                  <h4 className="font-medium text-gray-600 mb-2 text-sm">
+                  <h4 className="font-medium text-gray-600 mb-3 text-sm">
                     Others ({stakeholders.filter(s => !s.potential_decision_maker).length})
                   </h4>
-                  <div className="flex flex-wrap gap-3">
+                  <div className="flex flex-wrap gap-2">
                     {stakeholders
                       .filter(stakeholder => !stakeholder.potential_decision_maker)
                       .map((stakeholder, index) => {
@@ -3827,8 +3858,8 @@ useEffect(() => {
                             className="relative group"
                           >
                             <div 
-                              className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:scale-110 bg-gray-500 ring-2 ring-gray-300 ${
-                                isTooltipVisible ? 'ring-4 ring-blue-300 ring-opacity-50' : ''
+                              className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:scale-105 bg-gray-500 ${
+                                isTooltipVisible ? 'ring-2 ring-blue-300' : ''
                               }`}
                               onClick={() => toggleStakeholderTooltip(stakeholderId)}
                               title="Click to see details"
@@ -3858,36 +3889,43 @@ useEffect(() => {
 
           {/* Last Touch Point Section */}
           {dealInfo && (
-            <div className={`mb-4 p-3 rounded-md ${
+            <div className={`bg-white p-4 rounded-lg shadow-sm border ${
               calculateDaysPassed(dealInfo.endDate) > 10 
-                ? 'bg-red-50' 
-                : 'bg-green-50'
+                ? 'border-red-200 bg-red-50' 
+                : 'border-green-200 bg-green-50'
             }`}>
-              <p className="text-gray-700">
-                <span className="font-semibold">Last Touch Point:</span> {formatDate(dealInfo.endDate)}
-                <span className="text-gray-700 text-sm ml-1">
-                  <b>(been {calculateDaysPassed(dealInfo.endDate)} days)</b>
-                </span>
-              </p>
+              <div className="flex items-center justify-between">
+                <div className="text-sm">
+                  <span className="text-gray-500">Last Touch Point:</span>
+                  <div className="font-medium text-gray-900">{formatDate(dealInfo.endDate)}</div>
+                </div>
+                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                  calculateDaysPassed(dealInfo.endDate) > 10 
+                    ? 'bg-red-100 text-red-700' 
+                    : 'bg-green-100 text-green-700'
+                }`}>
+                  {calculateDaysPassed(dealInfo.endDate)} days ago
+                </div>
+              </div>
             </div>
           )}
 
           {/* Sentiment and Intent Summary Boxes */}
           {timelineData && timelineData.events && (
-            <div className="mb-6 grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Positive Sentiment Incoming Emails */}
-              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
                 <div className="flex items-center">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="p-2 bg-green-50 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
                   </div>
-                  <div className="ml-4">
-                    <h4 className="text-sm font-medium text-gray-600">Positive Incoming Emails</h4>
+                  <div className="ml-3">
+                    <h4 className="text-sm font-medium text-gray-600">Positive Emails</h4>
                     <button 
                       onClick={() => handleMetricClick('positive-incoming')}
-                      className="text-2xl font-bold text-green-600 hover:text-green-800 transition-colors cursor-pointer"
+                      className="text-xl font-bold text-green-600 hover:text-green-700 transition-colors cursor-pointer"
                     >
                       {timelineData.events.filter(e => e.type === 'Incoming Email' && e.sentiment === 'positive').length}
                     </button>
@@ -3896,18 +3934,18 @@ useEffect(() => {
               </div>
               
               {/* Likely/Very Likely to Buy */}
-              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-green-500">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
                 <div className="flex items-center">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="p-2 bg-green-50 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <div className="ml-4">
-                    <h4 className="text-sm font-medium text-gray-600">Positive Buying Signals</h4>
+                  <div className="ml-3">
+                    <h4 className="text-sm font-medium text-gray-600">Positive Signals</h4>
                     <button 
                       onClick={() => handleMetricClick('likely-buy')}
-                      className="text-2xl font-bold text-green-600 hover:text-green-800 transition-colors cursor-pointer"
+                      className="text-xl font-bold text-green-600 hover:text-green-700 transition-colors cursor-pointer"
                     >
                       {timelineData.events.filter(e => 
                         e.type === 'Meeting' && 
@@ -3919,18 +3957,18 @@ useEffect(() => {
               </div>
               
               {/* Less Likely to Buy */}
-              <div className="bg-white rounded-lg shadow p-4 border-l-4 border-red-500">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
                 <div className="flex items-center">
-                  <div className="p-2 bg-red-100 rounded-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="p-2 bg-red-50 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                   </div>
-                  <div className="ml-4">
-                    <h4 className="text-sm font-medium text-gray-600">Less Likely to Buy</h4>
+                  <div className="ml-3">
+                    <h4 className="text-sm font-medium text-gray-600">Less Likely</h4>
                     <button 
                       onClick={() => handleMetricClick('less-likely')}
-                      className="text-2xl font-bold text-red-600 hover:text-red-800 transition-colors cursor-pointer"
+                      className="text-xl font-bold text-red-600 hover:text-red-700 transition-colors cursor-pointer"
                     >
                       {timelineData.events.filter(e => 
                         e.type === 'Meeting' && e.buyer_intent === 'Less likely to buy'
@@ -3944,12 +3982,60 @@ useEffect(() => {
 
           {/* Add Challenges section */}
           {timelineData && timelineData.events && (
-            <div className="mb-6 grid grid-cols-3 gap-4">
-              {/* Pricing Concerns */}
-              <div 
-                className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500 cursor-pointer hover:shadow-lg transition-shadow"
-                onClick={() => handleConcernClick('pricing_concerns')}
-              >
+            <div className="space-y-4">
+              {/* Debug controls for concerns */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-yellow-800">Debug: Concerns Status</span>
+                    <button
+                      onClick={() => {
+                        if (selectedDeal?.name) {
+                          console.log('Manually triggering concerns fetch for:', selectedDeal.name);
+                          concernsFetchedRef.current.delete(selectedDeal.name);
+                          setConcerns([]);
+                          setLoadingConcerns(true);
+                          makeApiCall(`${API_CONFIG.getApiPath('/get-concerns')}?dealName=${encodeURIComponent(selectedDeal.name)}`)
+                            .then(response => {
+                              if (response) {
+                                return response.json();
+                              }
+                              return null;
+                            })
+                            .then(data => {
+                              console.log('Manual concerns fetch result:', data);
+                              if (Array.isArray(data)) {
+                                setConcerns(data);
+                              } else {
+                                setConcerns([]);
+                              }
+                            })
+                            .catch(error => {
+                              console.error('Manual concerns fetch error:', error);
+                              setConcerns([]);
+                            })
+                            .finally(() => {
+                              setLoadingConcerns(false);
+                            });
+                        }
+                      }}
+                      className="px-3 py-1 text-xs bg-yellow-200 text-yellow-800 rounded hover:bg-yellow-300 transition-colors"
+                    >
+                      Re-fetch Concerns
+                    </button>
+                  </div>
+                  <div className="text-xs text-yellow-700 mt-1">
+                    Concerns loaded: {concerns.length} | Loading: {loadingConcerns ? 'true' : 'false'}
+                  </div>
+                </div>
+              )}
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Pricing Concerns */}
+                <div 
+                  className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => handleConcernClick('pricing_concerns')}
+                >
                 <div className="flex items-center">
                   {(() => {
                     const processedConcerns = processConcernsArray(concerns);
@@ -3981,6 +4067,7 @@ useEffect(() => {
                               </span>
                             </div>
                           )}
+
                         </div>
                       </>
                     );
@@ -3990,7 +4077,7 @@ useEffect(() => {
 
               {/* Decision Maker */}
               <div 
-                className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500 cursor-pointer hover:shadow-lg transition-shadow"
+                className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 cursor-pointer hover:shadow-md transition-shadow"
                 onClick={() => handleConcernClick('no_decision_maker')}
               >
                 <div className="flex items-center">
@@ -4033,7 +4120,7 @@ useEffect(() => {
 
               {/* Existing Vendor */}
               <div 
-                className="bg-white rounded-lg shadow p-4 border-l-4 border-orange-500 cursor-pointer hover:shadow-lg transition-shadow"
+                className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 cursor-pointer hover:shadow-md transition-shadow"
                 onClick={() => handleConcernClick('already_has_vendor')}
               >
                 <div className="flex items-center">
@@ -4074,10 +4161,11 @@ useEffect(() => {
                 </div>
               </div>
             </div>
+          </div>
           )}
 
-          <div className="mt-4">
-            <h3 className="text-xl font-semibold mb-2">Deal Timeline: {selectedDeal?.name}</h3>
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Timeline Chart</h3>
             {chartData.length > 0 ? (
               <div className="h-[500px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -4252,7 +4340,7 @@ useEffect(() => {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="text-center py-10 text-gray-600">
+              <div className="text-center py-10 text-gray-500">
                 No timeline events found for this deal.
               </div>
             )}
@@ -4260,7 +4348,7 @@ useEffect(() => {
 
           {/* Add DealLogs component */}
           {timelineData.events && timelineData.events.length > 0 && (
-            <div className="mt-4">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100">
               <DealLogs 
                 events={timelineData.events} 
                 activeFilters={activeEventFilters}

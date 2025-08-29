@@ -277,7 +277,7 @@ const DealTimeline: React.FC = () => {
   const timelineDataRef = useRef<TimelineData | null>(null);
   const selectedDealRef = useRef<Deal | null>(null);
   const allDealsRef = useRef<Deal[]>([]);
-  const concernsFetchedRef = useRef<Set<string>>(new Set());
+
 
   // Timer
   const [elapsedTime, setElapsedTime] = useState<number>(0);
@@ -2863,9 +2863,7 @@ const handleDealChange = useCallback(async (selectedOption: any) => {
   cleanupState();
   setMeetingContacts({}); // Clear meeting contacts when changing deals
   
-  // Clear concerns tracking when changing deals
-  console.log('Clearing concerns tracking for new deal selection');
-  concernsFetchedRef.current.clear();
+
   
   updateState('dealTimeline.selectedDeal', deal);
   setSelectedOption(selectedOption);
@@ -2942,10 +2940,7 @@ const handleRefresh = useCallback(() => {
     cleanupState();
     setMeetingContacts({});
     
-    // Clear concerns tracking for refresh
-    console.log('Clearing concerns tracking for refresh');
-    concernsFetchedRef.current.clear();
-    setConcerns([]); // Clear concerns state
+
     
     // Clear localStorage meetingContacts
     if (typeof window !== 'undefined') {
@@ -2980,114 +2975,17 @@ const handleRefresh = useCallback(() => {
   }
 }, [handleGetTimeline, cleanupState, updateState]);
 
-  // Effect to automatically fetch concerns after timeline loads
+  // Fetch concerns when the selected deal changes
   useEffect(() => {
-    if (!timelineData?.events || !selectedDeal?.name || isUnmounting) {
-      console.log('Skipping concerns fetch - conditions not met:', {
-        hasEvents: !!timelineData?.events,
-        dealName: selectedDeal?.name,
-        isUnmounting
-      });
-      return;
+    // Only fetch concerns after everything else has loaded
+    if (selectedDeal?.name && !loading && timelineData) {
+      fetchConcerns(selectedDeal.name);
     }
-    
-    // Only fetch concerns if we haven't already fetched them for this deal (prevents infinite loops)
-    if (!concernsFetchedRef.current.has(selectedDeal.name)) {
-      console.log('Fetching concerns for deal:', selectedDeal.name);
-      concernsFetchedRef.current.add(selectedDeal.name);
-      
-      // Inline the fetch concerns call to avoid circular dependencies
-      const fetchConcernsInline = async () => {
-        if (!selectedDeal.name) return;
-        
-        console.log('Making API call to fetch concerns for:', selectedDeal.name);
-        setLoadingConcerns(true);
-        try {
-          const response = await makeApiCall(
-            `${API_CONFIG.getApiPath('/get-concerns')}?dealName=${encodeURIComponent(selectedDeal.name)}`
-          );
-          
-          if (response) {
-            const data = await response.json();
-            console.log('Concerns API response:', data);
-            // Handle empty responses properly - set to empty array if null/undefined/empty object
-            if (Array.isArray(data)) {
-              setConcerns(data);
-              console.log('Set concerns to:', data);
-            } else {
-              console.log('Concerns data is not an array, setting to empty array');
-              setConcerns([]);
-            }
-          } else {
-            // If no response, set to empty array
-            console.log('No response from concerns API, setting to empty array');
-            setConcerns([]);
-          }
-        } catch (error) {
-          console.error('Error fetching concerns:', error);
-          setConcerns([]); // Set to empty array instead of null to prevent infinite loops
-        } finally {
-          setLoadingConcerns(false);
-        }
-      };
-      
-      fetchConcernsInline();
-    } else {
-      console.log('Concerns already fetched for deal:', selectedDeal.name);
-    }
-  }, [timelineData?.events, selectedDeal?.name, isUnmounting, makeApiCall]);
+  }, [selectedDeal?.name, fetchConcerns, loading, timelineData]);
 
-  // Fallback effect to ensure concerns are fetched even if timeline data is not available
-  useEffect(() => {
-    if (!selectedDeal?.name || isUnmounting || concerns.length > 0) {
-      return;
-    }
-    
-    // If we have a selected deal but no concerns loaded, try to fetch them
-    if (!concernsFetchedRef.current.has(selectedDeal.name)) {
-      console.log('Fallback: Fetching concerns for deal:', selectedDeal.name);
-      concernsFetchedRef.current.add(selectedDeal.name);
-      
-      const fetchConcernsFallback = async () => {
-        if (!selectedDeal.name) return;
-        
-        console.log('Fallback: Making API call to fetch concerns for:', selectedDeal.name);
-        setLoadingConcerns(true);
-        try {
-          const response = await makeApiCall(
-            `${API_CONFIG.getApiPath('/get-concerns')}?dealName=${encodeURIComponent(selectedDeal.name)}`
-          );
-          
-          if (response) {
-            const data = await response.json();
-            console.log('Fallback: Concerns API response:', data);
-            if (Array.isArray(data)) {
-              setConcerns(data);
-              console.log('Fallback: Set concerns to:', data);
-            } else {
-              setConcerns([]);
-            }
-          } else {
-            setConcerns([]);
-          }
-        } catch (error) {
-          console.error('Fallback: Error fetching concerns:', error);
-          setConcerns([]);
-        } finally {
-          setLoadingConcerns(false);
-        }
-      };
-      
-      fetchConcernsFallback();
-    }
-  }, [selectedDeal?.name, isUnmounting, concerns.length, makeApiCall]);
 
-  // Clean up concerns ref on unmount
-  useEffect(() => {
-    return () => {
-      concernsFetchedRef.current.clear();
-    };
-  }, []);
+
+
 
 // Update the effect that fetches champions to be more robust
 // Effect to automatically fetch champions after timeline loads
@@ -3200,13 +3098,7 @@ useEffect(() => {
 
 // Removed redundant useEffect to prevent infinite loops
 
-// Clear concerns when deal changes to prevent stale data
-useEffect(() => {
-  if (selectedDeal?.name) {
-    setConcerns([]); // Set to empty array instead of null to prevent infinite loops
-    setLoadingConcerns(false);
-  }
-}, [selectedDeal?.name]);
+
 
 // Clear stakeholders when deal changes to prevent stale data
 useEffect(() => {
@@ -3992,7 +3884,6 @@ useEffect(() => {
                       onClick={() => {
                         if (selectedDeal?.name) {
                           console.log('Manually triggering concerns fetch for:', selectedDeal.name);
-                          concernsFetchedRef.current.delete(selectedDeal.name);
                           setConcerns([]);
                           setLoadingConcerns(true);
                           makeApiCall(`${API_CONFIG.getApiPath('/get-concerns')}?dealName=${encodeURIComponent(selectedDeal.name)}`)

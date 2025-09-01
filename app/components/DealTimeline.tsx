@@ -5,7 +5,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import Select from 'react-select';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend, Brush, ReferenceArea
+  ResponsiveContainer, Legend, Brush, ReferenceArea, LineChart, Line
 } from 'recharts';
 import { Deal } from '../context/AppContext';
 import { API_CONFIG } from '../utils/config';
@@ -4053,6 +4053,226 @@ useEffect(() => {
               </div>
             </div>
           </div>
+          )}
+
+          {/* Add Sentiment Trends Chart */}
+          {timelineData && timelineData.events && (
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 mb-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Sentiment Trends</h3>
+              {(() => {
+                // Process events to create sentiment trend data
+                const sentimentData = (timelineData.events as Event[])
+                  .filter(event => {
+                    const eventType = event.type || event.event_type;
+                    // Only include events with sentiment or buyer intent
+                    // Exclude outgoing emails with positive sentiment
+                    if (eventType === 'Outgoing Email' && event.sentiment === 'positive') {
+                      return false;
+                    }
+                    return (eventType === 'Incoming Email' || eventType === 'Outgoing Email') && event.sentiment ||
+                           eventType === 'Meeting' && event.buyer_intent;
+                  })
+                  .map(event => {
+                    const eventType = event.type || event.event_type;
+                    const eventDate = event.date_str || event.event_date?.split('T')[0];
+                    
+                    let sentimentCategory = '';
+                    
+                    if (eventType === 'Meeting' && event.buyer_intent) {
+                      // Convert buyer intent to sentiment category
+                      switch (event.buyer_intent) {
+                        case 'Very likely to buy':
+                        case 'Likely to buy':
+                          sentimentCategory = 'Positive';
+                          break;
+                        case 'Neutral':
+                          sentimentCategory = 'Neutral';
+                          break;
+                        case 'Less likely to buy':
+                          sentimentCategory = 'Negative';
+                          break;
+                        default:
+                          sentimentCategory = 'Unknown';
+                      }
+                    } else if (event.sentiment) {
+                      // Convert email sentiment to category
+                      switch (event.sentiment) {
+                        case 'positive':
+                          sentimentCategory = 'Positive';
+                          break;
+                        case 'neutral':
+                          sentimentCategory = 'Neutral';
+                          break;
+                        case 'negative':
+                          sentimentCategory = 'Negative';
+                          break;
+                        default:
+                          sentimentCategory = 'Unknown';
+                      }
+                    }
+                    
+                    return {
+                      date: eventDate,
+                      sentimentCategory,
+                      eventType,
+                      subject: event.subject || 'No subject',
+                      time: event.time_str || event.event_date?.split('T')[1] || ''
+                    };
+                  })
+                  .filter(item => item.sentimentCategory !== '');
+
+                if (sentimentData.length === 0) {
+                  return (
+                    <div className="text-center py-10 text-gray-500">
+                      No sentiment data available for this deal.
+                    </div>
+                  );
+                }
+
+                // Group data into weekly buckets
+                const weeklyData = (() => {
+                  const weeklyBuckets: Record<string, { 
+                    weekStart: string; 
+                    Positive: number; 
+                    Neutral: number; 
+                    Negative: number;
+                  }> = {};
+
+                  sentimentData.forEach(item => {
+                    if (!item.date) return;
+                    
+                    // Skip unknown sentiments
+                    if (item.sentimentCategory === 'Unknown') return;
+                    
+                    const date = new Date(item.date);
+                    const weekStart = new Date(date);
+                    weekStart.setDate(date.getDate() - date.getDay()); // Start of week (Sunday)
+                    const weekKey = weekStart.toISOString().split('T')[0];
+                    
+                    if (!weeklyBuckets[weekKey]) {
+                      weeklyBuckets[weekKey] = {
+                        weekStart: weekKey,
+                        Positive: 0,
+                        Neutral: 0,
+                        Negative: 0
+                      };
+                    }
+                    
+                    weeklyBuckets[weekKey][item.sentimentCategory as keyof typeof weeklyBuckets[typeof weekKey]]++;
+                  });
+
+                  return Object.values(weeklyBuckets).sort((a, b) => 
+                    new Date(a.weekStart).getTime() - new Date(b.weekStart).getTime()
+                  );
+                })();
+
+                return (
+                  <div className="h-[400px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={weeklyData}
+                        margin={{ top: 20, right: 30, left: 30, bottom: 20 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="weekStart" 
+                          tickFormatter={(value) => {
+                            const date = new Date(value);
+                            return date.toLocaleDateString('en-US', { 
+                              month: 'short', 
+                              day: '2-digit' 
+                            });
+                          }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                          tickMargin={15}
+                        />
+                        <YAxis 
+                          domain={[0, 'dataMax + 1']}
+                          tickFormatter={(value) => value.toString()}
+                        />
+                        <Tooltip 
+                          content={({ active, payload, label }) => {
+                            if (active && payload && payload.length) {
+                              const data = payload[0].payload;
+                              const weekStart = new Date(label);
+                              const weekEnd = new Date(weekStart);
+                              weekEnd.setDate(weekStart.getDate() + 6);
+                              
+                              return (
+                                <div className="bg-white p-3 shadow-lg rounded-md border border-gray-200">
+                                  <p className="font-medium text-gray-900">
+                                    Week of {weekStart.toLocaleDateString('en-US', { 
+                                      month: 'long', 
+                                      day: 'numeric' 
+                                    })} - {weekEnd.toLocaleDateString('en-US', { 
+                                      month: 'long', 
+                                      day: 'numeric',
+                                      year: 'numeric'
+                                    })}
+                                  </p>
+                                  <div className="mt-2 space-y-1">
+                                    <p className="text-sm text-gray-600">
+                                      <span className="font-medium text-green-600">Positive:</span> {data.Positive}
+                                    </p>
+                                    <p className="text-sm text-gray-600">
+                                      <span className="font-medium text-yellow-600">Neutral:</span> {data.Neutral}
+                                    </p>
+                                    <p className="text-sm text-gray-600">
+                                      <span className="font-medium text-red-600">Negative:</span> {data.Negative}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Legend 
+                          content={() => (
+                            <div className="flex flex-wrap items-center justify-center gap-4 mt-4">
+                              <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 bg-green-500"></div>
+                                <span className="text-sm text-gray-600">Positive</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 bg-yellow-500"></div>
+                                <span className="text-sm text-gray-600">Neutral</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 bg-red-600"></div>
+                                <span className="text-sm text-gray-600">Negative</span>
+                              </div>
+                            </div>
+                          )}
+                        />
+                        
+                        {/* Single stacked bar per week */}
+                        <Bar 
+                          dataKey="Positive" 
+                          stackId="stack" 
+                          fill="#10b981" 
+                          name="Positive"
+                        />
+                        <Bar 
+                          dataKey="Negative" 
+                          stackId="stack" 
+                          fill="#991b1b" 
+                          name="Negative"
+                        />
+                        <Bar 
+                          dataKey="Neutral" 
+                          stackId="stack" 
+                          fill="#f59e0b" 
+                          name="Neutral"
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                );
+              })()}
+            </div>
           )}
 
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">

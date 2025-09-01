@@ -336,7 +336,7 @@ const OwnerAnalysis: React.FC = () => {
         
         {/* Header */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-          <h1 className="text-3xl font-bold text-gray-900">Sentiment Dashboard</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Customer Signals</h1>
         </div>
 
         {/* Performance Metrics Cards */}

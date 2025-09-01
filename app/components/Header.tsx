@@ -59,7 +59,7 @@ const Header: React.FC = () => {
               </Link>
               <Link href="/deals-by-stage" 
                     className={`px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${isActive('/deals-by-stage')}`}>
-                Pipeline Explorer
+                Pipe Explorer
               </Link>
               <Link href="/deal-timeline" 
                     className={`px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${isActive('/deal-timeline')}`}>
@@ -67,7 +67,7 @@ const Header: React.FC = () => {
               </Link>
               <Link href="/owner-analysis" 
                     className={`px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${isActive('/owner-analysis')}`}>
-                Owner Analysis
+                Signals
               </Link>
             </nav>
           </div>

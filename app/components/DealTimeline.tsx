@@ -1275,8 +1275,8 @@ const DealTimeline: React.FC = () => {
     if (!hasMounted || isUrlProcessed) return;
     
     const searchParams = new URLSearchParams(window.location.search);
-    const dealName = searchParams.get('dealName');
-    const autoload = searchParams.get('autoload') === 'true';
+    const dealName = searchParams.get('dealName') || searchParams.get('deal_name');
+    const autoload = searchParams.get('autoload') === 'true' || searchParams.get('auto_load') === 'true';
     
     if (dealName) {
       const decodedDealName = decodeURIComponent(dealName);
@@ -1291,22 +1291,34 @@ const DealTimeline: React.FC = () => {
         updateState('dealTimeline.selectedDeal', matchingDeal);
         setSelectedOption({ value: matchingDeal.id, label: matchingDeal.name });
         setCurrentDealId(matchingDeal.id);
+        
+        if (autoload) {
+          loadTimelineDirectly(decodedDealName);
+        }
+        // Mark as processed only when we successfully find and process the deal
+        setIsUrlProcessed(true);
+      } else if (allDeals.length === 0) {
+        // If allDeals is empty, don't mark as processed yet - wait for deals to load
+        console.log('Waiting for deals to load before processing URL for:', decodedDealName);
+        return;
       } else {
-        // If not found, create a temporary deal object
+        // If allDeals is populated but deal not found, create temporary deal
         const tempDeal = {
           name: decodedDealName,
           id: 'pending'
         };
         updateState('dealTimeline.selectedDeal', tempDeal);
         setSelectedOption({ value: 'pending', label: decodedDealName });
+        
+        if (autoload) {
+          loadTimelineDirectly(decodedDealName);
+        }
+        setIsUrlProcessed(true);
       }
-      
-      if (autoload) {
-        loadTimelineDirectly(decodedDealName);
-      }
+    } else {
+      // No dealName in URL, mark as processed
+      setIsUrlProcessed(true);
     }
-    
-    setIsUrlProcessed(true);
   }, [hasMounted, isUrlProcessed, allDeals, updateState, loadTimelineDirectly]);
 
 // Fetch all deals after component mounts and when needed
@@ -4476,15 +4488,11 @@ useEffect(() => {
           )}
         </div>
       ) : selectedDeal ? (
-        <div className="text-center py-10 text-gray-600">
-          <p className="mb-4">No timeline data loaded yet.</p>
-          <button 
-            onClick={() => handleGetTimeline(selectedDeal)} 
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-            disabled={loading}
-          >
-            Load Timeline
-          </button>
+        <div className="text-center py-10">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+          <p className="mt-3 text-lg font-medium text-gray-600">
+            Loading timeline data for <b>{selectedDeal?.name}</b>...
+          </p>
         </div>
       ) : null}
 

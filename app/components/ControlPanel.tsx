@@ -509,49 +509,69 @@ const ControlPanel: React.FC = () => {
 
   // Stat boxes component
   const StatBoxes = () => {
-    // Find the data for each stage
-    const proposalData = pipelineData.find(item => item.stage === "4. Proposal & Negotiation") || { count: 0, amount: 0 };
-    const technicalData = pipelineData.find(item => item.stage === "3. Technical Validation") || { count: 0, amount: 0 };
-    const nurtureData = pipelineData.find(item => item.stage === "Closed Active Nurture") || { count: 0, amount: 0 };
+    // Function to get display name for stages
+    const getDisplayName = (stage: string) => {
+      switch (stage) {
+        case "4. Proposal & Negotiation":
+          return "Post Pilot Negotiations";
+        case "3. Technical Validation":
+          return "Active Pilots";
+        case "Closed Active Nurture":
+          return "Active Nurture";
+        case "0. Identification":
+          return "Identification";
+        case "1. Sales Qualification":
+          return "Sales Qualification";
+        case "2. Needs Analysis & Solution Mapping":
+          return "Needs Analysis";
+        case "Waiting for Signature":
+          return "Waiting for Signature";
+        case "Closed Won":
+          return "Closed Won";
+        case "Renew/Closed won":
+          return "Renewed/Closed Won";
+        case "Closed Lost":
+          return "Closed Lost";
+        case "Closed Marketing Nurture":
+          return "Marketing Nurture";
+        case "Assessment":
+          return "Assessment";
+        default:
+          return stage;
+      }
+    };
+
+    // Sort stages by funnel order for consistent display
+    const sortedPipelineData = [...pipelineData].sort((a, b) => {
+      const aOrder = funnelOrder.indexOf(a.stage);
+      const bOrder = funnelOrder.indexOf(b.stage);
+      
+      if (aOrder >= 0 && bOrder >= 0) {
+        return aOrder - bOrder;
+      }
+      if (aOrder >= 0) return -1;
+      if (bOrder >= 0) return 1;
+      return a.stage.localeCompare(b.stage);
+    });
     
     return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {/* Proposal & Negotiation Box */}
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6 flex flex-col items-center justify-center text-center transition-colors">
-          <h3 className="text-sm font-medium text-black dark:text-gray-400 mb-1"><b>Post Pilot Negotiations</b></h3>
-
-          <button 
-          onClick={() => navigateToStageDetails("4. Proposal & Negotiation")}
-          className="text-4xl font-bold text-blue-600 dark:text-blue-400 mb-2 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
-          >
-            {proposalData.count}
-          </button>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{formatCurrency(proposalData.amount)}</p>
-        </div>
-        
-        {/* Technical Validation Box */}
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6 flex flex-col items-center justify-center text-center transition-colors">
-          <h3 className="text-sm font-medium text-black dark:text-gray-400 mb-1"><b>Active Pilots</b></h3>
-          <button 
-            onClick={() => navigateToStageDetails("3. Technical Validation")}
-            className="text-4xl font-bold text-blue-600 dark:text-blue-400 mb-2 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
-          >
-            {technicalData.count}
-          </button>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{formatCurrency(technicalData.amount)}</p>
-        </div>
-        
-        {/* Closed Active Nurture Box */}
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6 flex flex-col items-center justify-center text-center transition-colors">
-          <h3 className="text-sm font-medium text-black dark:text-gray-400 mb-1"><b>Active Nurture</b></h3>
-          <button 
-            onClick={() => navigateToStageDetails("Closed Active Nurture")}
-            className="text-4xl font-bold text-blue-600 dark:text-blue-400 mb-2 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
-          >
-            {nurtureData.count}
-          </button>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{formatCurrency(nurtureData.amount)}</p>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 mb-8">
+        {sortedPipelineData.map((stageData, index) => (
+          <div key={index} className="bg-white dark:bg-slate-800 rounded-lg shadow p-4 flex flex-col items-center justify-center text-center transition-colors min-h-[120px]">
+            <h3 className="text-xs font-medium text-black dark:text-gray-400 mb-2 text-center leading-tight">
+              <b>{getDisplayName(stageData.stage)}</b>
+            </h3>
+            <button 
+              onClick={() => navigateToStageDetails(stageData.stage)}
+              className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-1 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
+            >
+              {stageData.count}
+            </button>
+            <p className="text-xs text-gray-500 dark:text-gray-400 text-center leading-tight">
+              {formatCurrency(stageData.amount)}
+            </p>
+          </div>
+        ))}
       </div>
     );
   };
@@ -608,7 +628,7 @@ const ControlPanel: React.FC = () => {
     return (
       <div className="p-6 bg-gray-50 dark:bg-slate-900 transition-colors">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pipeline Performance</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pipe Status</h1>
           <button
             onClick={handleRefresh}
             className="px-3 py-1 bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white rounded transition-colors text-sm flex items-center"
@@ -635,7 +655,7 @@ const ControlPanel: React.FC = () => {
   return (
     <div className="p-6 bg-gray-50 dark:bg-slate-900 transition-colors">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pipeline Performance</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pipeline Status</h1>
         
         {/* Refresh button with last updated timestamp */}
         <div className="flex items-center space-x-4">

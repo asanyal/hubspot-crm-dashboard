@@ -10,6 +10,19 @@ interface SentimentData {
   deals: string[];
 }
 
+// Raw API response structure
+interface RawOwnerPerformance {
+  _id: string;
+  owner: string;
+  deals_performance: {
+    'likely to buy': SentimentData;
+    'very likely to buy': SentimentData;
+    'less likely to buy': SentimentData;
+    'neutral': SentimentData;
+  };
+}
+
+// Processed structure for UI (maintains existing naming)
 interface OwnerPerformance {
   _id: string;
   owner: string;
@@ -18,6 +31,10 @@ interface OwnerPerformance {
     negative: SentimentData;
     neutral: SentimentData;
   };
+}
+
+interface RawOwnerAnalysisData {
+  owners: RawOwnerPerformance[];
 }
 
 interface OwnerAnalysisData {
@@ -106,12 +123,53 @@ const OwnerAnalysis: React.FC = () => {
     return response.json();
   }, [browserId, isInitialized]);
 
-  // Fetch owner performance data
-  const fetchOwnerData = useCallback(async () => {
+  // Fetch owner performance data and transform to expected format
+  const fetchOwnerData = useCallback(async (): Promise<OwnerAnalysisData> => {
     try {
       const apiPath = API_CONFIG.getApiPath('/deal-owner-performance');
-      const result = await makeApiCall(apiPath);
-      return result;
+      const rawResult: RawOwnerAnalysisData = await makeApiCall(apiPath);
+      
+      // Transform the raw API response to match the expected UI format
+      const transformedResult: OwnerAnalysisData = {
+        owners: rawResult.owners.map(owner => {
+          // Combine "likely to buy" and "very likely to buy" into "positive"
+          const positiveCount = (owner.deals_performance['likely to buy']?.count || 0) + 
+                               (owner.deals_performance['very likely to buy']?.count || 0);
+          const positiveDeals = [
+            ...(owner.deals_performance['likely to buy']?.deals || []),
+            ...(owner.deals_performance['very likely to buy']?.deals || [])
+          ];
+          
+          // Map "less likely to buy" to "negative"
+          const negativeCount = owner.deals_performance['less likely to buy']?.count || 0;
+          const negativeDeals = owner.deals_performance['less likely to buy']?.deals || [];
+          
+          // Keep neutral as is
+          const neutralCount = owner.deals_performance['neutral']?.count || 0;
+          const neutralDeals = owner.deals_performance['neutral']?.deals || [];
+          
+          return {
+            _id: owner._id,
+            owner: owner.owner,
+            deals_performance: {
+              positive: {
+                count: positiveCount,
+                deals: positiveDeals
+              },
+              negative: {
+                count: negativeCount,
+                deals: negativeDeals
+              },
+              neutral: {
+                count: neutralCount,
+                deals: neutralDeals
+              }
+            }
+          };
+        })
+      };
+      
+      return transformedResult;
     } catch (error) {
       console.error('Error fetching owner performance data:', error);
       throw error;
@@ -226,7 +284,9 @@ const OwnerAnalysis: React.FC = () => {
           {deals.map((deal, index) => (
             <a
               key={index}
-              href={`/deal-timeline?deal_name=${encodeURIComponent(deal)}&auto_load=true`}
+              href={`/deal-timeline?dealName=${encodeURIComponent(deal)}&auto_load=true`}
+              target="_blank"
+              rel="noopener noreferrer"
               className={`text-sm hover:underline ${colorClass} block truncate`}
               title={deal}
             >
@@ -238,26 +298,10 @@ const OwnerAnalysis: React.FC = () => {
     );
   }, []);
 
-  // Prepare data for charts
-  const chartData = processedData.map(owner => ({
-    name: owner.owner,
-    Positive: owner.deals_performance.positive.count,
-    Neutral: owner.deals_performance.neutral.count,
-    Negative: owner.deals_performance.negative.count,
-    totalInteractions: owner.totalInteractions,
-    positiveRatio: owner.positiveRatio
-  }));
-
   const teamPieData = teamSummary ? [
     { name: 'Positive', value: teamSummary.totalPositive, color: COLORS.positive },
     { name: 'Neutral', value: teamSummary.totalNeutral, color: COLORS.neutral },
     { name: 'Negative', value: teamSummary.totalNegative, color: COLORS.negative }
-  ] : [];
-
-  const selectedOwnerPieData = selectedOwner ? [
-    { name: 'Positive', value: selectedOwner.deals_performance.positive.count, color: COLORS.positive },
-    { name: 'Neutral', value: selectedOwner.deals_performance.neutral.count, color: COLORS.neutral },
-    { name: 'Negative', value: selectedOwner.deals_performance.negative.count, color: COLORS.negative }
   ] : [];
 
   if (loading) {
@@ -292,34 +336,33 @@ const OwnerAnalysis: React.FC = () => {
         
         {/* Header */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-          <h1 className="text-3xl font-bold text-gray-900">Sentiment Analysis Dashboard</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Sentiment Dashboard</h1>
         </div>
 
         {/* Performance Metrics Cards */}
         {teamSummary && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-800">Total Captured Sentiments</h3>
+              <h3 className="text-lg font-semibold text-gray-800">Captured Signals</h3>
               <p className="text-3xl font-bold text-blue-600 mt-2">{teamSummary.totalInteractions.toLocaleString()}</p>
               <p className="text-sm text-gray-500 mt-1">Across all owners</p>
             </div>
             
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-800">Positive Sentiment</h3>
-              <p className="text-3xl font-bold text-green-600 mt-2">{teamSummary.averagePositiveRatio.toFixed(1)}%</p>
+              <h3 className="text-lg font-semibold text-gray-800">Positive Signals</h3>
+              <p className="text-3xl font-bold text-green-600 mt-2">{teamSummary.totalPositive.toLocaleString()}</p>
               <p className="text-sm text-gray-500 mt-1">Team average</p>
             </div>
-            
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-800">Top Performer</h3>
-              <p className="text-xl font-bold text-purple-600 mt-2">{teamSummary.topPerformer}</p>
-              <p className="text-sm text-gray-500 mt-1">Highest positive ratio</p>
+              <h3 className="text-lg font-semibold text-gray-800">Negative Signals</h3>
+              <p className="text-3xl font-bold text-red-600 mt-2">{teamSummary.totalNegative.toLocaleString()}</p>
+              <p className="text-sm text-gray-500 mt-1">Total</p>
             </div>
-            
+
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-800">Active Owners</h3>
-              <p className="text-3xl font-bold text-indigo-600 mt-2">{processedData.length}</p>
-              <p className="text-sm text-gray-500 mt-1">With interactions</p>
+              <h3 className="text-lg font-semibold text-gray-800">Neutral Sentiments</h3>
+              <p className="text-3xl font-bold text-yellow-600 mt-2">{teamSummary.totalNeutral.toLocaleString()}</p>
+              <p className="text-sm text-gray-500 mt-1">Total</p>
             </div>
           </div>
         )}
@@ -329,7 +372,7 @@ const OwnerAnalysis: React.FC = () => {
           
           {/* Team Distribution Pie Chart */}
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">Team Distribution</h3>
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">Signal Distribution</h3>
             {teamPieData.length > 0 && (
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
@@ -356,7 +399,7 @@ const OwnerAnalysis: React.FC = () => {
           </div>
 
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-            <h3 className="text-xl font-semibold text-gray-800 mb-4">Deal Owner Breakdown</h3>
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">Owner Signal Breakdown</h3>
             <div className="mb-4">
               <select 
                 className="w-full p-2 border border-gray-300 rounded-md"
@@ -392,7 +435,7 @@ const OwnerAnalysis: React.FC = () => {
                       <div className="text-2xl font-bold text-green-600">
                         {selectedOwner.deals_performance.positive.count}
                       </div>
-                      <div className="text-sm text-gray-600">Positive</div>
+                      <div className="text-sm text-gray-600">Positive Signals</div>
                     </div>
                   </button>
                   
@@ -408,7 +451,7 @@ const OwnerAnalysis: React.FC = () => {
                       <div className="text-2xl font-bold text-yellow-600">
                         {selectedOwner.deals_performance.neutral.count}
                       </div>
-                      <div className="text-sm text-gray-600">Neutral</div>
+                      <div className="text-sm text-gray-600">Neutral Signals</div>
                     </div>
                   </button>
                   
@@ -424,7 +467,7 @@ const OwnerAnalysis: React.FC = () => {
                       <div className="text-2xl font-bold text-red-600">
                         {selectedOwner.deals_performance.negative.count}
                       </div>
-                      <div className="text-sm text-gray-600">Negative</div>
+                      <div className="text-sm text-gray-600">Negative Signals</div>
                     </div>
                   </button>
                 </div>
@@ -441,7 +484,9 @@ const OwnerAnalysis: React.FC = () => {
                           {selectedOwner.deals_performance[selectedSentiment].deals.map((deal, index) => (
                             <a
                               key={index}
-                              href={`/deal-timeline?deal_name=${encodeURIComponent(deal)}&auto_load=true`}
+                              href={`/deal-timeline?dealName=${encodeURIComponent(deal)}&auto_load=true`}
+                              target="_blank"
+                              rel="noopener noreferrer"
                               className={`text-sm hover:underline block p-2 rounded hover:bg-white transition-colors ${
                                 selectedSentiment === 'positive' ? 'text-green-600 hover:text-green-800' :
                                 selectedSentiment === 'neutral' ? 'text-yellow-600 hover:text-yellow-800' :
@@ -479,9 +524,9 @@ const OwnerAnalysis: React.FC = () => {
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Owner</th>
                   <th className="text-right py-3 px-4 font-semibold text-gray-700">Positive Ratio</th>
                   <th className="text-right py-3 px-4 font-semibold text-gray-700">Total Interactions</th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-700">Positive</th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-700">Neutral</th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-700">Negative</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-700">Positive Signals</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-700">Neutral Signals</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-700">Negative Signals</th>
                 </tr>
               </thead>
               <tbody>
@@ -556,8 +601,6 @@ const OwnerAnalysis: React.FC = () => {
           </div>
         </div>
 
-
-
         {/* Summary Statistics */}
         {teamSummary && (
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
@@ -569,7 +612,7 @@ const OwnerAnalysis: React.FC = () => {
                 <p className="text-gray-600">
                   <span className="font-medium text-green-600">
                     {((teamSummary.totalPositive / teamSummary.totalInteractions) * 100).toFixed(1)}%
-                  </span> of all team interactions are positive
+                  </span> of all team interactions lead to positive buying signals
                 </p>
                 <p className="text-gray-600">
                   <span className="font-medium text-red-600">
@@ -579,7 +622,7 @@ const OwnerAnalysis: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <h4 className="font-semibold text-gray-700">Team Distribution</h4>
+                <h4 className="font-semibold text-gray-700">Signal Distribution</h4>
                 <p className="text-gray-600">
                   <span className="font-medium">{processedData.length}</span> active deal owners
                 </p>
@@ -587,18 +630,6 @@ const OwnerAnalysis: React.FC = () => {
                   Average of <span className="font-medium">
                     {(teamSummary.totalInteractions / processedData.length).toFixed(0)}
                   </span> interactions per owner
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="font-semibold text-gray-700">Performance Range</h4>
-                <p className="text-gray-600">
-                  Top performer: <span className="font-medium text-green-600">{teamSummary.topPerformer}</span>
-                </p>
-                <p className="text-gray-600">
-                  Highest ratio: <span className="font-medium">
-                    {processedData[0]?.positiveRatio.toFixed(1)}%
-                  </span>
                 </p>
               </div>
             </div>

@@ -349,20 +349,59 @@ const OwnerAnalysis: React.FC = () => {
             </div>
             
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-800">Positive Signals</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-gray-800">Positive Signals</h3>
+                <div className="relative group">
+                  <button className="w-4 h-4 rounded-full border border-gray-400 text-gray-600 text-xs flex items-center justify-center hover:bg-gray-100 transition-colors">
+                    ?
+                  </button>
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 w-64">
+                    <div className="text-center leading-relaxed">
+                      A positive signal means the buyer demonstrated intent to buy/use the product and/or at some point in the conversation, they leaned in and showed signs that their pains could be addressed, were interested in next steps and eventually buy the product.
+                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
+              </div>
               <p className="text-3xl font-bold text-green-600 mt-2">{teamSummary.totalPositive.toLocaleString()}</p>
-              <p className="text-sm text-gray-500 mt-1">Team average</p>
+              <p className="text-sm text-gray-500 mt-1">Across all owners</p>
             </div>
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-800">Negative Signals</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-gray-800">Negative Signals</h3>
+                <div className="relative group">
+                  <button className="w-4 h-4 rounded-full border border-gray-400 text-gray-600 text-xs flex items-center justify-center hover:bg-gray-100 transition-colors">
+                    ?
+                  </button>
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 w-64">
+                    <div className="text-center leading-relaxed">
+                      A negative signal reflects the buyer showing disinterest, confusion, or explicit dissatisfaction.
+                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
+              </div>
               <p className="text-3xl font-bold text-red-600 mt-2">{teamSummary.totalNegative.toLocaleString()}</p>
-              <p className="text-sm text-gray-500 mt-1">Total</p>
+              <p className="text-sm text-gray-500 mt-1">Across all owners</p>
             </div>
 
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-800">Neutral Sentiments</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-gray-800">Neutral Signals</h3>
+                <div className="relative group">
+                  <button className="w-4 h-4 rounded-full border border-gray-400 text-gray-600 text-xs flex items-center justify-center hover:bg-gray-100 transition-colors">
+                    ?
+                  </button>
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 w-80">
+                    <div className="text-center leading-relaxed">
+                      A neutral signal reflects a buyer expressing neither interest nor negative signals. It could just mean its a regular meeting (without any intent), or could point to a negative signal due to the "Mom test" principle.
+                    </div>
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                  </div>
+                </div>
+              </div>
               <p className="text-3xl font-bold text-yellow-600 mt-2">{teamSummary.totalNeutral.toLocaleString()}</p>
-              <p className="text-sm text-gray-500 mt-1">Total</p>
+              <p className="text-sm text-gray-500 mt-1">Across all owners</p>
             </div>
           </div>
         )}
@@ -435,7 +474,20 @@ const OwnerAnalysis: React.FC = () => {
                       <div className="text-2xl font-bold text-green-600">
                         {selectedOwner.deals_performance.positive.count}
                       </div>
-                      <div className="text-sm text-gray-600">Positive Signals</div>
+                      <div className="flex items-center justify-center gap-1 text-sm text-gray-600">
+                        Positive Signals
+                        <div className="relative group">
+                          <button className="w-3 h-3 rounded-full border border-gray-400 text-gray-600 text-xs flex items-center justify-center hover:bg-gray-100 transition-colors">
+                            ?
+                          </button>
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 w-64">
+                            <div className="text-center leading-relaxed">
+                              A positive signal means the buyer demonstrated intent at some point in the conversation, they leaned in, and showed signs of using the product.
+                            </div>
+                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </button>
                   
@@ -451,7 +503,20 @@ const OwnerAnalysis: React.FC = () => {
                       <div className="text-2xl font-bold text-yellow-600">
                         {selectedOwner.deals_performance.neutral.count}
                       </div>
-                      <div className="text-sm text-gray-600">Neutral Signals</div>
+                      <div className="flex items-center justify-center gap-1 text-sm text-gray-600">
+                        Neutral Signals
+                        <div className="relative group">
+                          <button className="w-3 h-3 rounded-full border border-gray-400 text-gray-600 text-xs flex items-center justify-center hover:bg-gray-100 transition-colors">
+                            ?
+                          </button>
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 w-80">
+                            <div className="text-center leading-relaxed">
+                              A neutral signal reflects a buyer expressing neither interest nor negative signals. It could just mean its a regular meeting (without any intent), or could point to a negative signal due to the "Mom test" principle.
+                            </div>
+                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </button>
                   
@@ -467,7 +532,20 @@ const OwnerAnalysis: React.FC = () => {
                       <div className="text-2xl font-bold text-red-600">
                         {selectedOwner.deals_performance.negative.count}
                       </div>
-                      <div className="text-sm text-gray-600">Negative Signals</div>
+                      <div className="flex items-center justify-center gap-1 text-sm text-gray-600">
+                        Negative Signals
+                        <div className="relative group">
+                          <button className="w-3 h-3 rounded-full border border-gray-400 text-gray-600 text-xs flex items-center justify-center hover:bg-gray-100 transition-colors">
+                            ?
+                          </button>
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 w-64">
+                            <div className="text-center leading-relaxed">
+                              A negative signal reflects the buyer showing disinterest, confusion, or explicit dissatisfaction.
+                            </div>
+                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </button>
                 </div>
@@ -524,9 +602,54 @@ const OwnerAnalysis: React.FC = () => {
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Owner</th>
                   <th className="text-right py-3 px-4 font-semibold text-gray-700">Positive Ratio</th>
                   <th className="text-right py-3 px-4 font-semibold text-gray-700">Total Interactions</th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-700">Positive Signals</th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-700">Neutral Signals</th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-700">Negative Signals</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-700">
+                    <div className="flex items-center justify-end gap-1">
+                      Positive Signals
+                      <div className="relative group">
+                        <button className="w-3 h-3 rounded-full border border-gray-400 text-gray-600 text-xs flex items-center justify-center hover:bg-gray-100 transition-colors">
+                          ?
+                        </button>
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 w-64">
+                          <div className="text-center leading-relaxed">
+                            A positive signal means the buyer demonstrated intent at some point in the conversation, they leaned in, and showed signs of using the product.
+                          </div>
+                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-700">
+                    <div className="flex items-center justify-end gap-1">
+                      Neutral Signals
+                      <div className="relative group">
+                        <button className="w-3 h-3 rounded-full border border-gray-400 text-gray-600 text-xs flex items-center justify-center hover:bg-gray-100 transition-colors">
+                          ?
+                        </button>
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 w-80">
+                          <div className="text-center leading-relaxed">
+                            A neutral signal reflects a buyer expressing neither interest nor negative signals. It could just mean its a regular meeting (without any intent), or could point to a negative signal due to the "Mom test" principle.
+                          </div>
+                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-700">
+                    <div className="flex items-center justify-end gap-1">
+                      Negative Signals
+                      <div className="relative group">
+                        <button className="w-3 h-3 rounded-full border border-gray-400 text-gray-600 text-xs flex items-center justify-center hover:bg-gray-100 transition-colors">
+                          ?
+                        </button>
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-10 w-64">
+                          <div className="text-center leading-relaxed">
+                            A negative signal reflects the buyer showing disinterest, confusion, or explicit dissatisfaction.
+                          </div>
+                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody>

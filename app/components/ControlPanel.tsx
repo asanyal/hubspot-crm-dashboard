@@ -509,6 +509,10 @@ const ControlPanel: React.FC = () => {
 
   // Stat boxes component
   const StatBoxes = () => {
+    const [currentPage, setCurrentPage] = useState(0);
+    const [cardsPerPage, setCardsPerPage] = useState(3);
+    const containerRef = useRef<HTMLDivElement>(null);
+    
     // Function to get display name for stages
     const getDisplayName = (stage: string) => {
       switch (stage) {
@@ -554,24 +558,129 @@ const ControlPanel: React.FC = () => {
       return a.stage.localeCompare(b.stage);
     });
     
+    // Calculate optimal cards per page based on container width
+    const calculateCardsPerPage = useCallback(() => {
+      if (!containerRef.current) return 3;
+      
+      const containerWidth = containerRef.current.offsetWidth;
+      const cardWidth = 140; // Card width + gap (128px + 12px gap)
+      const availableWidth = containerWidth - 120; // Account for carat buttons and spacing
+      
+      if (availableWidth <= 0) return 1;
+      
+      const optimalCards = Math.floor(availableWidth / cardWidth);
+      return Math.max(1, Math.min(optimalCards, sortedPipelineData.length));
+    }, [sortedPipelineData.length]);
+    
+    // Update cards per page when container size changes
+    useEffect(() => {
+      const updateCardsPerPage = () => {
+        const newCardsPerPage = calculateCardsPerPage();
+        if (newCardsPerPage !== cardsPerPage) {
+          setCardsPerPage(newCardsPerPage);
+          setCurrentPage(0); // Reset to first page when changing cards per page
+        }
+      };
+      
+      updateCardsPerPage();
+      
+      // Add resize listener
+      const resizeObserver = new ResizeObserver(updateCardsPerPage);
+      if (containerRef.current) {
+        resizeObserver.observe(containerRef.current);
+      }
+      
+      return () => {
+        resizeObserver.disconnect();
+      };
+    }, [calculateCardsPerPage, cardsPerPage]);
+    
+    const totalPages = Math.ceil(sortedPipelineData.length / cardsPerPage);
+    const startIndex = currentPage * cardsPerPage;
+    const endIndex = startIndex + cardsPerPage;
+    const currentCards = sortedPipelineData.slice(startIndex, endIndex);
+    
+    const goToPreviousPage = () => {
+      setCurrentPage(prev => Math.max(0, prev - 1));
+    };
+    
+    const goToNextPage = () => {
+      setCurrentPage(prev => Math.min(totalPages - 1, prev + 1));
+    };
+    
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 mb-8">
-        {sortedPipelineData.map((stageData, index) => (
-          <div key={index} className="bg-white dark:bg-slate-800 rounded-lg shadow p-4 flex flex-col items-center justify-center text-center transition-colors min-h-[120px]">
-            <h3 className="text-xs font-medium text-black dark:text-gray-400 mb-2 text-center leading-tight">
-              <b>{getDisplayName(stageData.stage)}</b>
-            </h3>
-            <button 
-              onClick={() => navigateToStageDetails(stageData.stage)}
-              className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-1 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
-            >
-              {stageData.count}
-            </button>
-            <p className="text-xs text-gray-500 dark:text-gray-400 text-center leading-tight">
-              {formatCurrency(stageData.amount)}
-            </p>
+      <div className="mb-8" ref={containerRef}>
+        <div className="flex items-center justify-center space-x-4">
+          {/* Left Carat */}
+          <button
+            onClick={goToPreviousPage}
+            disabled={currentPage === 0}
+            className={`p-2 rounded-full transition-colors ${
+              currentPage === 0
+                ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700'
+            }`}
+            aria-label="Previous page"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          
+          {/* Cards Container */}
+          <div className="flex gap-3">
+            {currentCards.map((stageData, index) => (
+              <div key={startIndex + index} className="bg-white dark:bg-slate-800 rounded-lg shadow p-4 flex flex-col items-center justify-center text-center transition-colors min-h-[120px] w-32 flex-shrink-0">
+                <h3 className="text-xs font-medium text-black dark:text-gray-400 mb-2 text-center leading-tight">
+                  <b>{getDisplayName(stageData.stage)}</b>
+                </h3>
+                <button 
+                  onClick={() => navigateToStageDetails(stageData.stage)}
+                  className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-1 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                >
+                  {stageData.count}
+                </button>
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center leading-tight">
+                  {formatCurrency(stageData.amount)}
+                </p>
+              </div>
+            ))}
           </div>
-        ))}
+          
+          {/* Right Carat */}
+          <button
+            onClick={goToNextPage}
+            disabled={currentPage === totalPages - 1}
+            className={`p-2 rounded-full transition-colors ${
+              currentPage === totalPages - 1
+                ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700'
+            }`}
+            aria-label="Next page"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+        
+        {/* Page Indicator */}
+        {totalPages > 1 && (
+          <div className="flex justify-center mt-4 space-x-2">
+            {Array.from({ length: totalPages }, (_, index) => (
+              <button
+                key={index}
+                onClick={() => setCurrentPage(index)}
+                className={`w-2 h-2 rounded-full transition-colors ${
+                  index === currentPage
+                    ? 'bg-blue-600 dark:bg-blue-400'
+                    : 'bg-gray-300 dark:bg-gray-600 hover:bg-gray-400 dark:hover:bg-gray-500'
+                }`}
+                aria-label={`Go to page ${index + 1}`}
+              />
+            ))}
+          </div>
+        )}
       </div>
     );
   };

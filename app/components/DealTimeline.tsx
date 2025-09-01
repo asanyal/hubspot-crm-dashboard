@@ -3846,7 +3846,7 @@ useEffect(() => {
                     </svg>
                   </div>
                   <div className="ml-3">
-                    <h4 className="text-sm font-medium text-gray-600">Positive Signals</h4>
+                    <h4 className="text-sm font-medium text-gray-600">Buying Signals</h4>
                     <button 
                       onClick={() => handleMetricClick('likely-buy')}
                       className="text-xl font-bold text-green-600 hover:text-green-700 transition-colors cursor-pointer"
@@ -3869,7 +3869,7 @@ useEffect(() => {
                     </svg>
                   </div>
                   <div className="ml-3">
-                    <h4 className="text-sm font-medium text-gray-600">Less Likely</h4>
+                    <h4 className="text-sm font-medium text-gray-600">Less Likely to Buy</h4>
                     <button 
                       onClick={() => handleMetricClick('less-likely')}
                       className="text-xl font-bold text-red-600 hover:text-red-700 transition-colors cursor-pointer"

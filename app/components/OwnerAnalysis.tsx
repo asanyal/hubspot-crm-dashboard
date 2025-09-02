@@ -211,7 +211,9 @@ const OwnerAnalysis: React.FC = () => {
   // Fetch health score data
   const fetchHealthScoreData = useCallback(async (): Promise<HealthScoreData> => {
     try {
-      const apiPath = API_CONFIG.getApiPath('/health-scores?start_date=6 Jan 2025&end_date=31 Aug 2025');
+      const startDate = '1 Sep 2024';
+      const endDate = new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+      const apiPath = `${API_CONFIG.getApiPath('/health-scores')}?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
       const result: HealthScoreData = await makeApiCall(apiPath);
       return result;
     } catch (error) {

@@ -755,7 +755,7 @@ const OwnerAnalysis: React.FC = () => {
                   onChange={() => setUseTrailingAverage(true)}
                   className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500"
                 />
-                <span className="text-sm font-medium text-gray-700">Buyer Intent - Trailing Average</span>
+                <span className="text-sm font-medium text-gray-700">Positive:Neutral Ratio - Trailing Average</span>
               </label>
               
               <label className="flex items-center gap-2 cursor-pointer">
@@ -766,7 +766,7 @@ const OwnerAnalysis: React.FC = () => {
                   onChange={() => setUseTrailingAverage(false)}
                   className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500"
                 />
-                <span className="text-sm font-medium text-gray-700">Raw Buyer Intent</span>
+                <span className="text-sm font-medium text-gray-700">Positive:Neutral Ratio</span>
               </label>
             </div>
           </div>
@@ -814,17 +814,17 @@ const OwnerAnalysis: React.FC = () => {
                   <YAxis 
                     yAxisId="right"
                     orientation="right"
-                    label={{ value: 'Buyer Intent Signal', angle: 90, position: 'insideRight' }}
+                    label={{ value: 'Positive:Neutral Ratio', angle: 90, position: 'insideRight' }}
                     domain={[0, 'dataMax + 1']}
                   />
                   
                   <Tooltip 
                     formatter={(value: number, name: string) => {
                       if (name === 'ratio') {
-                        return [value.toFixed(2), 'Buyer Intent Index'];
+                        return [value.toFixed(2), 'Positive:Neutral Ratio'];
                       }
                       if (name === 'trailing_average') {
-                        return [value.toFixed(2), 'Buyer Intent Signal'];
+                        return [value.toFixed(2), 'Positive:Neutral Ratio - Trailing Average'];
                       }
                       return [value, name];
                     }}
@@ -845,7 +845,7 @@ const OwnerAnalysis: React.FC = () => {
                     strokeDasharray="5 5"
                     yAxisId="right"
                     dot={false}
-                    name="Buyer Intent Signal"
+                    name="Positive:Neutral Ratio"
                   />
                   
                   {/* Legend */}
@@ -856,8 +856,8 @@ const OwnerAnalysis: React.FC = () => {
                       if (value === 'positive_signals') return 'Positive Signals';
                       if (value === 'neutral_signals') return 'Neutral Signals';
                       if (value === 'negative_signals') return 'Negative Signals';
-                      if (value === 'ratio') return 'Raw Buyer Intent Index';
-                      if (value === 'trailing_average') return 'Buying Signal';
+                      if (value === 'ratio') return 'Positive:Neutral Ratio';
+                      if (value === 'trailing_average') return 'Positive:Neutral Ratio - Trailing Average';
                       return value;
                     }}
                   />

@@ -149,7 +149,7 @@ const OwnerAnalysis: React.FC = () => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [healthScoreData, setHealthScoreData] = useState<HealthScoreData | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
+  const [searchSuggestions, setSearchSuggestions] = useState<Array<{name: string, createdDate: string}>>([]);
   const [selectedDeal, setSelectedDeal] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
 
@@ -245,6 +245,54 @@ const OwnerAnalysis: React.FC = () => {
       });
     });
     return Array.from(dealNames).sort();
+  }, [data]);
+
+  // Get all deals with their creation dates
+  const getAllDealsWithDates = useCallback((): Array<{name: string, createdDate: string}> => {
+    if (!data || !data.owners) return [];
+    
+    try {
+      const dealsMap = new Map<string, string>();
+      data.owners.forEach(owner => {
+        if (!owner.deals_performance) return;
+        
+        Object.values(owner.deals_performance).forEach(sentiment => {
+          if (!sentiment || !sentiment.deals) return;
+          
+          sentiment.deals.forEach(deal => {
+            if (!deal || !deal.deal_name) return;
+            
+            if (!dealsMap.has(deal.deal_name)) {
+              // Find the earliest signal date as creation date
+              let earliestDate = '';
+              if (deal.signal_dates && deal.signal_dates.length > 0) {
+                try {
+                  const dates = deal.signal_dates
+                    .map(date => new Date(date))
+                    .filter(date => !isNaN(date.getTime()));
+                  
+                  if (dates.length > 0) {
+                    earliestDate = dates.reduce((earliest, current) => 
+                      current < earliest ? current : earliest
+                    ).toISOString().split('T')[0];
+                  }
+                } catch (dateError) {
+                  console.warn('Error parsing dates for deal:', deal.deal_name, dateError);
+                }
+              }
+              dealsMap.set(deal.deal_name, earliestDate);
+            }
+          });
+        });
+      });
+      
+      return Array.from(dealsMap.entries())
+        .map(([name, createdDate]) => ({ name, createdDate }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } catch (error) {
+      console.error('Error in getAllDealsWithDates:', error);
+      return [];
+    }
   }, [data]);
 
   // Check if a deal is a hot deal (4+ positive signals)
@@ -387,14 +435,47 @@ const OwnerAnalysis: React.FC = () => {
       return;
     }
     
-    const allDeals = getAllDealNames();
-    const filtered = allDeals.filter(deal => 
-      deal.toLowerCase().includes(query.toLowerCase())
-    ).slice(0, 10); // Limit to 10 suggestions
-    
-    setSearchSuggestions(filtered);
-    setShowSuggestions(true);
-  }, [getAllDealNames]);
+    try {
+      // Get deals with their creation dates
+      const dealsWithDates = getAllDealsWithDates();
+      if (dealsWithDates.length > 0) {
+        const filtered = dealsWithDates.filter(deal => 
+          deal.name.toLowerCase().includes(query.toLowerCase())
+        ).slice(0, 10); // Limit to 10 suggestions
+        
+        setSearchSuggestions(filtered);
+        setShowSuggestions(true);
+      } else {
+        // Fallback to simple deal names if dates function fails
+        const allDeals = getAllDealNames();
+        const filtered = allDeals.filter(deal => 
+          deal.toLowerCase().includes(query.toLowerCase())
+        ).slice(0, 10);
+        
+        // Convert to the expected format
+        const fallbackSuggestions = filtered.map(name => ({ name, createdDate: '' }));
+        setSearchSuggestions(fallbackSuggestions);
+        setShowSuggestions(true);
+      }
+    } catch (error) {
+      console.error('Error getting deals with dates:', error);
+      // Fallback to simple deal names
+      try {
+        const allDeals = getAllDealNames();
+        const filtered = allDeals.filter(deal => 
+          deal.toLowerCase().includes(query.toLowerCase())
+        ).slice(0, 10);
+        
+        const fallbackSuggestions = filtered.map(name => ({ name, createdDate: '' }));
+        setSearchSuggestions(fallbackSuggestions);
+        setShowSuggestions(true);
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError);
+        setSearchSuggestions([]);
+        setShowSuggestions(false);
+      }
+    }
+  }, [getAllDealsWithDates, getAllDealNames]);
 
   // Handle deal selection
   const handleDealSelect = useCallback((dealName: string) => {
@@ -639,13 +720,24 @@ const OwnerAnalysis: React.FC = () => {
               {/* Search suggestions dropdown */}
               {showSuggestions && searchSuggestions.length > 0 && (
                 <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto search-suggestions">
-                  {searchSuggestions.map((dealName, index) => (
+                  {searchSuggestions.map((deal, index) => (
                     <button
                       key={index}
-                      onClick={() => handleDealSelect(dealName)}
+                      onClick={() => handleDealSelect(deal.name)}
                       className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors"
                     >
-                      <span className="font-medium text-gray-900">{dealName}</span>
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-gray-900">{deal.name}</span>
+                        {deal.createdDate && (
+                          <span className="text-sm text-gray-500">
+                            Created: {new Date(deal.createdDate).toLocaleDateString('en-US', { 
+                              month: 'short', 
+                              day: 'numeric', 
+                              year: 'numeric' 
+                            })}
+                          </span>
+                        )}
+                      </div>
                     </button>
                   ))}
                 </div>

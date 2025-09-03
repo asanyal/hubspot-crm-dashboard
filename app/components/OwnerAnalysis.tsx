@@ -150,6 +150,7 @@ const OwnerAnalysis: React.FC = () => {
   const [healthScoreData, setHealthScoreData] = useState<HealthScoreData | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchSuggestions, setSearchSuggestions] = useState<Array<{name: string, createdDate: string}>>([]);
+  const [allDealsWithDates, setAllDealsWithDates] = useState<Array<{name: string, createdDate: string}>>([]);
   const [selectedDeal, setSelectedDeal] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
 
@@ -430,52 +431,20 @@ const OwnerAnalysis: React.FC = () => {
     setSearchQuery(query);
     
     if (query.length === 0) {
-      setSearchSuggestions([]);
-      setShowSuggestions(false);
+      // Show all deals when search is empty
+      setSearchSuggestions(allDealsWithDates);
+      setShowSuggestions(true);
       return;
     }
     
-    try {
-      // Get deals with their creation dates
-      const dealsWithDates = getAllDealsWithDates();
-      if (dealsWithDates.length > 0) {
-        const filtered = dealsWithDates.filter(deal => 
-          deal.name.toLowerCase().includes(query.toLowerCase())
-        ).slice(0, 10); // Limit to 10 suggestions
-        
-        setSearchSuggestions(filtered);
-        setShowSuggestions(true);
-      } else {
-        // Fallback to simple deal names if dates function fails
-        const allDeals = getAllDealNames();
-        const filtered = allDeals.filter(deal => 
-          deal.toLowerCase().includes(query.toLowerCase())
-        ).slice(0, 10);
-        
-        // Convert to the expected format
-        const fallbackSuggestions = filtered.map(name => ({ name, createdDate: '' }));
-        setSearchSuggestions(fallbackSuggestions);
-        setShowSuggestions(true);
-      }
-    } catch (error) {
-      console.error('Error getting deals with dates:', error);
-      // Fallback to simple deal names
-      try {
-        const allDeals = getAllDealNames();
-        const filtered = allDeals.filter(deal => 
-          deal.toLowerCase().includes(query.toLowerCase())
-        ).slice(0, 10);
-        
-        const fallbackSuggestions = filtered.map(name => ({ name, createdDate: '' }));
-        setSearchSuggestions(fallbackSuggestions);
-        setShowSuggestions(true);
-      } catch (fallbackError) {
-        console.error('Fallback also failed:', fallbackError);
-        setSearchSuggestions([]);
-        setShowSuggestions(false);
-      }
-    }
-  }, [getAllDealsWithDates, getAllDealNames]);
+    // Filter from pre-loaded deals
+    const filtered = allDealsWithDates.filter(deal => 
+      deal.name.toLowerCase().includes(query.toLowerCase())
+    ).slice(0, 20); // Show more results since we have them pre-loaded
+    
+    setSearchSuggestions(filtered);
+    setShowSuggestions(true);
+  }, [allDealsWithDates]);
 
   // Handle deal selection
   const handleDealSelect = useCallback((dealName: string) => {
@@ -548,6 +517,56 @@ const OwnerAnalysis: React.FC = () => {
         const transformedData = transformOwnerData(rawData);
         setData(transformedData);
         
+        // Pre-load all deals with dates for search
+        try {
+          // Calculate deals with dates directly here instead of calling the function
+          const dealsMap = new Map<string, string>();
+          transformedData.owners.forEach(owner => {
+            Object.values(owner.deals_performance).forEach(sentiment => {
+              sentiment.deals.forEach(deal => {
+                if (!dealsMap.has(deal.deal_name)) {
+                  let earliestDate = '';
+                  if (deal.signal_dates && deal.signal_dates.length > 0) {
+                    try {
+                      const dates = deal.signal_dates
+                        .map(date => new Date(date))
+                        .filter(date => !isNaN(date.getTime()));
+                      
+                      if (dates.length > 0) {
+                        earliestDate = dates.reduce((earliest, current) => 
+                          current < earliest ? current : earliest
+                        ).toISOString().split('T')[0];
+                      }
+                    } catch (dateError) {
+                      console.warn('Error parsing dates for deal:', deal.deal_name, dateError);
+                    }
+                  }
+                  dealsMap.set(deal.deal_name, earliestDate);
+                }
+              });
+            });
+          });
+          
+          const dealsWithDates = Array.from(dealsMap.entries())
+            .map(([name, createdDate]) => ({ name, createdDate }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+          
+          setAllDealsWithDates(dealsWithDates);
+        } catch (error) {
+          console.warn('Failed to pre-load deals with dates, will use fallback:', error);
+          // Fallback to simple deal names
+          const allDeals = new Set<string>();
+          transformedData.owners.forEach(owner => {
+            Object.values(owner.deals_performance).forEach(sentiment => {
+              sentiment.deals.forEach(deal => {
+                allDeals.add(deal.deal_name);
+              });
+            });
+          });
+          const fallbackDeals = Array.from(allDeals).sort().map(name => ({ name, createdDate: '' }));
+          setAllDealsWithDates(fallbackDeals);
+        }
+        
         // Apply deal filter if selected
         const filteredData = getFilteredData(transformedData, selectedDeal);
         const processed = processOwnerData(filteredData);
@@ -577,7 +596,7 @@ const OwnerAnalysis: React.FC = () => {
 
   // Refilter data when selectedDeal changes
   useEffect(() => {
-    if (data) {
+    if (data && selectedDeal !== null) {
       const filteredData = getFilteredData(data, selectedDeal);
       const processed = processOwnerData(filteredData);
       setProcessedData(processed);
@@ -695,17 +714,25 @@ const OwnerAnalysis: React.FC = () => {
           <div className="max-w-2xl">
             <label htmlFor="deal-search" className="block text-sm font-medium text-gray-700 mb-2">
               Search for a specific deal
+              {allDealsWithDates.length === 0 && !loading && (
+                <span className="text-xs text-gray-500 ml-2">(Loading deals...)</span>
+              )}
             </label>
             <div className="relative">
-              <input
-                type="text"
-                id="deal-search"
-                placeholder="Search a specific deal"
-                value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                onFocus={() => searchQuery.length > 0 && setShowSuggestions(true)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-              />
+                  <input
+                    type="text"
+                    id="deal-search"
+                    placeholder="Search a specific deal"
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onFocus={() => {
+                      if (allDealsWithDates.length > 0) {
+                        setSearchSuggestions(allDealsWithDates);
+                        setShowSuggestions(true);
+                      }
+                    }}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  />
               
               {/* Clear button */}
               {selectedDeal && (

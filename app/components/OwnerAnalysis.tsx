@@ -1407,7 +1407,7 @@ const OwnerAnalysis: React.FC = () => {
 
         {/* Deal Focus */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-          <h3 className="text-xl font-semibold text-gray-800 mb-4">🔥 Deals to Double Down</h3>
+          <h3 className="text-xl font-semibold text-gray-800 mb-4">🔥 Deals with Multiple Positive Signals</h3>
           <div className="space-y-3 max-h-80 overflow-y-auto">
             {(() => {
               // Get all deals from all owners with their signal counts

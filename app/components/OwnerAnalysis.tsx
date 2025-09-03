@@ -148,6 +148,10 @@ const OwnerAnalysis: React.FC = () => {
   const [browserId, setBrowserId] = useState<string>('');
   const [isInitialized, setIsInitialized] = useState(false);
   const [healthScoreData, setHealthScoreData] = useState<HealthScoreData | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
+  const [selectedDeal, setSelectedDeal] = useState<string | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
 
   // Initialize browser ID on component mount
   useEffect(() => {
@@ -228,6 +232,81 @@ const OwnerAnalysis: React.FC = () => {
 
 
 
+  // Get all unique deal names for search
+  const getAllDealNames = useCallback((): string[] => {
+    if (!data) return [];
+    
+    const dealNames = new Set<string>();
+    data.owners.forEach(owner => {
+      Object.values(owner.deals_performance).forEach(sentiment => {
+        sentiment.deals.forEach(deal => {
+          dealNames.add(deal.deal_name);
+        });
+      });
+    });
+    return Array.from(dealNames).sort();
+  }, [data]);
+
+  // Check if a deal is a hot deal (4+ positive signals)
+  const isHotDeal = useCallback((dealName: string): boolean => {
+    if (!data) return false;
+    
+    let totalPositiveSignals = 0;
+    data.owners.forEach(owner => {
+      const positiveDeals = owner.deals_performance.positive.deals;
+      positiveDeals.forEach(deal => {
+        if (deal.deal_name === dealName) {
+          totalPositiveSignals += deal.signal_dates ? deal.signal_dates.length : 0;
+        }
+      });
+    });
+    
+    return totalPositiveSignals >= 4;
+  }, [data]);
+
+  // Filter data based on selected deal
+  const getFilteredData = useCallback((rawData: OwnerAnalysisData, dealName: string | null): OwnerAnalysisData => {
+    if (!dealName) return rawData;
+    
+    return {
+      owners: rawData.owners.map(owner => {
+        const filteredPerformance = {
+          positive: { count: 0, deals: [] as DealWithSignals[] },
+          negative: { count: 0, deals: [] as DealWithSignals[] },
+          neutral: { count: 0, deals: [] as DealWithSignals[] }
+        };
+        
+        Object.entries(owner.deals_performance).forEach(([key, sentiment]) => {
+          const filteredDeals = sentiment.deals.filter(deal => 
+            deal.deal_name.toLowerCase().includes(dealName.toLowerCase())
+          );
+          
+          // Calculate total signal count for this sentiment across all matching deals
+          const totalSignals = filteredDeals.reduce((sum, deal) => 
+            sum + (deal.signal_dates ? deal.signal_dates.length : 0), 0
+          );
+          
+          if (key === 'positive') {
+            filteredPerformance.positive = { count: totalSignals, deals: filteredDeals };
+          } else if (key === 'negative') {
+            filteredPerformance.negative = { count: totalSignals, deals: filteredDeals };
+          } else if (key === 'neutral') {
+            filteredPerformance.neutral = { count: totalSignals, deals: filteredDeals };
+          }
+        });
+        
+        return {
+          ...owner,
+          deals_performance: filteredPerformance
+        };
+      }).filter(owner => 
+        owner.deals_performance.positive.count > 0 || 
+        owner.deals_performance.negative.count > 0 || 
+        owner.deals_performance.neutral.count > 0
+      )
+    };
+  }, []);
+
   // Transform raw data to expected format
   const transformOwnerData = useCallback((rawResult: RawOwnerAnalysisData): OwnerAnalysisData => {
     return {
@@ -298,6 +377,54 @@ const OwnerAnalysis: React.FC = () => {
       .sort((a, b) => b.positiveRatio - a.positiveRatio); // Sort by positive ratio descending
   }, []);
 
+  // Handle search input changes
+  const handleSearchChange = useCallback((query: string) => {
+    setSearchQuery(query);
+    
+    if (query.length === 0) {
+      setSearchSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    
+    const allDeals = getAllDealNames();
+    const filtered = allDeals.filter(deal => 
+      deal.toLowerCase().includes(query.toLowerCase())
+    ).slice(0, 10); // Limit to 10 suggestions
+    
+    setSearchSuggestions(filtered);
+    setShowSuggestions(true);
+  }, [getAllDealNames]);
+
+  // Handle deal selection
+  const handleDealSelect = useCallback((dealName: string) => {
+    setSelectedDeal(dealName);
+    setSearchQuery(dealName);
+    setShowSuggestions(false);
+    setSearchSuggestions([]);
+  }, []);
+
+  // Clear deal filter
+  const clearDealFilter = useCallback(() => {
+    setSelectedDeal(null);
+    setSearchQuery('');
+    setShowSuggestions(false);
+    setSearchSuggestions([]);
+  }, []);
+
+  // Handle click outside to close suggestions
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('#deal-search') && !target.closest('.search-suggestions')) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
 
 
   // Calculate team summary statistics
@@ -340,7 +467,9 @@ const OwnerAnalysis: React.FC = () => {
         const transformedData = transformOwnerData(rawData);
         setData(transformedData);
         
-        const processed = processOwnerData(transformedData);
+        // Apply deal filter if selected
+        const filteredData = getFilteredData(transformedData, selectedDeal);
+        const processed = processOwnerData(filteredData);
         setProcessedData(processed);
         
         // Auto-select the first owner (top performer)
@@ -363,7 +492,25 @@ const OwnerAnalysis: React.FC = () => {
     };
 
     loadData();
-  }, [isInitialized, fetchRawOwnerData, transformOwnerData, processOwnerData, calculateTeamSummary, fetchHealthScoreData]);
+  }, [isInitialized, fetchRawOwnerData, transformOwnerData, processOwnerData, calculateTeamSummary, fetchHealthScoreData, selectedDeal, getFilteredData]);
+
+  // Refilter data when selectedDeal changes
+  useEffect(() => {
+    if (data) {
+      const filteredData = getFilteredData(data, selectedDeal);
+      const processed = processOwnerData(filteredData);
+      setProcessedData(processed);
+      
+      if (processed.length > 0) {
+        setSelectedOwner(processed[0]);
+        const summary = calculateTeamSummary(processed);
+        setTeamSummary(summary);
+      } else {
+        setSelectedOwner(null);
+        setTeamSummary(null);
+      }
+    }
+  }, [selectedDeal, data, getFilteredData, processOwnerData, calculateTeamSummary]);
 
   // Toggle expanded row for specific owner and sentiment
   const toggleExpandedRow = useCallback((ownerId: string, sentiment: 'positive' | 'neutral' | 'negative') => {
@@ -405,7 +552,15 @@ const OwnerAnalysis: React.FC = () => {
               className={`text-sm hover:underline ${colorClass} block truncate`}
               title={deal.deal_name}
             >
-              {truncateDealName(deal.deal_name)} <span className="text-xs text-gray-500">{formatDateAndCount(deal)}</span>
+              <div className="flex items-center gap-2">
+                <span>{truncateDealName(deal.deal_name)}</span>
+                {isHotDeal(deal.deal_name) && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                    🔥 HOT
+                  </span>
+                )}
+              </div>
+              <span className="text-xs text-gray-500">{formatDateAndCount(deal)}</span>
             </a>
           ))}
         </div>
@@ -453,6 +608,76 @@ const OwnerAnalysis: React.FC = () => {
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
           <h1 className="text-3xl font-bold text-gray-900">Customer Signals</h1>
         </div>
+
+        {/* Search Bar */}
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+          <div className="max-w-2xl">
+            <label htmlFor="deal-search" className="block text-sm font-medium text-gray-700 mb-2">
+              Search for a specific deal
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                id="deal-search"
+                placeholder="Search a specific deal"
+                value={searchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                onFocus={() => searchQuery.length > 0 && setShowSuggestions(true)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              />
+              
+              {/* Clear button */}
+              {selectedDeal && (
+                <button
+                  onClick={clearDealFilter}
+                  className="absolute right-12 top-1/2 transform -translate-y-1/2 px-3 py-1 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+              
+              {/* Search suggestions dropdown */}
+              {showSuggestions && searchSuggestions.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto search-suggestions">
+                  {searchSuggestions.map((dealName, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleDealSelect(dealName)}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                    >
+                      <span className="font-medium text-gray-900">{dealName}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            {/* Active filter indicator */}
+            {selectedDeal && (
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-sm text-gray-600">Filtering by:</span>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                    {selectedDeal}
+                  </span>
+                  {isHotDeal(selectedDeal) && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800 animate-pulse">
+                      🔥 HOT DEAL
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={clearDealFilter}
+                  className="text-sm text-blue-600 hover:text-blue-800 underline"
+                >
+                  Clear filter
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+
 
         {/* Performance Metrics Cards */}
         {teamSummary && (
@@ -723,7 +948,14 @@ const OwnerAnalysis: React.FC = () => {
 
         {/* Health Score Trends */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-          <h3 className="text-xl font-semibold text-gray-800 mb-4">Sales Performance</h3>
+          <h3 className="text-xl font-semibold text-gray-800 mb-4">
+            Sales Performance
+            {selectedDeal && (
+              <span className="text-lg font-normal text-gray-600 ml-2">
+                - Filtered by {selectedDeal}
+              </span>
+            )}
+          </h3>
           <div className="mb-4">
             <p className="text-sm text-gray-600">
               Frequency of buying signals detected in calls across different time periods.
@@ -736,7 +968,71 @@ const OwnerAnalysis: React.FC = () => {
             <div className="h-[500px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart 
-                  data={healthScoreData.buckets}
+                  data={(() => {
+                    if (!selectedDeal || !data) return healthScoreData.buckets;
+                    
+                    // Filter buckets to only show data for the selected deal
+                    return healthScoreData.buckets.map(bucket => {
+                      let positiveSignals = 0;
+                      let neutralSignals = 0;
+                      let negativeSignals = 0;
+                      
+                      // Count signals for the selected deal across all owners
+                      data.owners.forEach(owner => {
+                        // Count positive signals
+                        owner.deals_performance.positive.deals.forEach(deal => {
+                          if (deal.deal_name.toLowerCase().includes(selectedDeal.toLowerCase())) {
+                            deal.signal_dates?.forEach(date => {
+                              const signalDate = new Date(date);
+                              const bucketStart = new Date(bucket.bucket_start);
+                              const bucketEnd = new Date(bucket.bucket_end);
+                              
+                              if (signalDate >= bucketStart && signalDate <= bucketEnd) {
+                                positiveSignals++;
+                              }
+                            });
+                          }
+                        });
+                        
+                        // Count neutral signals
+                        owner.deals_performance.neutral.deals.forEach(deal => {
+                          if (deal.deal_name.toLowerCase().includes(selectedDeal.toLowerCase())) {
+                            deal.signal_dates?.forEach(date => {
+                              const signalDate = new Date(date);
+                              const bucketStart = new Date(bucket.bucket_start);
+                              const bucketEnd = new Date(bucket.bucket_end);
+                              
+                              if (signalDate >= bucketStart && signalDate <= bucketEnd) {
+                                neutralSignals++;
+                              }
+                            });
+                          }
+                        });
+                        
+                        // Count negative signals
+                        owner.deals_performance.negative.deals.forEach(deal => {
+                          if (deal.deal_name.toLowerCase().includes(selectedDeal.toLowerCase())) {
+                            deal.signal_dates?.forEach(date => {
+                              const signalDate = new Date(date);
+                              const bucketStart = new Date(bucket.bucket_start);
+                              const bucketEnd = new Date(bucket.bucket_end);
+                              
+                              if (signalDate >= bucketStart && signalDate <= bucketEnd) {
+                                negativeSignals++;
+                              }
+                            });
+                          }
+                        });
+                      });
+                      
+                      return {
+                        ...bucket,
+                        positive_signals: positiveSignals,
+                        neutral_signals: neutralSignals,
+                        negative_signals: negativeSignals
+                      };
+                    });
+                  })()}
                   margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
@@ -1061,6 +1357,11 @@ const OwnerAnalysis: React.FC = () => {
                         >
                           {truncateDealName(deal.deal_name)}
                         </a>
+                        {isHotDeal(deal.deal_name) && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            🔥 HOT
+                          </span>
+                        )}
                         <span className="text-xs text-gray-500">•</span>
                         <span className="text-sm text-gray-600 truncate" title={deal.owner}>
                           {deal.owner}

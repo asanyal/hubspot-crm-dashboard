@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, ComposedChart, Line, LabelList } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, ComposedChart, Line, LabelList, AreaChart, Area } from 'recharts';
 import { API_CONFIG } from '../utils/config';
 
 // Types
@@ -148,7 +148,6 @@ const OwnerAnalysis: React.FC = () => {
   const [browserId, setBrowserId] = useState<string>('');
   const [isInitialized, setIsInitialized] = useState(false);
   const [healthScoreData, setHealthScoreData] = useState<HealthScoreData | null>(null);
-  const [useTrailingAverage, setUseTrailingAverage] = useState<boolean>(true);
 
   // Initialize browser ID on component mount
   useEffect(() => {
@@ -214,8 +213,12 @@ const OwnerAnalysis: React.FC = () => {
       const startDate = '1 Sep 2024';
       const endDate = new Date();
       const endDateFormatted = `${endDate.getDate()} ${endDate.toLocaleDateString('en-US', { month: 'short' })} ${endDate.getFullYear()}`;
+      console.log("End date formatted: ", endDateFormatted);
       const apiPath = `${API_CONFIG.getApiPath('/health-scores')}?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDateFormatted)}`;
       const result: HealthScoreData = await makeApiCall(apiPath);
+      console.log('Raw API response:', result);
+      console.log('Sample bucket data:', result.buckets[0]);
+      console.log('API path:', apiPath);
       return result;
     } catch (error) {
       console.error('Error fetching health score data:', error);
@@ -223,25 +226,7 @@ const OwnerAnalysis: React.FC = () => {
     }
   }, [makeApiCall]);
 
-  // Calculate trailing average for buyer intent index
-  const calculateTrailingAverage = useCallback((buckets: HealthScoreBucket[], windowSize: number = 4): number[] => {
-    const trailingAverages: number[] = [];
-    
-    for (let i = 0; i < buckets.length; i++) {
-      const startIndex = Math.max(0, i - windowSize + 1);
-      const window = buckets.slice(startIndex, i + 1);
-      const validRatios = window.filter(bucket => bucket.ratio >= 0); // Filter out -1 values
-      
-      if (validRatios.length > 0) {
-        const average = validRatios.reduce((sum, bucket) => sum + bucket.ratio, 0) / validRatios.length;
-        trailingAverages.push(average);
-      } else {
-        trailingAverages.push(0);
-      }
-    }
-    
-    return trailingAverages;
-  }, []);
+
 
   // Transform raw data to expected format
   const transformOwnerData = useCallback((rawResult: RawOwnerAnalysisData): OwnerAnalysisData => {
@@ -287,7 +272,7 @@ const OwnerAnalysis: React.FC = () => {
 
   // Process raw data into enhanced format
   const processOwnerData = useCallback((rawData: OwnerAnalysisData): ProcessedOwnerData[] => {
-    const excludedOwners = ['Galileo Marketing'];
+    const excludedOwners = ['Galileo Marketing', 'Yash Sheth', 'Vikram Chatterji'];
     
     return rawData.owners
       .filter(owner => !excludedOwners.includes(owner.owner)) // Exclude specified owners
@@ -594,10 +579,10 @@ const OwnerAnalysis: React.FC = () => {
                 <div className="grid grid-cols-3 gap-4">
                   <button
                     onClick={() => setSelectedSentiment(selectedSentiment === 'positive' ? null : 'positive')}
-                    className={`p-4 rounded-lg border-2 transition-all ${
+                    className={`p-4 rounded-lg border-2 transition-all duration-200 cursor-pointer ${
                       selectedSentiment === 'positive' 
-                        ? 'border-green-500 bg-green-50' 
-                        : 'border-gray-200 hover:border-green-300'
+                        ? 'border-green-500 bg-green-50 shadow-md' 
+                        : 'border-gray-200 hover:border-green-300 hover:shadow-lg hover:bg-green-50/30 hover:scale-105'
                     }`}
                   >
                     <div className="text-center">
@@ -623,10 +608,10 @@ const OwnerAnalysis: React.FC = () => {
                   
                   <button
                     onClick={() => setSelectedSentiment(selectedSentiment === 'neutral' ? null : 'neutral')}
-                    className={`p-4 rounded-lg border-2 transition-all ${
+                    className={`p-4 rounded-lg border-2 transition-all duration-200 cursor-pointer ${
                       selectedSentiment === 'neutral' 
-                        ? 'border-yellow-500 bg-yellow-50' 
-                        : 'border-gray-200 hover:border-yellow-300'
+                        ? 'border-yellow-500 bg-yellow-50 shadow-md' 
+                        : 'border-gray-200 hover:border-yellow-300 hover:shadow-lg hover:bg-yellow-50/30 hover:scale-105'
                     }`}
                   >
                     <div className="text-center">
@@ -652,10 +637,10 @@ const OwnerAnalysis: React.FC = () => {
                   
                   <button
                     onClick={() => setSelectedSentiment(selectedSentiment === 'negative' ? null : 'negative')}
-                    className={`p-4 rounded-lg border-2 transition-all ${
+                    className={`p-4 rounded-lg border-2 transition-all duration-200 cursor-pointer ${
                       selectedSentiment === 'negative' 
-                        ? 'border-red-500 bg-red-50' 
-                        : 'border-gray-200 hover:border-red-300'
+                        ? 'border-red-500 bg-red-50 shadow-md' 
+                        : 'border-gray-200 hover:border-red-300 hover:shadow-lg hover:bg-red-50/30 hover:scale-105'
                     }`}
                   >
                     <div className="text-center">
@@ -741,47 +726,17 @@ const OwnerAnalysis: React.FC = () => {
           <h3 className="text-xl font-semibold text-gray-800 mb-4">Sales Performance</h3>
           <div className="mb-4">
             <p className="text-sm text-gray-600">
-              Trends of a buyer's "purchasing signal" as detected in calls.<br/>
-              The purple line is a ratio of positive signals to neutral signals (it should trend higher for better performance)
+              Frequency of buying signals detected in calls across different time periods.
             </p>
             
-            {/* Trailing Average Toggle */}
-            <div className="mt-3 flex items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="trailingAverage"
-                  checked={useTrailingAverage}
-                  onChange={() => setUseTrailingAverage(true)}
-                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500"
-                />
-                <span className="text-sm font-medium text-gray-700">Positive:Neutral Ratio - Trailing Average</span>
-              </label>
-              
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="trailingAverage"
-                  checked={!useTrailingAverage}
-                  onChange={() => setUseTrailingAverage(false)}
-                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 focus:ring-blue-500"
-                />
-                <span className="text-sm font-medium text-gray-700">Positive:Neutral Ratio</span>
-              </label>
-            </div>
+
           </div>
           
           {healthScoreData && healthScoreData.buckets.length > 0 ? (
             <div className="h-[500px]">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart 
-                  data={useTrailingAverage ? 
-                    healthScoreData.buckets.map((bucket, index) => ({
-                      ...bucket,
-                      trailing_average: calculateTrailingAverage(healthScoreData.buckets)[index] || 0
-                    })) : 
-                    healthScoreData.buckets
-                  } 
+                <AreaChart 
+                  data={healthScoreData.buckets}
                   margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
@@ -793,6 +748,7 @@ const OwnerAnalysis: React.FC = () => {
                     textAnchor="end"
                     height={80}
                     interval={0}
+                    tick={{ fontSize: 10 }}
                     tickFormatter={(value, index) => {
                       const bucket = healthScoreData.buckets[index];
                       if (bucket) {
@@ -804,48 +760,45 @@ const OwnerAnalysis: React.FC = () => {
                     }}
                   />
                   
-                  {/* Left Y-Axis for signal counts */}
+                  {/* Y-Axis for signal counts */}
                   <YAxis 
-                    yAxisId="left"
                     label={{ value: 'Interactions', angle: -90, position: 'insideLeft' }}
-                  />
-                  
-                  {/* Right Y-Axis for ratio */}
-                  <YAxis 
-                    yAxisId="right"
-                    orientation="right"
-                    label={{ value: 'Positive:Neutral Ratio', angle: 90, position: 'insideRight' }}
-                    domain={[0, 'dataMax + 1']}
                   />
                   
                   <Tooltip 
                     formatter={(value: number, name: string) => {
-                      if (name === 'ratio') {
-                        return [value.toFixed(2), 'Positive:Neutral Ratio'];
-                      }
-                      if (name === 'trailing_average') {
-                        return [value.toFixed(2), 'Positive:Neutral Ratio - Trailing Average'];
-                      }
+                      if (name === 'positive_signals') return [value, 'Positive Signals'];
+                      if (name === 'neutral_signals') return [value, 'Neutral Signals'];
+                      if (name === 'negative_signals') return [value, 'Negative Signals'];
                       return [value, name];
                     }}
                     labelFormatter={(label) => `Week of ${label}`}
                   />
                   
-                  {/* Stacked bars for signal counts */}
-                  <Bar dataKey="positive_signals" stackId="a" fill="#10b981" yAxisId="left" />
-                  <Bar dataKey="neutral_signals" stackId="a" fill="#f59e0b" yAxisId="left" />
-                  <Bar dataKey="negative_signals" stackId="a" fill="#ef4444" yAxisId="left" />
-                  
-                  {/* Trend line for ratio - either raw or trailing average */}
-                  <Line 
+                  {/* Area charts for signal counts */}
+                  <Area 
                     type="monotone" 
-                    dataKey={useTrailingAverage ? "trailing_average" : "ratio"}
-                    stroke="#8b5cf6" 
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    yAxisId="right"
-                    dot={false}
-                    name="Positive:Neutral Ratio"
+                    dataKey="positive_signals" 
+                    stackId="1" 
+                    fill="#10b981" 
+                    stroke="#10b981"
+                    fillOpacity={0.8}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="neutral_signals" 
+                    stackId="1" 
+                    fill="#f59e0b" 
+                    stroke="#f59e0b"
+                    fillOpacity={0.8}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="negative_signals" 
+                    stackId="1" 
+                    fill="#ef4444" 
+                    stroke="#ef4444"
+                    fillOpacity={0.8}
                   />
                   
                   {/* Legend */}
@@ -856,12 +809,10 @@ const OwnerAnalysis: React.FC = () => {
                       if (value === 'positive_signals') return 'Positive Signals';
                       if (value === 'neutral_signals') return 'Neutral Signals';
                       if (value === 'negative_signals') return 'Negative Signals';
-                      if (value === 'ratio') return 'Positive:Neutral Ratio';
-                      if (value === 'trailing_average') return 'Positive:Neutral Ratio - Trailing Average';
                       return value;
                     }}
                   />
-                </ComposedChart>
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           ) : (

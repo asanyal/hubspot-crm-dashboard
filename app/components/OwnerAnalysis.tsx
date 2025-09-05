@@ -81,6 +81,17 @@ interface HealthScoreData {
   buckets: HealthScoreBucket[];
 }
 
+interface DealBasicInfo {
+  id: number;
+  name: string;
+  createdate: string;
+  stage: string;
+  owner: string;
+  activities: number;
+}
+
+type FunnelFilter = 'all' | 'top' | 'mid' | 'closed';
+
 
 
 const COLORS = {
@@ -153,8 +164,10 @@ const OwnerAnalysis: React.FC = () => {
   const [allDealsWithDates, setAllDealsWithDates] = useState<Array<{name: string, createdDate: string}>>([]);
   const [selectedDeal, setSelectedDeal] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
+  const [allDealsBasic, setAllDealsBasic] = useState<DealBasicInfo[]>([]);
+  const [funnelFilter, setFunnelFilter] = useState<FunnelFilter>('all');
 
-  // Initialize browser ID on component mount
+  // Initialize browser ID and funnel filter on component mount
   useEffect(() => {
     const initializeBrowserId = () => {
       let storedBrowserId = localStorage.getItem('browserId');
@@ -163,6 +176,13 @@ const OwnerAnalysis: React.FC = () => {
         localStorage.setItem('browserId', storedBrowserId);
       }
       setBrowserId(storedBrowserId);
+      
+      // Load persisted funnel filter
+      const storedFilter = localStorage.getItem('funnelFilter') as FunnelFilter;
+      if (storedFilter && ['all', 'top', 'mid', 'closed'].includes(storedFilter)) {
+        setFunnelFilter(storedFilter);
+      }
+      
       setIsInitialized(true);
     };
 
@@ -208,6 +228,18 @@ const OwnerAnalysis: React.FC = () => {
       return rawResult;
     } catch (error) {
       console.error('Error fetching raw owner performance data:', error);
+      throw error;
+    }
+  }, [makeApiCall]);
+
+  // Fetch all deals basic info
+  const fetchAllDealsBasic = useCallback(async (): Promise<DealBasicInfo[]> => {
+    try {
+      const apiPath = API_CONFIG.getApiPath('/all-deals');
+      const result: DealBasicInfo[] = await makeApiCall(apiPath);
+      return result;
+    } catch (error) {
+      console.error('Error fetching all deals basic info:', error);
       throw error;
     }
   }, [makeApiCall]);
@@ -313,48 +345,15 @@ const OwnerAnalysis: React.FC = () => {
     return totalPositiveSignals >= 4;
   }, [data]);
 
-  // Filter data based on selected deal
-  const getFilteredData = useCallback((rawData: OwnerAnalysisData, dealName: string | null): OwnerAnalysisData => {
-    if (!dealName) return rawData;
-    
-    return {
-      owners: rawData.owners.map(owner => {
-        const filteredPerformance = {
-          positive: { count: 0, deals: [] as DealWithSignals[] },
-          negative: { count: 0, deals: [] as DealWithSignals[] },
-          neutral: { count: 0, deals: [] as DealWithSignals[] }
-        };
-        
-        Object.entries(owner.deals_performance).forEach(([key, sentiment]) => {
-          const filteredDeals = sentiment.deals.filter(deal => 
-            deal.deal_name.toLowerCase().includes(dealName.toLowerCase())
-          );
-          
-          // Calculate total signal count for this sentiment across all matching deals
-          const totalSignals = filteredDeals.reduce((sum, deal) => 
-            sum + (deal.signal_dates ? deal.signal_dates.length : 0), 0
-          );
-          
-          if (key === 'positive') {
-            filteredPerformance.positive = { count: totalSignals, deals: filteredDeals };
-          } else if (key === 'negative') {
-            filteredPerformance.negative = { count: totalSignals, deals: filteredDeals };
-          } else if (key === 'neutral') {
-            filteredPerformance.neutral = { count: totalSignals, deals: filteredDeals };
-          }
-        });
-        
-        return {
-          ...owner,
-          deals_performance: filteredPerformance
-        };
-      }).filter(owner => 
-        owner.deals_performance.positive.count > 0 || 
-        owner.deals_performance.negative.count > 0 || 
-        owner.deals_performance.neutral.count > 0
-      )
-    };
-  }, []);
+  // Get funnel stage for a deal
+  const getDealStage = useCallback((dealName: string): string => {
+    const deal = allDealsBasic.find(d => d.name === dealName);
+    return deal?.stage || '';
+  }, [allDealsBasic]);
+
+
+
+
 
   // Transform raw data to expected format
   const transformOwnerData = useCallback((rawResult: RawOwnerAnalysisData): OwnerAnalysisData => {
@@ -452,6 +451,9 @@ const OwnerAnalysis: React.FC = () => {
     setSearchQuery(dealName);
     setShowSuggestions(false);
     setSearchSuggestions([]);
+    // Reset funnel filter when a specific deal is selected
+    setFunnelFilter('all');
+    localStorage.setItem('funnelFilter', 'all');
   }, []);
 
   // Clear deal filter
@@ -460,6 +462,15 @@ const OwnerAnalysis: React.FC = () => {
     setSearchQuery('');
     setShowSuggestions(false);
     setSearchSuggestions([]);
+  }, []);
+
+  // Handle funnel filter change
+  const handleFunnelFilterChange = useCallback((filter: FunnelFilter) => {
+    setFunnelFilter(filter);
+    localStorage.setItem('funnelFilter', filter);
+    // Clear deal filter when changing funnel filter
+    setSelectedDeal(null);
+    setSearchQuery('');
   }, []);
 
   // Handle click outside to close suggestions
@@ -567,9 +578,8 @@ const OwnerAnalysis: React.FC = () => {
           setAllDealsWithDates(fallbackDeals);
         }
         
-        // Apply deal filter if selected
-        const filteredData = getFilteredData(transformedData, selectedDeal);
-        const processed = processOwnerData(filteredData);
+        // Initial data processing (no filtering yet - will be handled by useEffect)
+        const processed = processOwnerData(transformedData);
         setProcessedData(processed);
         
         // Auto-select the first owner (top performer)
@@ -580,9 +590,6 @@ const OwnerAnalysis: React.FC = () => {
         const summary = calculateTeamSummary(processed);
         setTeamSummary(summary);
         
-        // Fetch health score data
-        const healthData = await fetchHealthScoreData();
-        setHealthScoreData(healthData);
       } catch (error) {
         console.error('Error loading Signals:', error);
         setError(error instanceof Error ? error.message : 'Unknown error occurred');
@@ -592,12 +599,107 @@ const OwnerAnalysis: React.FC = () => {
     };
 
     loadData();
-  }, [isInitialized, fetchRawOwnerData, transformOwnerData, processOwnerData, calculateTeamSummary, fetchHealthScoreData, selectedDeal, getFilteredData]);
+  }, [isInitialized, fetchRawOwnerData, transformOwnerData, processOwnerData, calculateTeamSummary]);
 
-  // Refilter data when selectedDeal changes
+  // Fetch health score data separately to avoid dependency loops
   useEffect(() => {
-    if (data && selectedDeal !== null) {
-      const filteredData = getFilteredData(data, selectedDeal);
+    if (isInitialized && !loading) {
+      const loadHealthData = async () => {
+        try {
+          const healthData = await fetchHealthScoreData();
+          console.log('Health score data loaded:', healthData);
+          console.log('Number of buckets:', healthData?.buckets?.length || 0);
+          setHealthScoreData(healthData);
+        } catch (error) {
+          console.error('Error loading health score data:', error);
+        }
+      };
+      
+      loadHealthData();
+    }
+  }, [isInitialized, loading, fetchHealthScoreData]);
+
+  // Fetch all deals basic info asynchronously in the background
+  useEffect(() => {
+    if (isInitialized && !loading) {
+      const loadAllDealsBasic = async () => {
+        try {
+          const allDealsBasicData = await fetchAllDealsBasic();
+          setAllDealsBasic(allDealsBasicData);
+        } catch (error) {
+          console.error('Error loading all deals basic info:', error);
+        }
+      };
+      
+      loadAllDealsBasic();
+    }
+  }, [isInitialized, loading, fetchAllDealsBasic]);
+
+  // Refilter data when selectedDeal or funnelFilter changes
+  useEffect(() => {
+    if (data) {
+      // Filter data directly here instead of calling getFilteredData to avoid dependency loops
+      const filteredData = {
+        owners: data.owners.map(owner => {
+          const filteredPerformance = {
+            positive: { count: 0, deals: [] as DealWithSignals[] },
+            negative: { count: 0, deals: [] as DealWithSignals[] },
+            neutral: { count: 0, deals: [] as DealWithSignals[] }
+          };
+          
+          Object.entries(owner.deals_performance).forEach(([key, sentiment]) => {
+            let filteredDeals = sentiment.deals;
+            
+            // First filter by deal name if specified
+            if (selectedDeal) {
+              filteredDeals = filteredDeals.filter(deal => 
+                deal.deal_name.toLowerCase().includes(selectedDeal.toLowerCase())
+              );
+            }
+            
+            // Then filter by funnel stage
+            filteredDeals = filteredDeals.filter(deal => {
+              if (funnelFilter === 'all') return true;
+              
+              const stage = allDealsBasic.find(d => d.name === deal.deal_name)?.stage || '';
+              
+              switch (funnelFilter) {
+                case 'top':
+                  return ['Assessment', '0. Identification', '1. Sales Qualification', '2. Needs Analysis & Solution Mapping'].includes(stage);
+                case 'mid':
+                  return ['3. Technical Validation', '4. Proposal & Negotiation', 'Proposal', 'Negotiation', 'Waiting for Signature'].includes(stage);
+                case 'closed':
+                  return ['Closed Won', 'Closed Lost', 'Closed Marketing Nurture', 'Closed Active Nurture', 'Renew/Closed won', 'Churned'].includes(stage);
+                default:
+                  return true;
+              }
+            });
+            
+            // Calculate total signal count for this sentiment across all matching deals
+            const totalSignals = filteredDeals.reduce((sum, deal) => 
+              sum + (deal.signal_dates ? deal.signal_dates.length : 0), 0
+            );
+            
+            if (key === 'positive') {
+              filteredPerformance.positive = { count: totalSignals, deals: filteredDeals };
+            } else if (key === 'negative') {
+              filteredPerformance.negative = { count: totalSignals, deals: filteredDeals };
+            } else if (key === 'neutral') {
+              filteredPerformance.neutral = { count: totalSignals, deals: filteredDeals };
+            }
+          });
+          
+          return {
+            ...owner,
+            deals_performance: filteredPerformance
+          };
+        }).filter(owner => 
+          owner.deals_performance.positive.count > 0 || 
+          owner.deals_performance.negative.count > 0 || 
+          owner.deals_performance.neutral.count > 0
+        )
+      };
+      
       const processed = processOwnerData(filteredData);
       setProcessedData(processed);
       
@@ -610,7 +712,7 @@ const OwnerAnalysis: React.FC = () => {
         setTeamSummary(null);
       }
     }
-  }, [selectedDeal, data, getFilteredData, processOwnerData, calculateTeamSummary]);
+  }, [selectedDeal, funnelFilter, data, allDealsBasic, processOwnerData, calculateTeamSummary]);
 
   // Toggle expanded row for specific owner and sentiment
   const toggleExpandedRow = useCallback((ownerId: string, sentiment: 'positive' | 'neutral' | 'negative') => {
@@ -707,6 +809,73 @@ const OwnerAnalysis: React.FC = () => {
         {/* Header */}
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
           <h1 className="text-3xl font-bold text-gray-900">Customer Signals</h1>
+          
+          {/* Funnel Filter Controls */}
+          <div className="mt-6">
+            <h3 className="text-lg font-semibold text-gray-700 mb-3">Filter by Funnel Stage</h3>
+            <div className="flex flex-wrap gap-3">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="funnelFilter"
+                  value="all"
+                  checked={funnelFilter === 'all'}
+                  onChange={() => handleFunnelFilterChange('all')}
+                  className="mr-2 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700">All Signals</span>
+              </label>
+              
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="funnelFilter"
+                  value="top"
+                  checked={funnelFilter === 'top'}
+                  onChange={() => handleFunnelFilterChange('top')}
+                  className="mr-2 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700">Top of Funnel</span>
+              </label>
+              
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="funnelFilter"
+                  value="mid"
+                  checked={funnelFilter === 'mid'}
+                  onChange={() => handleFunnelFilterChange('mid')}
+                  className="mr-2 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700">Mid Funnel</span>
+              </label>
+              
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="funnelFilter"
+                  value="closed"
+                  checked={funnelFilter === 'closed'}
+                  onChange={() => handleFunnelFilterChange('closed')}
+                  className="mr-2 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-gray-700">Closed Funnel</span>
+              </label>
+            </div>
+            
+            {/* Filter Description */}
+            {funnelFilter !== 'all' && (
+              <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-sm text-blue-800">
+                  <strong>Showing signals for:</strong> {
+                    funnelFilter === 'top' ? 'Assessment, Identification, Sales Qualification, Needs Analysis' :
+                    funnelFilter === 'mid' ? 'Technical Validation, Proposal, Negotiation, Waiting for Signature' :
+                    'Closed Won, Closed Lost, Marketing Nurture, Active Nurture, Renew, Churned'
+                  }
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Search Bar */}
@@ -1074,6 +1243,11 @@ const OwnerAnalysis: React.FC = () => {
                 - Filtered by {selectedDeal}
               </span>
             )}
+            {funnelFilter !== 'all' && (
+              <span className="text-lg font-normal text-gray-600 ml-2">
+                - {funnelFilter === 'top' ? 'Top of Funnel' : funnelFilter === 'mid' ? 'Mid Funnel' : 'Closed Funnel'} Signals
+              </span>
+            )}
           </h3>
           <div className="mb-4">
             <p className="text-sm text-gray-600">
@@ -1083,75 +1257,11 @@ const OwnerAnalysis: React.FC = () => {
 
           </div>
           
-          {healthScoreData && healthScoreData.buckets.length > 0 ? (
+          {healthScoreData && healthScoreData.buckets && healthScoreData.buckets.length > 0 ? (
             <div className="h-[500px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart 
-                  data={(() => {
-                    if (!selectedDeal || !data) return healthScoreData.buckets;
-                    
-                    // Filter buckets to only show data for the selected deal
-                    return healthScoreData.buckets.map(bucket => {
-                      let positiveSignals = 0;
-                      let neutralSignals = 0;
-                      let negativeSignals = 0;
-                      
-                      // Count signals for the selected deal across all owners
-                      data.owners.forEach(owner => {
-                        // Count positive signals
-                        owner.deals_performance.positive.deals.forEach(deal => {
-                          if (deal.deal_name.toLowerCase().includes(selectedDeal.toLowerCase())) {
-                            deal.signal_dates?.forEach(date => {
-                              const signalDate = new Date(date);
-                              const bucketStart = new Date(bucket.bucket_start);
-                              const bucketEnd = new Date(bucket.bucket_end);
-                              
-                              if (signalDate >= bucketStart && signalDate <= bucketEnd) {
-                                positiveSignals++;
-                              }
-                            });
-                          }
-                        });
-                        
-                        // Count neutral signals
-                        owner.deals_performance.neutral.deals.forEach(deal => {
-                          if (deal.deal_name.toLowerCase().includes(selectedDeal.toLowerCase())) {
-                            deal.signal_dates?.forEach(date => {
-                              const signalDate = new Date(date);
-                              const bucketStart = new Date(bucket.bucket_start);
-                              const bucketEnd = new Date(bucket.bucket_end);
-                              
-                              if (signalDate >= bucketStart && signalDate <= bucketEnd) {
-                                neutralSignals++;
-                              }
-                            });
-                          }
-                        });
-                        
-                        // Count negative signals
-                        owner.deals_performance.negative.deals.forEach(deal => {
-                          if (deal.deal_name.toLowerCase().includes(selectedDeal.toLowerCase())) {
-                            deal.signal_dates?.forEach(date => {
-                              const signalDate = new Date(date);
-                              const bucketStart = new Date(bucket.bucket_start);
-                              const bucketEnd = new Date(bucket.bucket_end);
-                              
-                              if (signalDate >= bucketStart && signalDate <= bucketEnd) {
-                                negativeSignals++;
-                              }
-                            });
-                          }
-                        });
-                      });
-                      
-                      return {
-                        ...bucket,
-                        positive_signals: positiveSignals,
-                        neutral_signals: neutralSignals,
-                        negative_signals: negativeSignals
-                      };
-                    });
-                  })()}
+                  data={healthScoreData.buckets}
                   margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
@@ -1232,7 +1342,7 @@ const OwnerAnalysis: React.FC = () => {
             </div>
           ) : (
             <div className="h-[200px] flex items-center justify-center text-gray-500">
-              No health score data available
+              {!healthScoreData ? 'Loading health score data...' : 'No health score data available'}
             </div>
           )}
         </div>
@@ -1426,14 +1536,36 @@ const OwnerAnalysis: React.FC = () => {
                   if (!deal.signal_dates) return;
                   const positiveCount = deal.signal_dates.length;
                   
-                  // Include if 4+ positive signals
-                  if (positiveCount >= 4) {
-                    allDeals.push({
-                      deal_name: deal.deal_name,
-                      owner: owner.owner,
-                      signal_dates: deal.signal_dates,
-                      positiveCount
-                    });
+                  // Include if 3+ positive signals AND matches funnel filter
+                  if (positiveCount >= 3) {
+                    // Check funnel filter inline
+                    let shouldInclude = true;
+                    if (funnelFilter !== 'all') {
+                      const stage = allDealsBasic.find(d => d.name === deal.deal_name)?.stage || '';
+                      
+                      switch (funnelFilter) {
+                        case 'top':
+                          shouldInclude = ['Assessment', '0. Identification', '1. Sales Qualification', '2. Needs Analysis & Solution Mapping'].includes(stage);
+                          break;
+                        case 'mid':
+                          shouldInclude = ['3. Technical Validation', '4. Proposal & Negotiation', 'Proposal', 'Negotiation', 'Waiting for Signature'].includes(stage);
+                          break;
+                        case 'closed':
+                          shouldInclude = ['Closed Won', 'Closed Lost', 'Closed Marketing Nurture', 'Closed Active Nurture', 'Renew/Closed won', 'Churned'].includes(stage);
+                          break;
+                        default:
+                          shouldInclude = true;
+                      }
+                    }
+                    
+                    if (shouldInclude) {
+                      allDeals.push({
+                        deal_name: deal.deal_name,
+                        owner: owner.owner,
+                        signal_dates: deal.signal_dates,
+                        positiveCount
+                      });
+                    }
                   }
                 });
               });
@@ -1444,7 +1576,7 @@ const OwnerAnalysis: React.FC = () => {
               if (allDeals.length === 0) {
                 return (
                   <div className="text-gray-500 text-sm text-center py-4">
-                    No high-priority deals found (4+ positive signals)
+                    No hot deals found
                   </div>
                 );
               }
@@ -1496,7 +1628,7 @@ const OwnerAnalysis: React.FC = () => {
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <div className="text-xs font-medium text-green-600">
-                        {deal.positiveCount} positive
+                        {deal.positiveCount} buying signals
                       </div>
                     </div>
                   </div>

@@ -90,7 +90,7 @@ interface DealBasicInfo {
   activities: number;
 }
 
-type FunnelFilter = 'all' | 'top' | 'mid' | 'closed';
+type FunnelFilter = 'all' | 'Assessment' | '0. Identification' | '1. Sales Qualification' | '2. Needs Analysis & Solution Mapping' | '3. Technical Validation' | '4. Proposal & Negotiation' | 'Proposal' | 'Negotiation' | 'Waiting for Signature' | 'Closed Won' | 'Closed Lost' | 'Closed Marketing Nurture' | 'Closed Active Nurture' | 'Renew/Closed won' | 'Churned';
 
 
 
@@ -179,7 +179,8 @@ const OwnerAnalysis: React.FC = () => {
       
       // Load persisted funnel filter
       const storedFilter = localStorage.getItem('funnelFilter') as FunnelFilter;
-      if (storedFilter && ['all', 'top', 'mid', 'closed'].includes(storedFilter)) {
+      const validFilters = ['all', 'Assessment', '0. Identification', '1. Sales Qualification', '2. Needs Analysis & Solution Mapping', '3. Technical Validation', '4. Proposal & Negotiation', 'Proposal', 'Negotiation', 'Waiting for Signature', 'Closed Won', 'Closed Lost', 'Closed Marketing Nurture', 'Closed Active Nurture', 'Renew/Closed won', 'Churned'];
+      if (storedFilter && validFilters.includes(storedFilter)) {
         setFunnelFilter(storedFilter);
       }
       
@@ -245,17 +246,42 @@ const OwnerAnalysis: React.FC = () => {
   }, [makeApiCall]);
 
   // Fetch health score data
-  const fetchHealthScoreData = useCallback(async (): Promise<HealthScoreData> => {
+  const fetchHealthScoreData = useCallback(async (stageNames?: string[]): Promise<HealthScoreData> => {
     try {
-      const startDate = '1 Sep 2024';
+      const startDate = '1 Jan 2025';
       const endDate = new Date();
       const endDateFormatted = `${endDate.getDate()} ${endDate.toLocaleDateString('en-US', { month: 'short' })} ${endDate.getFullYear()}`;
       console.log("End date formatted: ", endDateFormatted);
-      const apiPath = `${API_CONFIG.getApiPath('/health-scores')}?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDateFormatted)}`;
-      const result: HealthScoreData = await makeApiCall(apiPath);
+      
+      const apiPath = API_CONFIG.getApiPath('/health-scores');
+      
+      // Prepare request body
+      const requestBody: {
+        start_date: string;
+        end_date: string;
+        stage_names?: string[];
+      } = {
+        start_date: startDate,
+        end_date: endDateFormatted
+      };
+      
+      // Add stage_names if provided
+      if (stageNames && stageNames.length > 0) {
+        requestBody.stage_names = stageNames;
+        console.log("Filtering health scores by stages:", stageNames);
+      }
+      
+      console.log('Health score request body:', requestBody);
+      console.log('API path:', apiPath);
+      
+      const result: HealthScoreData = await makeApiCall(apiPath, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+      
       console.log('Raw API response:', result);
       console.log('Sample bucket data:', result.buckets[0]);
-      console.log('API path:', apiPath);
       return result;
     } catch (error) {
       console.error('Error fetching health score data:', error);
@@ -606,7 +632,13 @@ const OwnerAnalysis: React.FC = () => {
     if (isInitialized && !loading) {
       const loadHealthData = async () => {
         try {
-          const healthData = await fetchHealthScoreData();
+          // Determine which stages to filter by
+          let stageNames: string[] | undefined;
+          if (funnelFilter !== 'all') {
+            stageNames = [funnelFilter];
+          }
+          
+          const healthData = await fetchHealthScoreData(stageNames);
           console.log('Health score data loaded:', healthData);
           console.log('Number of buckets:', healthData?.buckets?.length || 0);
           setHealthScoreData(healthData);
@@ -617,7 +649,7 @@ const OwnerAnalysis: React.FC = () => {
       
       loadHealthData();
     }
-  }, [isInitialized, loading, fetchHealthScoreData]);
+  }, [isInitialized, loading, fetchHealthScoreData, funnelFilter]);
 
   // Fetch all deals basic info asynchronously in the background
   useEffect(() => {
@@ -662,17 +694,7 @@ const OwnerAnalysis: React.FC = () => {
               if (funnelFilter === 'all') return true;
               
               const stage = allDealsBasic.find(d => d.name === deal.deal_name)?.stage || '';
-              
-              switch (funnelFilter) {
-                case 'top':
-                  return ['Assessment', '0. Identification', '1. Sales Qualification', '2. Needs Analysis & Solution Mapping'].includes(stage);
-                case 'mid':
-                  return ['3. Technical Validation', '4. Proposal & Negotiation', 'Proposal', 'Negotiation', 'Waiting for Signature'].includes(stage);
-                case 'closed':
-                  return ['Closed Won', 'Closed Lost', 'Closed Marketing Nurture', 'Closed Active Nurture', 'Renew/Closed won', 'Churned'].includes(stage);
-                default:
-                  return true;
-              }
+              return stage === funnelFilter;
             });
             
             // Calculate total signal count for this sentiment across all matching deals
@@ -812,66 +834,43 @@ const OwnerAnalysis: React.FC = () => {
           
           {/* Funnel Filter Controls */}
           <div className="mt-6">
-            <h3 className="text-lg font-semibold text-gray-700 mb-3">Filter by Funnel Stage</h3>
-            <div className="flex flex-wrap gap-3">
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  name="funnelFilter"
-                  value="all"
-                  checked={funnelFilter === 'all'}
-                  onChange={() => handleFunnelFilterChange('all')}
-                  className="mr-2 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm font-medium text-gray-700">All Signals</span>
-              </label>
-              
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  name="funnelFilter"
-                  value="top"
-                  checked={funnelFilter === 'top'}
-                  onChange={() => handleFunnelFilterChange('top')}
-                  className="mr-2 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm font-medium text-gray-700">Top of Funnel</span>
-              </label>
-              
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  name="funnelFilter"
-                  value="mid"
-                  checked={funnelFilter === 'mid'}
-                  onChange={() => handleFunnelFilterChange('mid')}
-                  className="mr-2 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm font-medium text-gray-700">Mid Funnel</span>
-              </label>
-              
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  name="funnelFilter"
-                  value="closed"
-                  checked={funnelFilter === 'closed'}
-                  onChange={() => handleFunnelFilterChange('closed')}
-                  className="mr-2 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm font-medium text-gray-700">Closed Funnel</span>
-              </label>
+            <h3 className="text-lg font-semibold text-gray-700 mb-3">Filter by Deal Stage</h3>
+            <div className="max-w-md">
+              <select 
+                value={funnelFilter}
+                onChange={(e) => handleFunnelFilterChange(e.target.value as FunnelFilter)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 font-medium shadow-sm"
+              >
+                <option value="all">All Stages</option>
+                <optgroup label="Early Stage">
+                  <option value="Assessment">Assessment</option>
+                  <option value="0. Identification">0. Identification</option>
+                  <option value="1. Sales Qualification">1. Sales Qualification</option>
+                  <option value="2. Needs Analysis & Solution Mapping">2. Needs Analysis & Solution Mapping</option>
+                </optgroup>
+                <optgroup label="Mid Stage">
+                  <option value="3. Technical Validation">3. Technical Validation</option>
+                  <option value="4. Proposal & Negotiation">4. Proposal & Negotiation</option>
+                  <option value="Proposal">Proposal</option>
+                  <option value="Negotiation">Negotiation</option>
+                  <option value="Waiting for Signature">Waiting for Signature</option>
+                </optgroup>
+                <optgroup label="Closed Stage">
+                  <option value="Closed Won">Closed Won</option>
+                  <option value="Closed Lost">Closed Lost</option>
+                  <option value="Closed Marketing Nurture">Closed Marketing Nurture</option>
+                  <option value="Closed Active Nurture">Closed Active Nurture</option>
+                  <option value="Renew/Closed won">Renew/Closed won</option>
+                  <option value="Churned">Churned</option>
+                </optgroup>
+              </select>
             </div>
             
             {/* Filter Description */}
             {funnelFilter !== 'all' && (
               <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="text-sm text-blue-800">
-                  <strong>Showing signals for:</strong> {
-                    funnelFilter === 'top' ? 'Assessment, Identification, Sales Qualification, Needs Analysis' :
-                    funnelFilter === 'mid' ? 'Technical Validation, Proposal, Negotiation, Waiting for Signature' :
-                    'Closed Won, Closed Lost, Marketing Nurture, Active Nurture, Renew, Churned'
-                  }
+                  <strong>Showing signals for stage:</strong> <span className="font-medium">{funnelFilter}</span>
                 </p>
               </div>
             )}
@@ -973,7 +972,11 @@ const OwnerAnalysis: React.FC = () => {
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-800">Captured Signals</h3>
               <p className="text-3xl font-bold text-blue-600 mt-2">{teamSummary.totalInteractions.toLocaleString()}</p>
-              <p className="text-sm text-gray-500 mt-1">Across all owners</p>
+              <p className="text-sm text-gray-500 mt-1">Across {
+                funnelFilter === 'all' 
+                  ? allDealsBasic.length 
+                  : allDealsBasic.filter(deal => deal.stage === funnelFilter).length
+              } deals</p>
             </div>
             
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
@@ -1245,7 +1248,7 @@ const OwnerAnalysis: React.FC = () => {
             )}
             {funnelFilter !== 'all' && (
               <span className="text-lg font-normal text-gray-600 ml-2">
-                - {funnelFilter === 'top' ? 'Top of Funnel' : funnelFilter === 'mid' ? 'Mid Funnel' : 'Closed Funnel'} Signals
+                - {funnelFilter} Stage Signals
               </span>
             )}
           </h3>
@@ -1542,20 +1545,7 @@ const OwnerAnalysis: React.FC = () => {
                     let shouldInclude = true;
                     if (funnelFilter !== 'all') {
                       const stage = allDealsBasic.find(d => d.name === deal.deal_name)?.stage || '';
-                      
-                      switch (funnelFilter) {
-                        case 'top':
-                          shouldInclude = ['Assessment', '0. Identification', '1. Sales Qualification', '2. Needs Analysis & Solution Mapping'].includes(stage);
-                          break;
-                        case 'mid':
-                          shouldInclude = ['3. Technical Validation', '4. Proposal & Negotiation', 'Proposal', 'Negotiation', 'Waiting for Signature'].includes(stage);
-                          break;
-                        case 'closed':
-                          shouldInclude = ['Closed Won', 'Closed Lost', 'Closed Marketing Nurture', 'Closed Active Nurture', 'Renew/Closed won', 'Churned'].includes(stage);
-                          break;
-                        default:
-                          shouldInclude = true;
-                      }
+                      shouldInclude = stage === funnelFilter;
                     }
                     
                     if (shouldInclude) {
@@ -1570,9 +1560,6 @@ const OwnerAnalysis: React.FC = () => {
                 });
               });
               
-              // Sort by positive count descending
-              allDeals.sort((a, b) => b.positiveCount - a.positiveCount);
-              
               if (allDeals.length === 0) {
                 return (
                   <div className="text-gray-500 text-sm text-center py-4">
@@ -1581,18 +1568,8 @@ const OwnerAnalysis: React.FC = () => {
                 );
               }
               
-              // Sort by latest date (most recent first)
-              allDeals.sort((a, b) => {
-                if (!a.signal_dates || !b.signal_dates) return 0;
-                if (a.signal_dates.length === 0 && b.signal_dates.length === 0) return 0;
-                if (a.signal_dates.length === 0) return 1;
-                if (b.signal_dates.length === 0) return -1;
-                
-                const aLatestDate = new Date(a.signal_dates[a.signal_dates.length - 1]);
-                const bLatestDate = new Date(b.signal_dates[b.signal_dates.length - 1]);
-                
-                return bLatestDate.getTime() - aLatestDate.getTime();
-              });
+              // Sort by positive count descending (most buying signals first)
+              allDeals.sort((a, b) => b.positiveCount - a.positiveCount);
               
               return allDeals.map((deal, index) => (
                 <div key={index} className="p-3 bg-gray-50 rounded-lg border border-gray-200">

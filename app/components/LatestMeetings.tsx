@@ -253,10 +253,17 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
     let badgeText = intent;
     let badgeColor = 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
 
-    if (lowerIntent.includes('likely') || lowerIntent.includes('buy')) {
-      badgeText = 'Likely to Buy';
+    // Handle specific buyer intent values to match Deal Logs display
+    if (lowerIntent === 'very likely to buy') {
+      badgeText = 'Very Likely to Buy';
       badgeColor = 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-    } else if (lowerIntent.includes('neutral')) {
+    } else if (lowerIntent === 'likely to buy') {
+      badgeText = 'Positive Signal'; // Match Deal Logs display
+      badgeColor = 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+    } else if (lowerIntent === 'less likely to buy') {
+      badgeText = 'Negative Signal';
+      badgeColor = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+    } else if (lowerIntent === 'neutral' || lowerIntent.includes('neutral')) {
       badgeText = 'Neutral';
       badgeColor = 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
     } else if (lowerIntent.includes('unable') || lowerIntent.includes('determine')) {
@@ -520,7 +527,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                     Date
                   </th>
                   <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Buyer Intent
+                    Signal
                   </th>
 
                 </tr>

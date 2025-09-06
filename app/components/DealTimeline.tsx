@@ -1560,6 +1560,16 @@ const DealTimeline: React.FC = () => {
     }
   }, [chartData]);
 
+  // Helper function to convert buyer intent to signal format
+  const formatBuyerIntentForDisplay = (intent: string): string => {
+    if (intent === 'Likely to buy') {
+      return 'Positive Signal';
+    } else if (intent === 'Less likely to buy') {
+      return 'Negative Signal';
+    }
+    return intent; // Return as-is for other values like "Very likely to buy", "Neutral", etc.
+  };
+
   // Custom tooltip for the chart - SIMPLIFIED VERSION
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length || !timelineData || !label) {
@@ -1657,7 +1667,7 @@ const DealTimeline: React.FC = () => {
                       <span className="ml-2 text-sm">
                         ({meetingIntents.map((intent, index) => (
                           <span key={index} className={getIntentColor(intent)}>
-                            {intent}{index < meetingIntents.length - 1 ? ', ' : ''}
+                            {formatBuyerIntentForDisplay(intent)}{index < meetingIntents.length - 1 ? ', ' : ''}
                           </span>
                         ))})
                       </span>
@@ -2151,7 +2161,8 @@ const EventDrawer = () => {
                                 ? 'bg-yellow-100 text-yellow-800'
                                 : 'bg-gray-100 text-gray-800'
                         }`}>
-                          {event.buyer_intent === 'Likely to buy' ? 'Positive Signal' : event.buyer_intent}
+                          {event.buyer_intent === 'Likely to buy' ? 'Positive Signal' : 
+                           event.buyer_intent === 'Less likely to buy' ? 'Negative Signal' : event.buyer_intent}
                             </span>
                       </div>
                     )}
@@ -2522,7 +2533,8 @@ return (
                     <div className="col-span-2">
                       {(eventType === 'Meeting' && event.buyer_intent) ? (
                         <span className={getIntentSentimentColor(event)}>
-                          {event.buyer_intent === 'Likely to buy' ? 'Positive Signal' : event.buyer_intent}
+                          {event.buyer_intent === 'Likely to buy' ? 'Positive Signal' : 
+                           event.buyer_intent === 'Less likely to buy' ? 'Negative Signal' : event.buyer_intent}
                         </span>
                       ) : event.sentiment ? (
                         <span className={getIntentSentimentColor(event)}>

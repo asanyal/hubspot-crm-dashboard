@@ -316,18 +316,64 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
     setIsModalOpen(false);
   };
 
-  // Handle ESC key to close modal
+  // Navigation functions for modal
+  const getCurrentMeetingIndex = useCallback(() => {
+    if (!selectedMeeting) return -1;
+    return filteredMeetings.findIndex(meeting => meeting.event_id === selectedMeeting.event_id);
+  }, [selectedMeeting, filteredMeetings]);
+
+  const navigateToPreviousMeeting = useCallback(() => {
+    const currentIndex = getCurrentMeetingIndex();
+    if (currentIndex > 0) {
+      setSelectedMeeting(filteredMeetings[currentIndex - 1]);
+    }
+  }, [getCurrentMeetingIndex, filteredMeetings]);
+
+  const navigateToNextMeeting = useCallback(() => {
+    const currentIndex = getCurrentMeetingIndex();
+    if (currentIndex < filteredMeetings.length - 1) {
+      setSelectedMeeting(filteredMeetings[currentIndex + 1]);
+    }
+  }, [getCurrentMeetingIndex, filteredMeetings]);
+
+  const canNavigatePrevious = useCallback(() => {
+    const currentIndex = getCurrentMeetingIndex();
+    return currentIndex > 0;
+  }, [getCurrentMeetingIndex]);
+
+  const canNavigateNext = useCallback(() => {
+    const currentIndex = getCurrentMeetingIndex();
+    return currentIndex < filteredMeetings.length - 1;
+  }, [getCurrentMeetingIndex, filteredMeetings]);
+
+  // Handle keyboard navigation in modal
   useEffect(() => {
-    const handleEscKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && isModalOpen) {
-        handleCloseModal();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isModalOpen) return;
+      
+      switch (event.key) {
+        case 'Escape':
+          handleCloseModal();
+          break;
+        case 'ArrowLeft':
+          event.preventDefault();
+          if (canNavigatePrevious()) {
+            navigateToPreviousMeeting();
+          }
+          break;
+        case 'ArrowRight':
+          event.preventDefault();
+          if (canNavigateNext()) {
+            navigateToNextMeeting();
+          }
+          break;
       }
     };
 
     if (isModalOpen) {
-      document.addEventListener('keydown', handleEscKey);
+      document.addEventListener('keydown', handleKeyDown);
       return () => {
-        document.removeEventListener('keydown', handleEscKey);
+        document.removeEventListener('keydown', handleKeyDown);
       };
     }
   }, [isModalOpen]);
@@ -613,15 +659,53 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
       {/* Meeting Insights Modal */}
       {isModalOpen && selectedMeeting && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          {/* Left Navigation Arrow */}
+          <button
+            onClick={navigateToPreviousMeeting}
+            disabled={!canNavigatePrevious()}
+            className={`absolute left-4 top-1/2 transform -translate-y-1/2 p-4 rounded-full transition-all duration-200 backdrop-blur-sm ${
+              canNavigatePrevious()
+                ? 'bg-white/90 dark:bg-gray-800/90 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 hover:scale-110 shadow-lg border border-white/20'
+                : 'bg-gray-300/50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-600 cursor-not-allowed'
+            }`}
+            title="Previous meeting (←)"
+          >
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+
+          {/* Right Navigation Arrow */}
+          <button
+            onClick={navigateToNextMeeting}
+            disabled={!canNavigateNext()}
+            className={`absolute right-4 top-1/2 transform -translate-y-1/2 p-4 rounded-full transition-all duration-200 backdrop-blur-sm ${
+              canNavigateNext()
+                ? 'bg-white/90 dark:bg-gray-800/90 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 hover:scale-110 shadow-lg border border-white/20'
+                : 'bg-gray-300/50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-600 cursor-not-allowed'
+            }`}
+            title="Next meeting (→)"
+          >
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+
           <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
             <div className="flex justify-between items-start p-6 border-b border-gray-200 dark:border-gray-700">
               <div className="flex-1 space-y-4">
                 {/* Meeting Subject - Main Title */}
-                <div className="space-y-2">
+                <div className="space-y-2 text-center">
                   <h2 className="text-xl font-semibold text-gray-900 dark:text-white leading-tight">
                     {selectedMeeting.subject}
                   </h2>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Meeting Insights</p>
+                  <div className="flex items-center justify-center space-x-2">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Meeting Insights</p>
+                    <span className="text-gray-300 dark:text-gray-600">•</span>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {getCurrentMeetingIndex() + 1} of {filteredMeetings.length}
+                    </p>
+                  </div>
                 </div>
                 
                 {/* Metadata Chips - Organized in a clean grid */}
@@ -684,12 +768,14 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                   })()}
                 </div>
               </div>
-              
+
+              {/* Close Button */}
               <button
                 onClick={handleCloseModal}
-                className="ml-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                title="Close modal (Esc)"
               >
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>

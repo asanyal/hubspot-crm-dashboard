@@ -167,6 +167,25 @@ const OwnerAnalysis: React.FC = () => {
   const [allDealsBasic, setAllDealsBasic] = useState<DealBasicInfo[]>([]);
   const [funnelFilter, setFunnelFilter] = useState<FunnelFilter>('all');
 
+  // Add color mapping for stages
+  const getStageColor = (stage: string): { bg: string; text: string; border: string } => {
+    const colors: Record<string, { bg: string; text: string; border: string }> = {
+      'Closed Won': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+      'Closed Lost': { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
+      'Closed Marketing Nurture': { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' },
+      'Closed Active Nurture': { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' },
+      'Assessment': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+      'Waiting for Signature': { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
+      '1. Sales Qualification': { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+      '2. Needs Analysis & Solution Mapping': { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+      '3. Technical Validation': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
+      '4. Proposal & Negotiation': { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
+      '0. Identification': { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
+      'Renew/Closed Won': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' }
+    };
+    return colors[stage] || { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' };
+  };
+
   // Initialize browser ID and funnel filter on component mount
   useEffect(() => {
     const initializeBrowserId = () => {
@@ -1529,6 +1548,7 @@ const OwnerAnalysis: React.FC = () => {
                 owner: string;
                 signal_dates: string[];
                 positiveCount: number;
+                stage: string;
               }> = [];
               
               // Process deals from all owners
@@ -1549,11 +1569,13 @@ const OwnerAnalysis: React.FC = () => {
                     }
                     
                     if (shouldInclude) {
+                      const stage = allDealsBasic.find(d => d.name === deal.deal_name)?.stage || 'Unknown';
                       allDeals.push({
                         deal_name: deal.deal_name,
                         owner: owner.owner,
                         signal_dates: deal.signal_dates,
-                        positiveCount
+                        positiveCount,
+                        stage
                       });
                     }
                   }
@@ -1590,9 +1612,14 @@ const OwnerAnalysis: React.FC = () => {
                             🔥 HOT
                           </span>
                         )}
-                        <span className="text-xs text-gray-500">•</span>
+                      </div>
+                      <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm text-gray-600 truncate" title={deal.owner}>
                           {deal.owner}
+                        </span>
+                        <span className="text-xs text-gray-500">•</span>
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStageColor(deal.stage).bg} ${getStageColor(deal.stage).text} ${getStageColor(deal.stage).border}`}>
+                          {deal.stage}
                         </span>
                       </div>
                       <div className="text-xs text-gray-500">

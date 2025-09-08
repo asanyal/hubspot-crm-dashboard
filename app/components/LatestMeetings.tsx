@@ -24,7 +24,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [timeframe, setTimeframe] = useState<number>(1); // Changed default to 1 (Last 24h)
+  const [timeframe, setTimeframe] = useState<number>(3); // Changed default to 3 (Last 3 days)
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -376,7 +376,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
         document.removeEventListener('keydown', handleKeyDown);
       };
     }
-  }, [isModalOpen]);
+  }, [isModalOpen, canNavigatePrevious, canNavigateNext, navigateToPreviousMeeting, navigateToNextMeeting]);
 
   // Function to fetch buyer intent explanation for a specific meeting
   const fetchBuyerIntentExplanation = useCallback(async (dealId: string, eventId: string) => {
@@ -841,4 +841,4 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   );
 };
 
-export default LatestMeetings; 
+export default LatestMeetings;

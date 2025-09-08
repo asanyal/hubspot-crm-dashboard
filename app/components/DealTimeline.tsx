@@ -1934,7 +1934,7 @@ const EventDrawer = () => {
     >
       <div className="p-6 border-b border-gray-100 sticky top-0 bg-white z-10 flex justify-between items-center">
         <div>
-          <h3 className="text-lg font-semibold text-gray-800">
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
             {selectedDeal?.name || 'Events'}
           </h3>
           {selectedDate && (
@@ -1999,7 +1999,7 @@ const EventDrawer = () => {
               return (
                 <div>
                   <div className="mb-6">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">{concernTitle}</h2>
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{concernTitle}</h2>
                     <div className="flex items-center gap-3">
                       <span className={`text-xl font-bold ${concernColor}`}>
                         {concernStatus}
@@ -2009,7 +2009,7 @@ const EventDrawer = () => {
                   
                   <div className="bg-gray-50 rounded-lg p-4 relative">
                     <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-lg font-semibold text-gray-900">Analysis</h3>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Analysis</h3>
                       {concernExplanation && (
                         <button
                           onClick={async () => {
@@ -2108,7 +2108,7 @@ const EventDrawer = () => {
                             </svg>
                           </div>
                           <div>
-                            <h4 className="font-semibold text-gray-900">{event.subject}</h4>
+                            <h4 className="font-semibold text-gray-900 dark:text-white">{event.subject}</h4>
                             <p className="text-sm text-gray-500">
                               {event.type === 'Incoming Email' ? 'Received' : 'Sent'} at {event.time_str}
                             </p>
@@ -2144,7 +2144,7 @@ const EventDrawer = () => {
                             </svg>
                           </div>
                           <div>
-                            <h4 className="font-semibold text-gray-900">{event.subject}</h4>
+                            <h4 className="font-semibold text-gray-900 dark:text-white">{event.subject}</h4>
                             <p className="text-sm text-gray-500">Meeting at {event.time_str}</p>
                           </div>
                         </div>
@@ -2262,7 +2262,7 @@ const EventDrawer = () => {
                     {/* Champion Information for Meetings */}
                     {event.type === 'Meeting' && event.subject && event.date_str && (
                       <div className="mt-4">
-                        <h4 className="font-semibold mb-2">Attendees</h4>
+                        <h4 className="font-semibold mb-2 text-gray-900 dark:text-white">Attendees</h4>
                         {meetingContacts[`${event.subject}_${event.date_str}`]?.contacts?.length > 0 ? (
                           meetingContacts[`${event.subject}_${event.date_str}`].contacts.map((contact, idx) => (
                             <div key={idx} className="p-2 bg-white rounded border border-gray-100">
@@ -2431,7 +2431,7 @@ const DealLogs: React.FC<{
 return (
     <div className="p-6">
       <div className="mb-4">
-        <h3 className="text-lg font-semibold text-gray-800">Deal Logs</h3>
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Deal Logs</h3>
         
         {/* Filter controls */}
         <div className="flex flex-wrap gap-2">
@@ -2547,7 +2547,7 @@ return (
 
                     {/* Details */}
                     <div className="col-span-6">
-                      <span className="text-gray-900">
+                      <span className="text-gray-900 dark:text-white">
                         {eventSubject || 'No subject'}
                       </span>
                     </div>
@@ -3418,7 +3418,7 @@ useEffect(() => {
                   >
                     <div className="flex-1 min-w-0">
                       <div className={`text-sm font-medium truncate mb-1 ${
-                        isSelected ? 'text-blue-700' : 'text-gray-900'
+                        isSelected ? 'text-blue-700' : 'text-gray-900 dark:text-white'
                       }`}>
                         {deal.name}
                       </div>
@@ -3510,7 +3510,7 @@ useEffect(() => {
           </button>
           {selectedDeal && (
             <div className="flex items-center">
-              <span className="text-2xl font-bold text-gray-800">{selectedDeal.name}</span>
+              <span className="text-2xl font-bold text-gray-800 dark:text-white">{selectedDeal.name}</span>
               <div className="relative inline-block ml-3" ref={latestActivityTooltipRef}>
                 <div className="cursor-help group">
                   <div 
@@ -3687,15 +3687,15 @@ useEffect(() => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="text-sm">
                   <span className="text-gray-500">Started:</span>
-                  <div className="font-medium text-gray-900">{formatDate(dealInfo.startDate)}</div>
+                  <div className="font-medium text-gray-900 dark:text-white">{formatDate(dealInfo.startDate)}</div>
                 </div>
                 <div className="text-sm">
                   <span className="text-gray-500">Deal Owner:</span>
-                  <div className="font-medium text-gray-900">{dealInfo.dealOwner}</div>
+                  <div className="font-medium text-gray-900 dark:text-white">{dealInfo.dealOwner}</div>
                 </div>
                 <div className="text-sm">
                   <span className="text-gray-500">Stage:</span>
-                  <div className="font-medium text-gray-900">{dealInfo.dealStage}</div>
+                  <div className="font-medium text-gray-900 dark:text-white">{dealInfo.dealStage}</div>
                 </div>
               </div>
             </div>
@@ -3704,12 +3704,12 @@ useEffect(() => {
           {/* Stakeholders Section */}
           {loadingStakeholders ? (
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-              <h3 className="font-semibold text-gray-700 mb-4">Stakeholders</h3>
+              <h3 className="font-semibold text-gray-700 dark:text-white mb-4">Stakeholders</h3>
               <div className="text-gray-500">Loading...</div>
             </div>
           ) : stakeholders.length > 0 ? (
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100" ref={stakeholderTooltipsRef}>
-              <h3 className="font-semibold text-gray-700 mb-4">Stakeholders</h3>
+              <h3 className="font-semibold text-gray-700 dark:text-white mb-4">Stakeholders</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Decision Makers */}
                 <div>
@@ -3813,7 +3813,7 @@ useEffect(() => {
               <div className="flex items-center justify-between">
                 <div className="text-sm">
                   <span className="text-gray-500">Last Touch Point:</span>
-                  <div className="font-medium text-gray-900">{formatDate(dealInfo.endDate)}</div>
+                  <div className="font-medium text-gray-900 dark:text-white">{formatDate(dealInfo.endDate)}</div>
                 </div>
                 <div className={`px-3 py-1 rounded-full text-xs font-medium ${
                   calculateDaysPassed(dealInfo.endDate) > 10 
@@ -4082,7 +4082,7 @@ useEffect(() => {
           {/* Add Sentiment Trends Chart */}
           {timelineData && timelineData.events && (
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 mb-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Sentiment Trends</h3>
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Sentiment Trends</h3>
               {(() => {
                 // Process events to create sentiment trend data
                 const sentimentData = (timelineData.events as Event[])
@@ -4300,7 +4300,7 @@ useEffect(() => {
           )}
 
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Timeline Chart</h3>
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Timeline Chart</h3>
             {chartData.length > 0 ? (
               <div className="h-[500px] w-full">
                 <ResponsiveContainer width="100%" height="100%">

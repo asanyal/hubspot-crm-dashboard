@@ -92,6 +92,8 @@ interface DealBasicInfo {
 
 type FunnelFilter = 'all' | 'Assessment' | '0. Identification' | '1. Sales Qualification' | '2. Needs Analysis & Solution Mapping' | '3. Technical Validation' | '4. Proposal & Negotiation' | 'Proposal' | 'Negotiation' | 'Waiting for Signature' | 'Closed Won' | 'Closed Lost' | 'Closed Marketing Nurture' | 'Closed Active Nurture' | 'Renew/Closed won' | 'Churned';
 
+type DateRangeFilter = 'all' | '1week' | '2weeks' | '1month' | '2months' | '3months' | '6months' | '1year';
+
 
 
 const COLORS = {
@@ -166,6 +168,7 @@ const OwnerAnalysis: React.FC = () => {
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
   const [allDealsBasic, setAllDealsBasic] = useState<DealBasicInfo[]>([]);
   const [funnelFilter, setFunnelFilter] = useState<FunnelFilter>('all');
+  const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>('all');
 
   // Add color mapping for stages
   const getStageColor = (stage: string): { bg: string; text: string; border: string } => {
@@ -201,6 +204,13 @@ const OwnerAnalysis: React.FC = () => {
       const validFilters = ['all', 'Assessment', '0. Identification', '1. Sales Qualification', '2. Needs Analysis & Solution Mapping', '3. Technical Validation', '4. Proposal & Negotiation', 'Proposal', 'Negotiation', 'Waiting for Signature', 'Closed Won', 'Closed Lost', 'Closed Marketing Nurture', 'Closed Active Nurture', 'Renew/Closed won', 'Churned'];
       if (storedFilter && validFilters.includes(storedFilter)) {
         setFunnelFilter(storedFilter);
+      }
+
+      // Load persisted date range filter
+      const storedDateFilter = localStorage.getItem('dateRangeFilter') as DateRangeFilter;
+      const validDateFilters = ['all', '1week', '2weeks', '1month', '2months', '3months', '6months', '1year'];
+      if (storedDateFilter && validDateFilters.includes(storedDateFilter)) {
+        setDateRangeFilter(storedDateFilter);
       }
       
       setIsInitialized(true);
@@ -252,6 +262,42 @@ const OwnerAnalysis: React.FC = () => {
     }
   }, [makeApiCall]);
 
+  // Get date range boundaries based on filter
+  const getDateRange = useCallback((filter: DateRangeFilter): { startDate: Date | null; endDate: Date | null } => {
+    if (filter === 'all') {
+      return { startDate: null, endDate: null };
+    }
+
+    const endDate = new Date();
+    const startDate = new Date();
+
+    switch (filter) {
+      case '1week':
+        startDate.setDate(endDate.getDate() - 7);
+        break;
+      case '2weeks':
+        startDate.setDate(endDate.getDate() - 14);
+        break;
+      case '1month':
+        startDate.setMonth(endDate.getMonth() - 1);
+        break;
+      case '2months':
+        startDate.setMonth(endDate.getMonth() - 2);
+        break;
+      case '3months':
+        startDate.setMonth(endDate.getMonth() - 3);
+        break;
+      case '6months':
+        startDate.setMonth(endDate.getMonth() - 6);
+        break;
+      case '1year':
+        startDate.setFullYear(endDate.getFullYear() - 1);
+        break;
+    }
+
+    return { startDate, endDate };
+  }, []);
+
   // Fetch all deals basic info
   const fetchAllDealsBasic = useCallback(async (): Promise<DealBasicInfo[]> => {
     try {
@@ -265,11 +311,22 @@ const OwnerAnalysis: React.FC = () => {
   }, [makeApiCall]);
 
   // Fetch health score data
-  const fetchHealthScoreData = useCallback(async (stageNames?: string[]): Promise<HealthScoreData> => {
+  const fetchHealthScoreData = useCallback(async (stageNames?: string[], dateRange?: DateRangeFilter): Promise<HealthScoreData> => {
     try {
-      const startDate = '1 Jan 2025';
-      const endDate = new Date();
+      let startDate = '1 Jan 2025'; // Default start date
+      let endDate = new Date();
+      
+      // Override dates if date range filter is specified
+      if (dateRange && dateRange !== 'all') {
+        const { startDate: rangeStart, endDate: rangeEnd } = getDateRange(dateRange);
+        if (rangeStart && rangeEnd) {
+          startDate = `${rangeStart.getDate()} ${rangeStart.toLocaleDateString('en-US', { month: 'short' })} ${rangeStart.getFullYear()}`;
+          endDate = rangeEnd;
+        }
+      }
+      
       const endDateFormatted = `${endDate.getDate()} ${endDate.toLocaleDateString('en-US', { month: 'short' })} ${endDate.getFullYear()}`;
+      console.log("Start date formatted: ", startDate);
       console.log("End date formatted: ", endDateFormatted);
       
       const apiPath = API_CONFIG.getApiPath('/health-scores');
@@ -306,7 +363,7 @@ const OwnerAnalysis: React.FC = () => {
       console.error('Error fetching health score data:', error);
       throw error;
     }
-  }, [makeApiCall]);
+  }, [makeApiCall, getDateRange]);
 
 
 
@@ -395,6 +452,28 @@ const OwnerAnalysis: React.FC = () => {
     const deal = allDealsBasic.find(d => d.name === dealName);
     return deal?.stage || '';
   }, [allDealsBasic]);
+
+  // Filter signal dates based on date range
+  const filterSignalDates = useCallback((signalDates: string[], dateRange: DateRangeFilter): string[] => {
+    if (dateRange === 'all' || !signalDates || signalDates.length === 0) {
+      return signalDates;
+    }
+
+    const { startDate, endDate } = getDateRange(dateRange);
+    if (!startDate || !endDate) {
+      return signalDates;
+    }
+
+    return signalDates.filter(dateStr => {
+      try {
+        const date = new Date(dateStr);
+        return date >= startDate && date <= endDate;
+      } catch (error) {
+        console.warn('Error parsing date:', dateStr, error);
+        return false;
+      }
+    });
+  }, [getDateRange]);
 
 
 
@@ -516,6 +595,12 @@ const OwnerAnalysis: React.FC = () => {
     // Clear deal filter when changing funnel filter
     setSelectedDeal(null);
     setSearchQuery('');
+  }, []);
+
+  // Handle date range filter change
+  const handleDateRangeFilterChange = useCallback((filter: DateRangeFilter) => {
+    setDateRangeFilter(filter);
+    localStorage.setItem('dateRangeFilter', filter);
   }, []);
 
   // Handle click outside to close suggestions
@@ -657,9 +742,10 @@ const OwnerAnalysis: React.FC = () => {
             stageNames = [funnelFilter];
           }
           
-          const healthData = await fetchHealthScoreData(stageNames);
+          const healthData = await fetchHealthScoreData(stageNames, dateRangeFilter);
           console.log('Health score data loaded:', healthData);
           console.log('Number of buckets:', healthData?.buckets?.length || 0);
+          
           setHealthScoreData(healthData);
         } catch (error) {
           console.error('Error loading health score data:', error);
@@ -668,7 +754,7 @@ const OwnerAnalysis: React.FC = () => {
       
       loadHealthData();
     }
-  }, [isInitialized, loading, fetchHealthScoreData, funnelFilter]);
+  }, [isInitialized, loading, fetchHealthScoreData, funnelFilter, dateRangeFilter, getDateRange]);
 
   // Fetch all deals basic info asynchronously in the background
   useEffect(() => {
@@ -686,7 +772,7 @@ const OwnerAnalysis: React.FC = () => {
     }
   }, [isInitialized, loading, fetchAllDealsBasic]);
 
-  // Refilter data when selectedDeal or funnelFilter changes
+  // Refilter data when selectedDeal, funnelFilter, or dateRangeFilter changes
   useEffect(() => {
     if (data) {
       // Filter data directly here instead of calling getFilteredData to avoid dependency loops
@@ -715,6 +801,12 @@ const OwnerAnalysis: React.FC = () => {
               const stage = allDealsBasic.find(d => d.name === deal.deal_name)?.stage || '';
               return stage === funnelFilter;
             });
+
+            // Apply date range filtering to signal dates
+            filteredDeals = filteredDeals.map(deal => ({
+              ...deal,
+              signal_dates: filterSignalDates(deal.signal_dates || [], dateRangeFilter)
+            })).filter(deal => deal.signal_dates.length > 0); // Remove deals with no signals in date range
             
             // Calculate total signal count for this sentiment across all matching deals
             const totalSignals = filteredDeals.reduce((sum, deal) => 
@@ -753,7 +845,7 @@ const OwnerAnalysis: React.FC = () => {
         setTeamSummary(null);
       }
     }
-  }, [selectedDeal, funnelFilter, data, allDealsBasic, processOwnerData, calculateTeamSummary]);
+  }, [selectedDeal, funnelFilter, dateRangeFilter, data, allDealsBasic, processOwnerData, calculateTeamSummary, filterSignalDates]);
 
   // Toggle expanded row for specific owner and sentiment
   const toggleExpandedRow = useCallback((ownerId: string, sentiment: 'positive' | 'neutral' | 'negative') => {
@@ -851,45 +943,86 @@ const OwnerAnalysis: React.FC = () => {
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
           <h1 className="text-3xl font-bold text-gray-900">Customer Signals</h1>
           
-          {/* Funnel Filter Controls */}
-          <div className="mt-6">
-            <h3 className="text-lg font-semibold text-gray-700 mb-3">Filter by Deal Stage</h3>
-            <div className="max-w-md">
-              <select 
-                value={funnelFilter}
-                onChange={(e) => handleFunnelFilterChange(e.target.value as FunnelFilter)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 font-medium shadow-sm"
-              >
-                <option value="all">All Stages</option>
-                <optgroup label="Early Stage">
-                  <option value="Assessment">Assessment</option>
-                  <option value="0. Identification">0. Identification</option>
-                  <option value="1. Sales Qualification">1. Sales Qualification</option>
-                  <option value="2. Needs Analysis & Solution Mapping">2. Needs Analysis & Solution Mapping</option>
-                </optgroup>
-                <optgroup label="Mid Stage">
-                  <option value="3. Technical Validation">3. Technical Validation</option>
-                  <option value="4. Proposal & Negotiation">4. Proposal & Negotiation</option>
-                  <option value="Proposal">Proposal</option>
-                  <option value="Negotiation">Negotiation</option>
-                  <option value="Waiting for Signature">Waiting for Signature</option>
-                </optgroup>
-                <optgroup label="Closed Stage">
-                  <option value="Closed Won">Closed Won</option>
-                  <option value="Closed Lost">Closed Lost</option>
-                  <option value="Closed Marketing Nurture">Closed Marketing Nurture</option>
-                  <option value="Closed Active Nurture">Closed Active Nurture</option>
-                  <option value="Renew/Closed won">Renew/Closed won</option>
-                  <option value="Churned">Churned</option>
-                </optgroup>
-              </select>
+          {/* Filter Controls */}
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Deal Stage Filter */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-700 mb-3">Filter by Deal Stage</h3>
+              <div className="max-w-md">
+                <select 
+                  value={funnelFilter}
+                  onChange={(e) => handleFunnelFilterChange(e.target.value as FunnelFilter)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 font-medium shadow-sm"
+                >
+                  <option value="all">All Stages</option>
+                  <optgroup label="Early Stage">
+                    <option value="Assessment">Assessment</option>
+                    <option value="0. Identification">0. Identification</option>
+                    <option value="1. Sales Qualification">1. Sales Qualification</option>
+                    <option value="2. Needs Analysis & Solution Mapping">2. Needs Analysis & Solution Mapping</option>
+                  </optgroup>
+                  <optgroup label="Mid Stage">
+                    <option value="3. Technical Validation">3. Technical Validation</option>
+                    <option value="4. Proposal & Negotiation">4. Proposal & Negotiation</option>
+                    <option value="Proposal">Proposal</option>
+                    <option value="Negotiation">Negotiation</option>
+                    <option value="Waiting for Signature">Waiting for Signature</option>
+                  </optgroup>
+                  <optgroup label="Closed Stage">
+                    <option value="Closed Won">Closed Won</option>
+                    <option value="Closed Lost">Closed Lost</option>
+                    <option value="Closed Marketing Nurture">Closed Marketing Nurture</option>
+                    <option value="Closed Active Nurture">Closed Active Nurture</option>
+                    <option value="Renew/Closed won">Renew/Closed won</option>
+                    <option value="Churned">Churned</option>
+                  </optgroup>
+                </select>
+              </div>
             </div>
-            
-            {/* Filter Description */}
+
+            {/* Date Range Filter */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-700 mb-3">Filter by Date Range</h3>
+              <div className="max-w-md">
+                <select 
+                  value={dateRangeFilter}
+                  onChange={(e) => handleDateRangeFilterChange(e.target.value as DateRangeFilter)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 font-medium shadow-sm"
+                >
+                  <option value="all">All Time</option>
+                  <option value="1week">Last 1 Week</option>
+                  <option value="2weeks">Last 2 Weeks</option>
+                  <option value="1month">Last 1 Month</option>
+                  <option value="2months">Last 2 Months</option>
+                  <option value="3months">Last 3 Months</option>
+                  <option value="6months">Last 6 Months</option>
+                  <option value="1year">Last 1 Year</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          
+          {/* Filter Descriptions */}
+          <div className="mt-4 space-y-3">
             {funnelFilter !== 'all' && (
-              <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="text-sm text-blue-800">
                   <strong>Showing signals for stage:</strong> <span className="font-medium">{funnelFilter}</span>
+                </p>
+              </div>
+            )}
+            {dateRangeFilter !== 'all' && (
+              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                <p className="text-sm text-green-800">
+                  <strong>Showing signals from:</strong> <span className="font-medium">
+                    {dateRangeFilter === '1week' && 'Last 1 Week'}
+                    {dateRangeFilter === '2weeks' && 'Last 2 Weeks'}
+                    {dateRangeFilter === '1month' && 'Last 1 Month'}
+                    {dateRangeFilter === '2months' && 'Last 2 Months'}
+                    {dateRangeFilter === '3months' && 'Last 3 Months'}
+                    {dateRangeFilter === '6months' && 'Last 6 Months'}
+                    {dateRangeFilter === '1year' && 'Last 1 Year'}
+                  </span>
                 </p>
               </div>
             )}
@@ -1270,13 +1403,25 @@ const OwnerAnalysis: React.FC = () => {
                 - {funnelFilter} Stage Signals
               </span>
             )}
+            {dateRangeFilter !== 'all' && (
+              <span className="text-lg font-normal text-gray-600 ml-2">
+                - {dateRangeFilter === '1week' && 'Last 1 Week'}
+                {dateRangeFilter === '2weeks' && 'Last 2 Weeks'}
+                {dateRangeFilter === '1month' && 'Last 1 Month'}
+                {dateRangeFilter === '2months' && 'Last 2 Months'}
+                {dateRangeFilter === '3months' && 'Last 3 Months'}
+                {dateRangeFilter === '6months' && 'Last 6 Months'}
+                {dateRangeFilter === '1year' && 'Last 1 Year'}
+              </span>
+            )}
           </h3>
           <div className="mb-4">
             <p className="text-sm text-gray-600">
-              Frequency of buying signals detected in calls across different time periods.
+              {dateRangeFilter === 'all' 
+                ? 'Frequency of buying signals detected in calls across different time periods.'
+                : 'Frequency of buying signals detected in calls within the selected date range.'
+              }
             </p>
-            
-
           </div>
           
           {healthScoreData && healthScoreData.buckets && healthScoreData.buckets.length > 0 ? (

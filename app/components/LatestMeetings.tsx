@@ -278,7 +278,8 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   const filteredMeetings = meetings.filter(meeting => {
     if (!searchTerm.trim()) return true;
     const searchLower = searchTerm.toLowerCase();
-    return meeting.subject.toLowerCase().includes(searchLower);
+    return meeting.subject.toLowerCase().includes(searchLower) || 
+           meeting.deal_id.toLowerCase().includes(searchLower);
   });
 
   // Navigate to deal timeline
@@ -526,7 +527,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
         <div className="relative">
           <input
             type="text"
-            placeholder="Search meetings by subject..."
+            placeholder="Search by deal name or meeting subject..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full px-4 py-2 pl-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 transition-colors"

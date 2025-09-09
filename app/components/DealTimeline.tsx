@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { Deal } from '../context/AppContext';
 import { API_CONFIG } from '../utils/config';
+import { parseBuyerIntentExplanation } from '../utils/buyerIntentParser';
 
 interface Contact {
   champion: boolean;
@@ -2218,42 +2219,20 @@ const EventDrawer = () => {
                         </div>
                         <div className="space-y-6">
                           {(() => {
-                            const explanation = event.buyer_intent_explanation;
+                            const sections = parseBuyerIntentExplanation(event.buyer_intent_explanation);
 
-                            const isStructuredObject =
-                              typeof explanation === 'object' &&
-                              explanation !== null &&
-                              !Array.isArray(explanation);
-
-                            const sections = isStructuredObject
-                              ? explanation
-                              : {
-                                  Explanation: [
-                                    typeof explanation === 'string' ? explanation : 'N/A',
-                                  ],
-                                };
-
-                            return Object.entries(sections).map(([title, rawBulletPoints]) => {
-                              // Normalize bullet points into an array of strings
-                              const bulletPoints = Array.isArray(rawBulletPoints)
-                                ? rawBulletPoints
-                                : typeof rawBulletPoints === 'object' && rawBulletPoints !== null
-                                  ? Object.values(rawBulletPoints)
-                                  : [String(rawBulletPoints)];
-
-                              return (
-                                <div key={title} className="space-y-2">
-                                  <h5 className="font-bold text-blue-900">{title}</h5>
-                                  <ul className="list-disc pl-5 space-y-1">
-                                    {bulletPoints.map((point, index) => (
-                                      <li key={index} className="text-sm text-blue-800 leading-relaxed">
-                                        {String(point)}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              );
-                            });
+                            return sections.map((section, sectionIndex) => (
+                              <div key={sectionIndex} className="space-y-2">
+                                <h5 className="font-bold text-blue-900">{section.title}</h5>
+                                <ul className="list-disc pl-5 space-y-1">
+                                  {section.bulletPoints.map((point, pointIndex) => (
+                                    <li key={pointIndex} className="text-sm text-blue-800 leading-relaxed">
+                                      {point}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ));
                           })()}
                         </div>
                       </div>

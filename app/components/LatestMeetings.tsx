@@ -33,6 +33,9 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   const [selectedSignals, setSelectedSignals] = useState<Set<string>>(new Set());
   const router = useRouter();
 
+  // Feature flag to disable buyer intent explanation fetching if CORS issues persist
+  const ENABLE_BUYER_INTENT_ENHANCEMENT = false; // Set to false to disable CORS-prone functionality
+
   // Function to save meetings data to localStorage
   const saveMeetingsToStorage = useCallback((days: number, data: Meeting[]) => {
     try {
@@ -170,21 +173,23 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
           setMeetings(cachedData);
           setLoading(false);
           
-          // Check if cached data needs enhancement and do it in background
-          const needsEnhancement = cachedData.some((meeting: Meeting) => 
-            !meeting.buyer_intent_explanation || meeting.buyer_intent_explanation === 'N/A'
-          );
-          
-          if (needsEnhancement) {
-            console.log('Enhancing cached data in background...');
-            enhanceMeetingsWithExplanations(cachedData).then(enhancedCachedData => {
-              setMeetings(enhancedCachedData);
-              // Update cache with enhanced data
-              saveMeetingsToStorage(days, enhancedCachedData);
-            }).catch(error => {
-              console.error('Error enhancing cached data:', error);
-              // Keep the cached data even if enhancement fails
-            });
+          // Check if cached data needs enhancement and do it in background (if enabled)
+          if (ENABLE_BUYER_INTENT_ENHANCEMENT) {
+            const needsEnhancement = cachedData.some((meeting: Meeting) => 
+              !meeting.buyer_intent_explanation || meeting.buyer_intent_explanation === 'N/A'
+            );
+            
+            if (needsEnhancement) {
+              console.log('Enhancing cached data in background...');
+              enhanceMeetingsWithExplanations(cachedData).then(enhancedCachedData => {
+                setMeetings(enhancedCachedData);
+                // Update cache with enhanced data
+                saveMeetingsToStorage(days, enhancedCachedData);
+              }).catch(error => {
+                console.error('Error enhancing cached data:', error);
+                // Keep the cached data even if enhancement fails
+              });
+            }
           }
           
           return;
@@ -214,16 +219,18 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
         // Save basic meetings data to localStorage
         saveMeetingsToStorage(days, sortedMeetings);
         
-        // Enhance meetings with buyer intent explanations in the background
-        console.log('Enhancing meetings with buyer intent explanations in background...');
-        enhanceMeetingsWithExplanations(sortedMeetings).then(enhancedMeetings => {
-          setMeetings(enhancedMeetings);
-          // Update cache with enhanced data
-          saveMeetingsToStorage(days, enhancedMeetings);
-        }).catch(error => {
-          console.error('Error enhancing meetings:', error);
-          // Keep the basic meetings even if enhancement fails
-        });
+        // Enhance meetings with buyer intent explanations in the background (if enabled)
+        if (ENABLE_BUYER_INTENT_ENHANCEMENT) {
+          console.log('Enhancing meetings with buyer intent explanations in background...');
+          enhanceMeetingsWithExplanations(sortedMeetings).then(enhancedMeetings => {
+            setMeetings(enhancedMeetings);
+            // Update cache with enhanced data
+            saveMeetingsToStorage(days, enhancedMeetings);
+          }).catch(error => {
+            console.error('Error enhancing meetings:', error);
+            // Keep the basic meetings even if enhancement fails
+          });
+        }
       }
     } catch (error) {
       console.error('Error fetching latest meetings:', error);
@@ -526,7 +533,14 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
         }
       }
     } catch (error) {
-      console.error('Error fetching buyer intent explanation:', error);
+      // Handle CORS and other errors gracefully - don't let them break the component
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('CORS')) {
+        console.warn('CORS error fetching buyer intent explanation - skipping enhancement for:', dealId);
+      } else {
+        console.warn('Error fetching buyer intent explanation for:', dealId, errorMessage);
+      }
+      // Return null instead of throwing to prevent component from breaking
     }
     return null;
   }, [makeApiCall]);

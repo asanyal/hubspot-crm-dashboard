@@ -34,7 +34,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   const router = useRouter();
 
   // Feature flag to disable buyer intent explanation fetching if CORS issues persist
-  const ENABLE_BUYER_INTENT_ENHANCEMENT = false; // Set to false to disable CORS-prone functionality
+  const ENABLE_BUYER_INTENT_ENHANCEMENT = true; // Re-enabled to restore insights functionality
 
   // Function to save meetings data to localStorage
   const saveMeetingsToStorage = useCallback((days: number, data: Meeting[]) => {
@@ -521,7 +521,8 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   // Function to fetch buyer intent explanation for a specific meeting
   const fetchBuyerIntentExplanation = useCallback(async (dealId: string, eventId: string) => {
     try {
-      const response = await makeApiCall(`${API_CONFIG.getApiPath('/deal-timeline')}?dealName=${encodeURIComponent(dealId)}`);
+      // Use local Next.js API route instead of direct backend call to avoid CORS
+      const response = await makeApiCall(`/api/hubspot/v2/deal-timeline?dealName=${encodeURIComponent(dealId)}`);
       if (response) {
         const data = await response.json();
         if (data.events && Array.isArray(data.events)) {

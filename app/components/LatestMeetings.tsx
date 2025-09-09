@@ -13,6 +13,7 @@ interface Meeting {
   buyer_intent: string;
   buyer_intent_explanation?: any;
   engagement_id?: string;
+  deal_stage: string;
 }
 
 interface LatestMeetingsProps {
@@ -28,6 +29,8 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [selectedStages, setSelectedStages] = useState<Set<string>>(new Set());
+  const [selectedSignals, setSelectedSignals] = useState<Set<string>>(new Set());
   const router = useRouter();
 
   // Function to save meetings data to localStorage
@@ -162,21 +165,28 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
         const cachedData = loadMeetingsFromStorage(days);
         if (cachedData && cachedData.length > 0) {
           console.log('Using cached data for days:', days);
-          // Check if cached data has buyer_intent_explanation, if not enhance it
+          
+          // Set cached data immediately for fast loading
+          setMeetings(cachedData);
+          setLoading(false);
+          
+          // Check if cached data needs enhancement and do it in background
           const needsEnhancement = cachedData.some((meeting: Meeting) => 
             !meeting.buyer_intent_explanation || meeting.buyer_intent_explanation === 'N/A'
           );
           
           if (needsEnhancement) {
-            console.log('Cached data needs enhancement, fetching explanations...');
-            const enhancedCachedData = await enhanceMeetingsWithExplanations(cachedData);
-            setMeetings(enhancedCachedData);
-            // Update cache with enhanced data
-            saveMeetingsToStorage(days, enhancedCachedData);
-          } else {
-            setMeetings(cachedData);
+            console.log('Enhancing cached data in background...');
+            enhanceMeetingsWithExplanations(cachedData).then(enhancedCachedData => {
+              setMeetings(enhancedCachedData);
+              // Update cache with enhanced data
+              saveMeetingsToStorage(days, enhancedCachedData);
+            }).catch(error => {
+              console.error('Error enhancing cached data:', error);
+              // Keep the cached data even if enhancement fails
+            });
           }
-          setLoading(false);
+          
           return;
         }
       }
@@ -198,13 +208,22 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
           console.log('Available fields:', Object.keys(sortedMeetings[0]));
         }
         
-        // Enhance meetings with buyer intent explanations
-        console.log('Enhancing meetings with buyer intent explanations...');
-        const enhancedMeetings = await enhanceMeetingsWithExplanations(sortedMeetings);
-        setMeetings(enhancedMeetings);
+        // Set meetings immediately for fast loading
+        setMeetings(sortedMeetings);
         
-        // Save to localStorage
-        saveMeetingsToStorage(days, enhancedMeetings);
+        // Save basic meetings data to localStorage
+        saveMeetingsToStorage(days, sortedMeetings);
+        
+        // Enhance meetings with buyer intent explanations in the background
+        console.log('Enhancing meetings with buyer intent explanations in background...');
+        enhanceMeetingsWithExplanations(sortedMeetings).then(enhancedMeetings => {
+          setMeetings(enhancedMeetings);
+          // Update cache with enhanced data
+          saveMeetingsToStorage(days, enhancedMeetings);
+        }).catch(error => {
+          console.error('Error enhancing meetings:', error);
+          // Keep the basic meetings even if enhancement fails
+        });
       }
     } catch (error) {
       console.error('Error fetching latest meetings:', error);
@@ -274,12 +293,125 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
     return { text: badgeText, color: badgeColor };
   };
 
-  // Filter meetings based on search term
+  // Add color mapping for stages with distinct colors
+  const getStageColor = (stage: string): { bg: string; text: string; border: string } => {
+    const colors: Record<string, { bg: string; text: string; border: string }> = {
+      'Closed Won': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+      'Closed Lost': { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200' },
+      'Closed Marketing Nurture': { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200' },
+      'Closed Active Nurture': { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200' },
+      'Assessment': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+      'Waiting for Signature': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+      '1. Sales Qualification': { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+      '2. Needs Analysis & Solution Mapping': { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+      '3. Technical Validation': { bg: 'bg-lime-50', text: 'text-lime-700', border: 'border-lime-200' },
+      '4. Proposal & Negotiation': { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
+      '0. Identification': { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
+      'Renew/Closed Won': { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200' }
+    };
+    return colors[stage] || { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' };
+  };
+
+  // Get initials for a stage name (same as DealTimeline)
+  const getStageInitials = (stage: string): string => {
+    return stage
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .replace(/[0-9]/g, '') // Remove any numbers
+      .toUpperCase();
+  };
+
+  // Handle stage filter toggle (same behavior as DealTimeline)
+  const toggleStageFilter = (stage: string) => {
+    setSelectedStages(prev => {
+      const newSet = new Set(prev);
+      
+      // If this is the only selected stage, deselect it to show all stages
+      if (newSet.size === 1 && newSet.has(stage)) {
+        return new Set();
+      }
+      
+      if (newSet.has(stage)) {
+        newSet.delete(stage);
+      } else {
+        newSet.add(stage);
+      }
+      
+      return newSet;
+    });
+  };
+
+  // Handle signal filter toggle
+  const toggleSignalFilter = (signal: string) => {
+    setSelectedSignals(prev => {
+      const newSet = new Set(prev);
+      
+      // If this is the only selected signal, deselect it to show all signals
+      if (newSet.size === 1 && newSet.has(signal)) {
+        return new Set();
+      }
+      
+      if (newSet.has(signal)) {
+        newSet.delete(signal);
+      } else {
+        newSet.add(signal);
+      }
+      
+      return newSet;
+    });
+  };
+
+  // Get signal type from buyer_intent
+  const getSignalType = (buyerIntent: string): string => {
+    const lowerIntent = buyerIntent.toLowerCase();
+    if (lowerIntent === 'very likely to buy' || lowerIntent === 'likely to buy') {
+      return 'positive';
+    } else if (lowerIntent === 'less likely to buy') {
+      return 'negative';
+    } else {
+      return 'neutral';
+    }
+  };
+
+  // Get signal color
+  const getSignalColor = (signalType: string): { bg: string; text: string; border: string } => {
+    const colors: Record<string, { bg: string; text: string; border: string }> = {
+      'positive': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
+      'negative': { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
+      'neutral': { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' }
+    };
+    return colors[signalType] || { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' };
+  };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setSelectedStages(new Set());
+    setSelectedSignals(new Set());
+  };
+
+  // Filter meetings based on search term, stage filter, and signal filter
   const filteredMeetings = meetings.filter(meeting => {
-    if (!searchTerm.trim()) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return meeting.subject.toLowerCase().includes(searchLower) || 
-           meeting.deal_id.toLowerCase().includes(searchLower);
+    // Apply search filter
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = meeting.subject.toLowerCase().includes(searchLower) || 
+                           meeting.deal_id.toLowerCase().includes(searchLower);
+      if (!matchesSearch) return false;
+    }
+    
+    // Apply stage filter
+    if (selectedStages.size > 0) {
+      if (!selectedStages.has(meeting.deal_stage)) return false;
+    }
+    
+    // Apply signal filter
+    if (selectedSignals.size > 0) {
+      const signalType = getSignalType(meeting.buyer_intent);
+      if (!selectedSignals.has(signalType)) return false;
+    }
+    
+    return true;
   });
 
   // Navigate to deal timeline
@@ -399,23 +531,44 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
     return null;
   }, [makeApiCall]);
 
-  // Function to enhance meeting data with buyer intent explanations
+  // Function to enhance meeting data with buyer intent explanations (with concurrency limit)
   const enhanceMeetingsWithExplanations = useCallback(async (meetings: Meeting[]) => {
-    const enhancedMeetings = await Promise.all(
-      meetings.map(async (meeting) => {
-        // If meeting already has buyer_intent_explanation, keep it
+    const BATCH_SIZE = 3; // Limit concurrent API calls to avoid overwhelming the backend
+    const enhancedMeetings = [...meetings];
+    
+    // Process meetings in batches to avoid too many concurrent requests
+    for (let i = 0; i < meetings.length; i += BATCH_SIZE) {
+      const batch = meetings.slice(i, i + BATCH_SIZE);
+      
+      const batchPromises = batch.map(async (meeting, batchIndex) => {
+        const actualIndex = i + batchIndex;
+        
+        // If meeting already has buyer_intent_explanation, skip it
         if (meeting.buyer_intent_explanation && meeting.buyer_intent_explanation !== 'N/A') {
-          return meeting;
+          return;
         }
         
-        // Try to fetch the explanation
-        const explanation = await fetchBuyerIntentExplanation(meeting.deal_id, meeting.event_id);
-        return {
-          ...meeting,
-          buyer_intent_explanation: explanation
-        };
-      })
-    );
+        try {
+          // Try to fetch the explanation
+          const explanation = await fetchBuyerIntentExplanation(meeting.deal_id, meeting.event_id);
+          enhancedMeetings[actualIndex] = {
+            ...meeting,
+            buyer_intent_explanation: explanation
+          };
+        } catch (error) {
+          console.error(`Error fetching explanation for meeting ${meeting.deal_id}:`, error);
+          // Keep the original meeting without explanation
+        }
+      });
+      
+      // Wait for current batch to complete before starting next batch
+      await Promise.all(batchPromises);
+      
+      // Add a small delay between batches to be gentle on the API
+      if (i + BATCH_SIZE < meetings.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
     
     return enhancedMeetings;
   }, [fetchBuyerIntentExplanation]);
@@ -435,6 +588,9 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
               <option value={3}>Last 3 days</option>
               <option value={7}>Last 7 days</option>
               <option value={14}>Last 2 weeks</option>
+              <option value={21}>Last 3 weeks</option>
+              <option value={30}>Last 1 month</option>
+              <option value={60}>Last 2 months</option>
             </select>
             <button
               onClick={handleRefresh}
@@ -470,6 +626,9 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
               <option value={3}>Last 3 days</option>
               <option value={7}>Last 7 days</option>
               <option value={14}>Last 2 weeks</option>
+              <option value={21}>Last 3 weeks</option>
+              <option value={30}>Last 1 month</option>
+              <option value={60}>Last 2 months</option>
             </select>
             <button
               onClick={handleRefresh}
@@ -509,6 +668,9 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
             <option value={3}>Last 3 days</option>
             <option value={7}>Last 7 days</option>
             <option value={14}>Last 2 weeks</option>
+            <option value={21}>Last 3 weeks</option>
+            <option value={30}>Last 1 month</option>
+            <option value={60}>Last 2 months</option>
           </select>
           <button
             onClick={handleRefresh}
@@ -550,9 +712,147 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
         </div>
       </div>
 
+      {/* Filters Section */}
+      {meetings.length > 0 && (
+        <div className="mb-6 bg-gray-50 dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+            {/* Filter Header */}
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                Filters
+              </h3>
+              {(selectedStages.size > 0 || selectedSignals.size > 0) && (
+                <button
+                  onClick={clearAllFilters}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium flex items-center gap-1"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Clear All
+                </button>
+              )}
+            </div>
+
+            {/* Filters Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full lg:w-auto">
+              {/* Deal Stage Filter */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Deal Stage</span>
+                  {selectedStages.size > 0 && (
+                    <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-medium">
+                      {selectedStages.size} selected
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {Array.from(new Set(meetings.map(meeting => meeting.deal_stage))).map(stage => {
+                    const isSelected = selectedStages.has(stage);
+                    return (
+                      <div key={stage} className="relative inline-block group">
+                        <button
+                          onClick={() => toggleStageFilter(stage)}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all duration-200 ${
+                            isSelected 
+                              ? `${getStageColor(stage).bg} ${getStageColor(stage).text} border-2 ${getStageColor(stage).border} shadow-sm`
+                              : 'bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-slate-600 hover:border-gray-400 dark:hover:border-gray-500'
+                          }`}
+                        >
+                          {getStageInitials(stage)}
+                        </button>
+                        <div className="invisible group-hover:visible absolute z-50 -top-10 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                          {stage}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Signal Filter */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Signal</span>
+                  {selectedSignals.size > 0 && (
+                    <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-medium">
+                      {selectedSignals.size} selected
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {['positive', 'negative', 'neutral'].map(signalType => {
+                    const isSelected = selectedSignals.has(signalType);
+                    const signalColor = getSignalColor(signalType);
+                    const signalIcon = signalType === 'positive' ? '↗' : signalType === 'negative' ? '↘' : '→';
+                    const signalLabel = signalType.charAt(0).toUpperCase() + signalType.slice(1);
+                    
+                    return (
+                      <button
+                        key={signalType}
+                        onClick={() => toggleSignalFilter(signalType)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all duration-200 ${
+                          isSelected 
+                            ? `${signalColor.bg} ${signalColor.text} border-2 ${signalColor.border} shadow-sm`
+                            : 'bg-white dark:bg-slate-700 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-slate-600 hover:border-gray-400 dark:hover:border-gray-500'
+                        }`}
+                      >
+                        <span className="text-sm">{signalIcon}</span>
+                        {signalLabel}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Active Filters Summary */}
+          {(selectedStages.size > 0 || selectedSignals.size > 0) && (
+            <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-600">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                <span className="font-medium">Active filters:</span>
+                {selectedStages.size > 0 && (
+                  <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
+                    {selectedStages.size} stage{selectedStages.size !== 1 ? 's' : ''}
+                  </span>
+                )}
+                {selectedSignals.size > 0 && (
+                  <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
+                    {selectedSignals.size} signal{selectedSignals.size !== 1 ? 's' : ''}
+                  </span>
+                )}
+                <span className="text-gray-500 dark:text-gray-400">
+                  • Showing {filteredMeetings.length} of {meetings.length} meetings
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {filteredMeetings.length === 0 ? (
         <div className="text-center text-gray-500 dark:text-gray-400 p-8">
-          <p>{searchTerm ? 'No meetings found matching your search' : 'No meetings found for the selected timeframe'}</p>
+          <p>
+            {searchTerm || selectedStages.size > 0 || selectedSignals.size > 0
+              ? 'No meetings found matching your filters'
+              : 'No meetings found for the selected timeframe'
+            }
+          </p>
+          {(searchTerm || selectedStages.size > 0 || selectedSignals.size > 0) && (
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                clearAllFilters();
+              }}
+              className="mt-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline"
+            >
+              Clear all filters
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -569,6 +869,9 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                   </th>
                   <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Meeting Subject
+                  </th>
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Deal Stage
                   </th>
                   <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Date
@@ -610,6 +913,16 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                       <td className="px-4 py-3 text-sm text-gray-900 dark:text-white max-w-xs truncate">
                         {meeting.subject}
                       </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-center">
+                        <div className="relative inline-block group">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStageColor(meeting.deal_stage).bg} ${getStageColor(meeting.deal_stage).text} border ${getStageColor(meeting.deal_stage).border} cursor-help`}>
+                            {getStageInitials(meeting.deal_stage)}
+                          </span>
+                          <div className="invisible group-hover:visible absolute z-50 -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                            {meeting.deal_stage}
+                          </div>
+                        </div>
+                      </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                         {formatDate(meeting.event_date)}
                       </td>
@@ -641,6 +954,17 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                   </div>
                   <div className="text-sm text-gray-900 dark:text-white">
                     {meeting.subject}
+                  </div>
+                  <div className="text-sm text-gray-500 dark:text-gray-300">
+                    <span className="font-medium">Stage:</span> 
+                    <div className="ml-2 relative inline-block group">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStageColor(meeting.deal_stage).bg} ${getStageColor(meeting.deal_stage).text} border ${getStageColor(meeting.deal_stage).border} cursor-help`}>
+                        {getStageInitials(meeting.deal_stage)}
+                      </span>
+                      <div className="invisible group-hover:visible absolute z-50 -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                        {meeting.deal_stage}
+                      </div>
+                    </div>
                   </div>
                   <div className="text-sm text-gray-500 dark:text-gray-300">
                     {formatDate(meeting.event_date)}

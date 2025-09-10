@@ -32,6 +32,8 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [selectedStages, setSelectedStages] = useState<Set<string>>(new Set());
   const [selectedSignals, setSelectedSignals] = useState<Set<string>>(new Set());
+  const [loadingInsights, setLoadingInsights] = useState<Set<string>>(new Set());
+  const [processedWithoutInsights, setProcessedWithoutInsights] = useState<Set<string>>(new Set());
   const router = useRouter();
 
   // Feature flag to disable buyer intent explanation fetching if CORS issues persist
@@ -176,11 +178,18 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
           
           // Check if cached data needs enhancement and do it in background (if enabled)
           if (ENABLE_BUYER_INTENT_ENHANCEMENT) {
-            const needsEnhancement = cachedData.some((meeting: Meeting) => 
+            const meetingsNeedingEnhancement = cachedData.filter((meeting: Meeting) => 
               !meeting.buyer_intent_explanation || meeting.buyer_intent_explanation === 'N/A'
             );
             
-            if (needsEnhancement) {
+            if (meetingsNeedingEnhancement.length > 0) {
+              // Immediately mark meetings that need enhancement as loading
+              setLoadingInsights(prev => {
+                const newSet = new Set(prev);
+                meetingsNeedingEnhancement.forEach((meeting: Meeting) => newSet.add(meeting.event_id));
+                return newSet;
+              });
+              
               console.log('Enhancing cached data in background...');
               enhanceMeetingsWithExplanations(cachedData).then(enhancedCachedData => {
                 setMeetings(enhancedCachedData);
@@ -222,6 +231,19 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
         
         // Enhance meetings with buyer intent explanations in the background (if enabled)
         if (ENABLE_BUYER_INTENT_ENHANCEMENT) {
+          // Immediately mark meetings that need enhancement as loading
+          const meetingsNeedingEnhancement = sortedMeetings.filter(meeting => 
+            !meeting.buyer_intent_explanation || meeting.buyer_intent_explanation === 'N/A'
+          );
+          
+          if (meetingsNeedingEnhancement.length > 0) {
+            setLoadingInsights(prev => {
+              const newSet = new Set(prev);
+              meetingsNeedingEnhancement.forEach((meeting: Meeting) => newSet.add(meeting.event_id));
+              return newSet;
+            });
+          }
+          
           console.log('Enhancing meetings with buyer intent explanations in background...');
           enhanceMeetingsWithExplanations(sortedMeetings).then(enhancedMeetings => {
             setMeetings(enhancedMeetings);
@@ -244,9 +266,20 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   // Fetch data when component mounts or timeframe changes
   useEffect(() => {
     if (isInitialized) {
+      // Clear any existing loading states when fetching new data
+      setLoadingInsights(new Set());
+      setProcessedWithoutInsights(new Set());
       fetchLatestMeetings(timeframe, false);
     }
   }, [isInitialized, timeframe, fetchLatestMeetings]);
+
+  // Cleanup loading states on unmount
+  useEffect(() => {
+    return () => {
+      setLoadingInsights(new Set());
+      setProcessedWithoutInsights(new Set());
+    };
+  }, []);
 
   // Format date
   const formatDate = (dateStr: string): string => {
@@ -571,9 +604,40 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
             ...meeting,
             buyer_intent_explanation: explanation
           };
+          
+          if (explanation && explanation !== 'N/A') {
+            // Successfully got insights - remove from loading state
+            setLoadingInsights(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(meeting.event_id);
+              return newSet;
+            });
+          } else {
+            // No insights available - remove from loading and mark as processed without insights
+            setLoadingInsights(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(meeting.event_id);
+              return newSet;
+            });
+            setProcessedWithoutInsights(prev => {
+              const newSet = new Set(prev);
+              newSet.add(meeting.event_id);
+              return newSet;
+            });
+          }
         } catch (error) {
           console.error(`Error fetching explanation for meeting ${meeting.deal_id}:`, error);
-          // Keep the original meeting without explanation
+          // Error occurred - remove from loading and mark as processed without insights
+          setLoadingInsights(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(meeting.event_id);
+            return newSet;
+          });
+          setProcessedWithoutInsights(prev => {
+            const newSet = new Set(prev);
+            newSet.add(meeting.event_id);
+            return newSet;
+          });
         }
       });
       
@@ -904,7 +968,14 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                   return (
                     <tr key={index} className="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
                       <td className="px-4 py-3 whitespace-nowrap text-center">
-                        {meeting.buyer_intent_explanation && meeting.buyer_intent_explanation !== 'N/A' ? (
+                        {loadingInsights.has(meeting.event_id) ? (
+                          <div className="flex justify-center" title="Loading insights...">
+                            <svg className="animate-spin h-4 w-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          </div>
+                        ) : meeting.buyer_intent_explanation && meeting.buyer_intent_explanation !== 'N/A' ? (
                           <button
                             onClick={() => handleOpenModal(meeting)}
                             className="p-2 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
@@ -914,6 +985,13 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                             </svg>
                           </button>
+                        ) : ENABLE_BUYER_INTENT_ENHANCEMENT && !processedWithoutInsights.has(meeting.event_id) ? (
+                          <div className="flex justify-center" title="Loading insights...">
+                            <svg className="animate-spin h-4 w-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          </div>
                         ) : (
                           <span className="text-gray-400 dark:text-gray-500 text-sm">-</span>
                         )}
@@ -985,10 +1063,28 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                   <div className="text-sm text-gray-500 dark:text-gray-300">
                     {formatDate(meeting.event_date)}
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 items-center">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${buyerIntentBadge.color}`}>
                       {buyerIntentBadge.text}
                     </span>
+                    {loadingInsights.has(meeting.event_id) || (ENABLE_BUYER_INTENT_ENHANCEMENT && !processedWithoutInsights.has(meeting.event_id) && (!meeting.buyer_intent_explanation || meeting.buyer_intent_explanation === 'N/A')) ? (
+                      <div className="flex justify-center" title="Loading insights...">
+                        <svg className="animate-spin h-3 w-3 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      </div>
+                    ) : meeting.buyer_intent_explanation && meeting.buyer_intent_explanation !== 'N/A' ? (
+                      <button
+                        onClick={() => handleOpenModal(meeting)}
+                        className="p-1.5 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                        title="View meeting insights"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               );

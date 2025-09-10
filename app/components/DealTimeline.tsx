@@ -331,7 +331,10 @@ const DealTimeline: React.FC = () => {
   const [selectedOwners, setSelectedOwners] = useState<Set<string>>(new Set());
 
   // Add state for activities filter
-  const [showOnlyActiveDeals, setShowOnlyActiveDeals] = useState<boolean>(true);
+  const [showOnlyActiveDeals, setShowOnlyActiveDeals] = useState<boolean>(false);
+
+  // Add state for sorting
+  const [sortBy, setSortBy] = useState<'created' | 'name' | 'activities'>('created');
 
   // Add state for sidebar collapse
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
@@ -478,7 +481,7 @@ const DealTimeline: React.FC = () => {
     }
   }, [uniqueStages, selectedStagesInitialized]);
 
-  // Filter deals based on selected stages and search term
+  // Filter and sort deals based on selected stages and search term
   const filteredDeals = useMemo(() => {
     let filtered = allDeals;
 
@@ -527,8 +530,26 @@ const DealTimeline: React.FC = () => {
         });
       }
     }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return (a.name || '').localeCompare(b.name || '');
+        case 'activities':
+          return (b.activities || 0) - (a.activities || 0); // Descending order
+        case 'created':
+        default:
+          // Most recent first (descending order)
+          if (!a.createdate && !b.createdate) return 0;
+          if (!a.createdate) return 1;
+          if (!b.createdate) return -1;
+          return new Date(b.createdate).getTime() - new Date(a.createdate).getTime();
+      }
+    });
+
     return filtered;
-  }, [allDeals, selectedStages, selectedOwners, debouncedDealSearchTerm, activeFilterTab, bookmarkedDeals, showOnlyActiveDeals]);
+  }, [allDeals, selectedStages, selectedOwners, debouncedDealSearchTerm, activeFilterTab, bookmarkedDeals, showOnlyActiveDeals, sortBy]);
 
   // Add debounce effect for search with increased delay
   useEffect(() => {
@@ -3347,23 +3368,46 @@ useEffect(() => {
         {/* Regular Deals Section - Scrollable */}
         <div className="flex-1 overflow-y-auto">
           <div className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-medium text-gray-600">
-                {activeFilterTab === 'bookmarks' ? 'Bookmarked Deals' : 'All Deals'} ({filteredDeals.length})
-              </h3>
-              {activeFilterTab !== 'bookmarks' && (
-                <button
-                  onClick={() => setShowOnlyActiveDeals(!showOnlyActiveDeals)}
-                  className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
-                    showOnlyActiveDeals 
-                      ? 'bg-blue-50 text-blue-600 border border-blue-200' 
-                      : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
-                  }`}
-                  title={showOnlyActiveDeals ? 'Show all deals' : 'Show only deals with activities'}
-                >
-                  {showOnlyActiveDeals ? 'All Deals' : 'Active Deals'}
-                </button>
-                  )}
+            <div className="mb-4 space-y-3">
+              {/* Title row */}
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium text-gray-600">
+                  {activeFilterTab === 'bookmarks' ? 'Bookmarked Deals' : 'All Deals'}
+                </h3>
+                <span className="text-xs text-gray-400 font-medium">
+                  {filteredDeals.length} deal{filteredDeals.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              
+              {/* Controls row */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Sort by:</span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as 'created' | 'name' | 'activities')}
+                    className="px-2 py-1 text-xs bg-white border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                  >
+                    <option value="created">Created</option>
+                    <option value="name">Name</option>
+                    <option value="activities">Activities</option>
+                  </select>
+                </div>
+                
+                {activeFilterTab !== 'bookmarks' && (
+                  <button
+                    onClick={() => setShowOnlyActiveDeals(!showOnlyActiveDeals)}
+                    className={`px-2.5 py-1 text-xs rounded transition-colors ${
+                      showOnlyActiveDeals 
+                        ? 'bg-blue-50 text-blue-600 border border-blue-200' 
+                        : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
+                    }`}
+                    title={showOnlyActiveDeals ? 'Show all deals' : 'Show only deals with activities'}
+                  >
+                    {showOnlyActiveDeals ? 'All Deals' : 'Active Deals'}
+                  </button>
+                )}
+              </div>
             </div>
             <div className="space-y-3">
               {filteredDeals.map(deal => {

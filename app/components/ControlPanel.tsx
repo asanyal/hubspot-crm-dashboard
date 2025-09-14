@@ -641,7 +641,7 @@ const ControlPanel: React.FC = () => {
                   {stageData.count}
                 </button>
                 <p className="text-xs text-gray-500 dark:text-gray-400 text-center leading-tight">
-                  {formatCurrency(stageData.amount)}
+                  {formatAbbreviatedCurrency(stageData.amount)}
                 </p>
               </div>
             ))}

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { API_CONFIG } from '../utils/config';
 import { parseBuyerIntentExplanation } from '../utils/buyerIntentParser';
 
@@ -33,6 +34,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [selectedStages, setSelectedStages] = useState<Set<string>>(new Set());
   const [selectedSignals, setSelectedSignals] = useState<Set<string>>(new Set());
+  const [selectedDate, setSelectedDate] = useState<string>('');
   const [loadingInsights, setLoadingInsights] = useState<Set<string>>(new Set());
   const [processedWithoutInsights, setProcessedWithoutInsights] = useState<Set<string>>(new Set());
   const router = useRouter();
@@ -438,9 +440,16 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   const clearAllFilters = () => {
     setSelectedStages(new Set());
     setSelectedSignals(new Set());
+    setSelectedDate('');
   };
 
-  // Filter meetings based on search term, stage filter, and signal filter
+  // Handle date filter from chart click
+  const handleDateFilter = (date: string) => {
+    console.log('📅 Date clicked:', date);
+    setSelectedDate(date);
+  };
+
+  // Filter meetings based on search term, stage filter, signal filter, and date filter
   const filteredMeetings = meetings.filter(meeting => {
     // Apply search filter
     if (searchTerm.trim()) {
@@ -461,13 +470,20 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
       if (!selectedSignals.has(signalType)) return false;
     }
     
+    // Apply date filter
+    if (selectedDate.trim()) {
+      const meetingDate = new Date(meeting.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      if (meetingDate !== selectedDate) return false;
+    }
+    
     return true;
   });
 
   // Navigate to deal timeline
   const navigateToDealTimeline = (dealId: string) => {
     const encodedDealId = encodeURIComponent(dealId);
-    router.push(`/deal-timeline?dealName=${encodedDealId}&autoload=true`);
+    const url = `/deal-timeline?dealName=${encodedDealId}&autoload=true`;
+    window.open(url, '_blank');
   };
 
   // Open Gong call
@@ -528,6 +544,50 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
     const currentIndex = getCurrentMeetingIndex();
     return currentIndex < filteredMeetings.length - 1;
   }, [getCurrentMeetingIndex, filteredMeetings]);
+
+  // Memoized function to get chart data that updates when filteredMeetings changes
+  const getChartData = useCallback(() => {
+    console.log('🔄 getChartData called - filteredMeetings length:', filteredMeetings.length);
+    console.log('🔍 Current filters:', { 
+      searchTerm, 
+      selectedStages: Array.from(selectedStages), 
+      selectedSignals: Array.from(selectedSignals) 
+    });
+    
+    const dateGroups: Record<string, { positive: number; negative: number; neutral: number }> = {};
+    
+    filteredMeetings.forEach(meeting => {
+      const date = new Date(meeting.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      
+      if (!dateGroups[date]) {
+        dateGroups[date] = { positive: 0, negative: 0, neutral: 0 };
+      }
+      
+      const signalType = getSignalType(meeting.buyer_intent);
+      dateGroups[date][signalType as keyof typeof dateGroups[string]]++;
+    });
+    
+    const chartData = Object.entries(dateGroups)
+      .map(([date, signals]) => ({
+        date,
+        positive: signals.positive,
+        negative: signals.negative,
+        neutral: signals.neutral,
+        // Add original date for sorting
+        sortDate: filteredMeetings.find(m => new Date(m.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) === date)?.event_date
+      }))
+      .sort((a, b) => {
+        // Sort by the original date
+        if (a.sortDate && b.sortDate) {
+          return new Date(a.sortDate).getTime() - new Date(b.sortDate).getTime();
+        }
+        return 0;
+      })
+      .map(({ sortDate, ...rest }) => rest); // Remove sortDate after sorting
+      
+    console.log('📊 Chart data generated:', chartData);
+    return chartData;
+  }, [filteredMeetings, searchTerm, selectedStages, selectedSignals, selectedDate]);
 
   // Handle keyboard navigation in modal
   useEffect(() => {
@@ -806,6 +866,10 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
     );
   }
 
+  // Get chart data that updates when filters change
+  const chartData = getChartData();
+  
+
   return (
     <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow transition-colors">
       <div className="flex justify-between items-center mb-4">
@@ -876,7 +940,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                 </svg>
                 Filters
               </h3>
-              {(selectedStages.size > 0 || selectedSignals.size > 0) && (
+              {(selectedStages.size > 0 || selectedSignals.size > 0 || selectedDate) && (
                 <button
                   onClick={clearAllFilters}
                   className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium flex items-center gap-1"
@@ -890,7 +954,35 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
             </div>
 
             {/* Filters Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full lg:w-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full lg:w-auto">
+              {/* Date Filter */}
+              {selectedDate && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Date</span>
+                    <span className="text-xs bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-medium">
+                      Selected
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <div className="flex items-center gap-1 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 px-3 py-1.5 rounded-lg text-xs font-medium border-2 border-purple-200 dark:border-purple-700">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span>{selectedDate}</span>
+                      <button
+                        onClick={() => setSelectedDate('')}
+                        className="ml-1 text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-200"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* Deal Stage Filter */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -963,10 +1055,15 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
           </div>
 
           {/* Active Filters Summary */}
-          {(selectedStages.size > 0 || selectedSignals.size > 0) && (
+          {(selectedStages.size > 0 || selectedSignals.size > 0 || selectedDate) && (
             <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-600">
               <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                 <span className="font-medium">Active filters:</span>
+                {selectedDate && (
+                  <span className="bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-1 rounded">
+                    Date: {selectedDate}
+                  </span>
+                )}
                 {selectedStages.size > 0 && (
                   <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
                     {selectedStages.size} stage{selectedStages.size !== 1 ? 's' : ''}
@@ -994,7 +1091,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
               : 'No meetings found for the selected timeframe'
             }
           </p>
-          {(searchTerm || selectedStages.size > 0 || selectedSignals.size > 0) && (
+          {(searchTerm || selectedStages.size > 0 || selectedSignals.size > 0 || selectedDate) && (
             <button
               onClick={() => {
                 setSearchTerm('');
@@ -1163,6 +1260,127 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
             })}
           </div>
         </>
+      )}
+
+      {/* Signal Trends Chart */}
+      {filteredMeetings.length > 0 && (
+        <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow transition-colors mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Daily Call Signals</h3>
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+              </svg>
+              <span>Click bars to filter by date</span>
+            </div>
+          </div>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart 
+                data={chartData}
+                onClick={(data) => {
+                  if (data && data.activeLabel) {
+                    handleDateFilter(data.activeLabel as string);
+                  }
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                <XAxis dataKey="date" />
+                <YAxis />
+                <Tooltip 
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      const total = payload.reduce((sum, entry) => sum + (typeof entry.value === 'number' ? entry.value : 0), 0);
+                      const positiveCount = typeof payload.find(p => p.dataKey === 'positive')?.value === 'number' 
+                        ? payload.find(p => p.dataKey === 'positive')?.value || 0 
+                        : 0;
+                      const negativeCount = typeof payload.find(p => p.dataKey === 'negative')?.value === 'number' 
+                        ? payload.find(p => p.dataKey === 'negative')?.value || 0 
+                        : 0;
+                      const neutralCount = typeof payload.find(p => p.dataKey === 'neutral')?.value === 'number' 
+                        ? payload.find(p => p.dataKey === 'neutral')?.value || 0 
+                        : 0;
+                      
+                      return (
+                        <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg p-4 min-w-[200px]">
+                          {/* Header */}
+                          <div className="text-center mb-3">
+                            <h4 className="font-semibold text-gray-900 dark:text-white text-sm">{label}</h4>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {total} meeting{total !== 1 ? 's' : ''} total
+                            </p>
+                          </div>
+                          
+                          {/* Signal Breakdown */}
+                          <div className="space-y-2">
+                            {typeof positiveCount === 'number' && positiveCount > 0 && (
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                                  <span className="text-sm text-gray-700 dark:text-gray-300">Positive</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-sm font-medium text-gray-900 dark:text-white">{positiveCount}</span>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    ({Math.round((positiveCount / total) * 100)}%)
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {typeof negativeCount === 'number' && negativeCount > 0 && (
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                                  <span className="text-sm text-gray-700 dark:text-gray-300">Negative</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-sm font-medium text-gray-900 dark:text-white">{negativeCount}</span>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    ({Math.round((negativeCount / total) * 100)}%)
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {typeof neutralCount === 'number' && neutralCount > 0 && (
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-2">
+                                  <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                                  <span className="text-sm text-gray-700 dark:text-gray-300">Neutral</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-sm font-medium text-gray-900 dark:text-white">{neutralCount}</span>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    ({Math.round((neutralCount / total) * 100)}%)
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Bottom indicator */}
+                          <div className="mt-3 pt-2 border-t border-gray-200 dark:border-gray-600">
+                            <div className="flex items-center justify-center space-x-1">
+                              <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">Meeting signals</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Bar dataKey="positive" stackId="a" fill="#10b981" name="Positive" />
+                <Bar dataKey="negative" stackId="a" fill="#ef4444" name="Negative" />
+                <Bar dataKey="neutral" stackId="a" fill="#eab308" name="Neutral" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       )}
 
       {/* Meeting Insights Modal */}

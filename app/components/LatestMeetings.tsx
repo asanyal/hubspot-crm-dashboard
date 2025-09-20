@@ -449,6 +449,24 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
     setSelectedDate(date);
   };
 
+  // Helper function to check if meeting has valid insights
+  const hasValidInsights = (meeting: Meeting): boolean => {
+    if (!meeting.buyer_intent_explanation) return false;
+    if (meeting.buyer_intent_explanation === 'N/A') return false;
+    
+    // Check if it's a non-empty string
+    if (typeof meeting.buyer_intent_explanation === 'string') {
+      return meeting.buyer_intent_explanation.trim().length > 0;
+    }
+    
+    // Check if it's a valid object
+    if (typeof meeting.buyer_intent_explanation === 'object') {
+      return true;
+    }
+    
+    return false;
+  };
+
   // Filter meetings based on search term, stage filter, signal filter, and date filter
   const filteredMeetings = meetings.filter(meeting => {
     // Apply search filter
@@ -1111,7 +1129,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
               <thead>
                 <tr>
                   <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Insights
+                    Deal Timeline
                   </th>
                   <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                     Deal Name
@@ -1137,41 +1155,33 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                   return (
                     <tr key={index} className="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
                       <td className="px-4 py-3 whitespace-nowrap text-center">
-                        {loadingInsights.has(meeting.event_id) ? (
-                          <div className="flex justify-center" title="Loading insights...">
-                            <svg className="animate-spin h-4 w-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                          </div>
-                        ) : meeting.buyer_intent_explanation && meeting.buyer_intent_explanation !== 'N/A' ? (
-                          <button
-                            onClick={() => handleOpenModal(meeting)}
-                            className="p-2 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                            title="View meeting insights"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                            </svg>
-                          </button>
-                        ) : ENABLE_BUYER_INTENT_ENHANCEMENT && !processedWithoutInsights.has(meeting.event_id) ? (
-                          <div className="flex justify-center" title="Loading insights...">
-                            <svg className="animate-spin h-4 w-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 dark:text-gray-500 text-sm">-</span>
-                        )}
+                        <button
+                          onClick={() => navigateToDealTimeline(meeting.deal_id)}
+                          className="p-2 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                          title="Open deal timeline"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                        <button 
-                          onClick={() => navigateToDealTimeline(meeting.deal_id)}
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-left cursor-pointer"
-                        >
-                          {meeting.deal_id}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => handleOpenModal(meeting)}
+                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-left cursor-pointer"
+                          >
+                            {meeting.deal_id}
+                          </button>
+                          {(loadingInsights.has(meeting.event_id) || (ENABLE_BUYER_INTENT_ENHANCEMENT && !processedWithoutInsights.has(meeting.event_id) && !hasValidInsights(meeting))) && (
+                            <div className="flex-shrink-0" title="Loading meeting insights...">
+                              <svg className="animate-spin h-3 w-3 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900 dark:text-white max-w-xs truncate">
                         {meeting.subject}
@@ -1208,12 +1218,22 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
               return (
                 <div key={index} className="bg-gray-50 dark:bg-slate-700 rounded-lg p-4 space-y-3">
                   <div className="flex justify-between items-start">
-                    <button 
-                      onClick={() => navigateToDealTimeline(meeting.deal_id)}
-                      className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-left font-medium text-sm cursor-pointer"
-                    >
-                      {meeting.deal_id}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => handleOpenModal(meeting)}
+                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-left font-medium text-sm cursor-pointer"
+                      >
+                        {meeting.deal_id}
+                      </button>
+                      {(loadingInsights.has(meeting.event_id) || (ENABLE_BUYER_INTENT_ENHANCEMENT && !processedWithoutInsights.has(meeting.event_id) && !hasValidInsights(meeting))) && (
+                        <div className="flex-shrink-0" title="Loading meeting insights...">
+                          <svg className="animate-spin h-3 w-3 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="text-sm text-gray-900 dark:text-white">
                     {meeting.subject}
@@ -1236,24 +1256,15 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${buyerIntentBadge.color}`}>
                       {buyerIntentBadge.text}
                     </span>
-                    {loadingInsights.has(meeting.event_id) || (ENABLE_BUYER_INTENT_ENHANCEMENT && !processedWithoutInsights.has(meeting.event_id) && (!meeting.buyer_intent_explanation || meeting.buyer_intent_explanation === 'N/A')) ? (
-                      <div className="flex justify-center" title="Loading insights...">
-                        <svg className="animate-spin h-3 w-3 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                      </div>
-                    ) : meeting.buyer_intent_explanation && meeting.buyer_intent_explanation !== 'N/A' ? (
-                      <button
-                        onClick={() => handleOpenModal(meeting)}
-                        className="p-1.5 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                        title="View meeting insights"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                      </button>
-                    ) : null}
+                    <button
+                      onClick={() => navigateToDealTimeline(meeting.deal_id)}
+                      className="p-1.5 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                      title="Open deal timeline"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               );
@@ -1521,7 +1532,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
             
             <div className="p-6 overflow-y-auto max-h-[60vh]">
               {/* Buyer Intent Explanation */}
-              {selectedMeeting.buyer_intent_explanation && selectedMeeting.buyer_intent_explanation !== 'N/A' && (
+              {hasValidInsights(selectedMeeting) && (
                 <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                   <div className="flex items-center gap-2 mb-4">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1531,20 +1542,31 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                   </div>
                   <div className="space-y-6">
                     {(() => {
-                      const sections = parseBuyerIntentExplanation(selectedMeeting.buyer_intent_explanation);
+                      // Check if buyer_intent_explanation is a string or object
+                      if (typeof selectedMeeting.buyer_intent_explanation === 'string') {
+                        // Display string format directly
+                        return (
+                          <div className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed whitespace-pre-wrap">
+                            {selectedMeeting.buyer_intent_explanation}
+                          </div>
+                        );
+                      } else {
+                        // Parse as object/dictionary format
+                        const sections = parseBuyerIntentExplanation(selectedMeeting.buyer_intent_explanation);
 
-                      return sections.map((section, sectionIndex) => (
-                        <div key={sectionIndex} className="space-y-2">
-                          <h5 className="font-bold text-blue-900 dark:text-blue-100">{section.title}</h5>
-                          <ul className="list-disc pl-5 space-y-1">
-                            {section.bulletPoints.map((point, pointIndex) => (
-                              <li key={pointIndex} className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed">
-                                {point}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ));
+                        return sections.map((section, sectionIndex) => (
+                          <div key={sectionIndex} className="space-y-2">
+                            <h5 className="font-bold text-blue-900 dark:text-blue-100">{section.title}</h5>
+                            <ul className="list-disc pl-5 space-y-1">
+                              {section.bulletPoints.map((point, pointIndex) => (
+                                <li key={pointIndex} className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed">
+                                  {point}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ));
+                      }
                     })()}
                   </div>
                 </div>

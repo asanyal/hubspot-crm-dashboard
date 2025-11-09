@@ -904,13 +904,18 @@ const DealTimeline: React.FC = () => {
   // Function to fetch company overview
   const fetchCompanyOverview = useCallback(async (dealName: string) => {
     try {
+      console.log('[fetchCompanyOverview] Starting fetch at:', new Date().toISOString());
       setLoadingOverview(true);
-      const apiPath = API_CONFIG.getApiPath('/company-overview');
+      // Use Next.js API route, not direct backend URL
+      const apiPath = '/api/hubspot/company-overview';
+      console.log('[fetchCompanyOverview] Making API call to:', apiPath);
       const response = await makeApiCall(`${apiPath}?dealName=${encodeURIComponent(dealName)}`);
-      
+      console.log('[fetchCompanyOverview] Received response at:', new Date().toISOString());
+
       if (response) {
         const data = await response.json();
         setCompanyOverview(data.overview);
+        console.log('[fetchCompanyOverview] Data set at:', new Date().toISOString());
       }
     } catch (error) {
       console.error('Error fetching company overview:', error);
@@ -946,10 +951,16 @@ const DealTimeline: React.FC = () => {
           console.error('Error parsing cached stakeholders data:', e);
         }
       }
-      
-      // Fetch fresh data from API
-      const apiPath = API_CONFIG.getApiPath('/get-stakeholders');
-      const response = await makeApiCall(`${apiPath}?deal_name=${encodeURIComponent(dealName)}`);
+
+      // Fetch fresh data from API - call backend v2 directly for now
+      // TODO: Create a proper Next.js proxy route for this
+      const backendUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/hubspot/v2/get-stakeholders`;
+      const response = await fetch(`${backendUrl}?deal_name=${encodeURIComponent(dealName)}`, {
+        headers: {
+          'X-Browser-ID': browserId || '',
+          'X-Session-ID': localStorage.getItem('sessionId') || '',
+        },
+      });
       
       if (response) {
         const data: StakeholdersData = await response.json();
@@ -2865,14 +2876,19 @@ const handleDealChange = useCallback(async (selectedOption: any) => {
 // Add new function to fetch concerns
 const fetchConcerns = useCallback(async (dealName: string) => {
   if (!dealName) return;
-  
-  console.log('Making API call to fetch concerns for:', dealName);
+
+  console.log('[fetchConcerns] Starting fetch at:', new Date().toISOString());
+  console.log('[fetchConcerns] Making API call to fetch concerns for:', dealName);
   setLoadingConcerns(true);
   try {
+    // Use Next.js API route, not direct backend URL
+    const apiPath = '/api/hubspot/get-concerns';
+    console.log('[fetchConcerns] Making API call to:', apiPath);
     const response = await makeApiCall(
-      `${API_CONFIG.getApiPath('/get-concerns')}?dealName=${encodeURIComponent(dealName)}`
+      `${apiPath}?dealName=${encodeURIComponent(dealName)}`
     );
-    
+    console.log('[fetchConcerns] Received response at:', new Date().toISOString());
+
     if (response) {
       const data = await response.json();
       // Handle empty responses properly - set to empty array if null/undefined/empty object
@@ -2881,6 +2897,7 @@ const fetchConcerns = useCallback(async (dealName: string) => {
       } else {
         setConcerns([]);
       }
+      console.log('[fetchConcerns] Data set at:', new Date().toISOString());
     } else {
       // If no response, set to empty array
       setConcerns([]);
@@ -2937,13 +2954,7 @@ const handleRefresh = useCallback(() => {
   }
 }, [handleGetTimeline, cleanupState, updateState]);
 
-  // Fetch concerns when the selected deal changes
-  useEffect(() => {
-    // Only fetch concerns after everything else has loaded
-    if (selectedDeal?.name && !loading && timelineData) {
-      fetchConcerns(selectedDeal.name);
-    }
-  }, [selectedDeal?.name, fetchConcerns, loading, timelineData]);
+  // Concerns are now fetched in parallel with other secondary data (see consolidated useEffect below)
 
 
 
@@ -3042,21 +3053,30 @@ useEffect(() => {
   }
 }, [browserId]);
 
-// Fetch company overview when the selected deal changes
+// Fetch all secondary data in parallel when timeline loads
+// This ensures Latest Activity, Stakeholders, and Concerns load simultaneously
+// without blocking each other, providing a faster user experience
 useEffect(() => {
-  // Only fetch company overview after everything else has loaded
+  // Only fetch after timeline has loaded
   if (selectedDeal?.name && !loading && timelineData) {
-    fetchCompanyOverview(selectedDeal.name);
-  }
-}, [selectedDeal?.name, fetchCompanyOverview, loading, timelineData]);
+    console.log('[Parallel Fetch] Starting all secondary data fetches at:', new Date().toISOString());
 
-// Fetch stakeholders when the selected deal changes
-useEffect(() => {
-  // Only fetch stakeholders after everything else has loaded
-  if (selectedDeal?.name && !loading && timelineData) {
-    fetchStakeholders(selectedDeal.name);
+    // TEMPORARY: Test sequential fetching to diagnose blocking issue
+    console.log('[Sequential Test] Starting sequential fetches...');
+
+    fetchConcerns(selectedDeal.name).then(() => {
+      console.log('[Sequential Test] Concerns completed at:', new Date().toISOString());
+    });
+
+    fetchCompanyOverview(selectedDeal.name).then(() => {
+      console.log('[Sequential Test] Company Overview completed at:', new Date().toISOString());
+    });
+
+    fetchStakeholders(selectedDeal.name).then(() => {
+      console.log('[Sequential Test] Stakeholders completed at:', new Date().toISOString());
+    });
   }
-}, [selectedDeal?.name, fetchStakeholders, loading, timelineData]);
+}, [selectedDeal?.name, fetchCompanyOverview, fetchStakeholders, fetchConcerns, loading, timelineData]);
 
 // Removed redundant useEffect to prevent infinite loops
 
@@ -3472,77 +3492,6 @@ useEffect(() => {
           {selectedDeal && (
             <div className="flex items-center">
               <span className="text-2xl font-bold text-gray-800 dark:text-white">{selectedDeal.name}</span>
-              <div className="relative inline-block ml-3" ref={latestActivityTooltipRef}>
-                <div className="cursor-help group">
-                  <div 
-                    className={`px-3 py-1.5 rounded-full flex items-center justify-center text-xs transition-all duration-200 relative cursor-pointer whitespace-nowrap border ${
-                      isLatestActivityTooltipVisible 
-                        ? 'ring-1 ring-blue-400' 
-                        : ''
-                    } ${
-                      loadingOverview 
-                        ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100' 
-                        : companyOverview 
-                          ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' 
-                          : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                    }`}
-                    onClick={toggleLatestActivityTooltip}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      <span>Latest Activity</span>
-                      <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </span>
-                    {loadingOverview && (
-                      <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                    )}
-                  </div>
-                  <div className={`absolute z-10 bg-white rounded-md shadow-lg border border-gray-200 w-72 sm:w-96 left-0 sm:left-0 top-full mt-1 transition-all duration-200 ${
-                    isLatestActivityTooltipVisible ? 'visible opacity-100' : 'invisible opacity-0 group-hover:visible group-hover:opacity-100'
-                  } -translate-x-1/2 sm:translate-x-0`}>
-                    <div className="relative">
-                      {/* Copy button in top right corner */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          copyLatestActivityToClipboard();
-                        }}
-                        className={`absolute top-2 right-2 p-1.5 rounded-lg transition-colors z-20 ${
-                          latestActivityCopyFeedback 
-                            ? 'text-green-600 bg-green-100' 
-                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                        }`}
-                        title={latestActivityCopyFeedback ? "Copied!" : "Copy latest activity to clipboard"}
-                      >
-                        {latestActivityCopyFeedback ? (
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        ) : (
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                          </svg>
-                        )}
-                      </button>
-                      
-                      {/* Tooltip content */}
-                      <div className="p-4 pr-10">
-                        {loadingOverview ? (
-                          <div className="flex items-center justify-center py-2">
-                            <div className="animate-spin h-4 w-4 border-2 border-sky-500 rounded-full border-t-transparent mr-2"></div>
-                            <p className="text-sm text-gray-500">Loading latest activity...</p>
-                          </div>
-                        ) : companyOverview ? (
-                          <p className="text-sm text-gray-700">{companyOverview}</p>
-                        ) : (
-                          <p className="text-sm text-gray-500">No latest activity available</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
         </div>
@@ -3566,34 +3515,6 @@ useEffect(() => {
           </button>
         </div>
       </div>
-      
-      {/* Activity count message */}
-      {selectedDeal && (
-        <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-100">
-          {fetchingActivities ? (
-            <p className="text-blue-700 font-medium flex items-center">
-              <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-blue-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Counting activities for <span className="font-bold ml-1">{selectedDeal.name}</span>...
-            </p>
-          ) : activitiesCount !== null ? (
-            <p className="text-blue-800 font-medium">
-              <span className="font-bold text-lg">{activitiesCount}</span> activities found for this deal
-            </p>
-          ) : timelineData ? (
-            <p className="text-blue-800 font-medium">
-              <span className="font-bold text-lg">{timelineData.events.length}</span> activities found for this deal
-            </p>
-          ) : (
-            <p className="text-blue-800 font-medium">
-              Loading deal activities...
-            </p>
-          )}
-        </div>
-      )}
-      
       {error && (
         <div className="text-red-500 mb-4 p-3 bg-red-50 rounded-md border border-red-100">
           {error}
@@ -3644,21 +3565,78 @@ useEffect(() => {
       ) : timelineData ? (
         <div className="space-y-6">
           {dealInfo && (
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-sm">
-                  <span className="text-gray-500">Started:</span>
-                  <div className="font-medium text-gray-900 dark:text-white">{formatDate(dealInfo.startDate)}</div>
+            <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-100">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div className="space-y-1">
+                  <span className="text-xs text-gray-400 uppercase tracking-wide">Started</span>
+                  <div className="font-semibold text-gray-900 dark:text-white text-sm">{formatDate(dealInfo.startDate)}</div>
                 </div>
-                <div className="text-sm">
-                  <span className="text-gray-500">Deal Owner:</span>
-                  <div className="font-medium text-gray-900 dark:text-white">{dealInfo.dealOwner}</div>
+                <div className="space-y-1">
+                  <span className="text-xs text-gray-400 uppercase tracking-wide">Owner</span>
+                  <div className="font-semibold text-gray-900 dark:text-white text-sm">{dealInfo.dealOwner}</div>
                 </div>
-                <div className="text-sm">
-                  <span className="text-gray-500">Stage:</span>
-                  <div className="font-medium text-gray-900 dark:text-white">{dealInfo.dealStage}</div>
+                <div className="space-y-1">
+                  <span className="text-xs text-gray-400 uppercase tracking-wide">Stage</span>
+                  <div className="font-semibold text-gray-900 dark:text-white text-sm">{dealInfo.dealStage}</div>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-xs text-gray-400 uppercase tracking-wide">Last Touch</span>
+                  <div className="flex items-center gap-2">
+                    <div className="font-semibold text-gray-900 dark:text-white text-sm">{formatDate(dealInfo.endDate)}</div>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      calculateDaysPassed(dealInfo.endDate) > 10
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {calculateDaysPassed(dealInfo.endDate)}d
+                    </span>
+                  </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Latest Activity Section */}
+          {selectedDeal && (
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-gray-700 dark:text-white">Latest Activity</h3>
+                {companyOverview && (
+                  <button
+                    onClick={copyLatestActivityToClipboard}
+                    className={`p-1.5 rounded-lg transition-colors ${
+                      latestActivityCopyFeedback
+                        ? 'text-green-600 bg-green-100'
+                        : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                    }`}
+                    title={latestActivityCopyFeedback ? "Copied!" : "Copy to clipboard"}
+                  >
+                    {latestActivityCopyFeedback ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    )}
+                  </button>
+                )}
+              </div>
+              {loadingOverview ? (
+                <div className="flex items-center text-gray-500">
+                  <span>Loading</span>
+                  <span className="inline-flex ml-1">
+                    <span className="animate-[blink_1.4s_ease-in-out_infinite]">.</span>
+                    <span className="animate-[blink_1.4s_ease-in-out_0.2s_infinite]">.</span>
+                    <span className="animate-[blink_1.4s_ease-in-out_0.4s_infinite]">.</span>
+                  </span>
+                </div>
+              ) : companyOverview ? (
+                <p className="text-sm text-gray-700 leading-relaxed">{companyOverview}</p>
+              ) : (
+                <p className="text-sm text-gray-400 italic">No latest activity available</p>
+              )}
             </div>
           )}
 
@@ -3669,123 +3647,101 @@ useEffect(() => {
               <div className="text-gray-500">Loading...</div>
             </div>
           ) : stakeholders.length > 0 ? (
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100" ref={stakeholderTooltipsRef}>
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
               <h3 className="font-semibold text-gray-700 dark:text-white mb-4">Stakeholders</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="max-h-[240px] overflow-y-auto space-y-4 pr-2">
                 {/* Decision Makers */}
-                <div>
-                  <h4 className="font-medium text-gray-600 mb-3 text-sm">
-                    Decision Makers ({stakeholders.filter(s => s.potential_decision_maker).length})
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {stakeholders
-                      .filter(stakeholder => stakeholder.potential_decision_maker)
-                      .map((stakeholder, index) => {
-                        const stakeholderId = `dm-${index}`;
-                        const isTooltipVisible = visibleStakeholderTooltips.has(stakeholderId);
-                        
-                        return (
+                {stakeholders.filter(s => s.potential_decision_maker).length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-gray-700 mb-3 text-xs uppercase tracking-wider sticky top-0 bg-white pb-2 flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
+                      Decision Makers ({stakeholders.filter(s => s.potential_decision_maker).length})
+                    </h4>
+                    <div className="space-y-2">
+                      {stakeholders
+                        .filter(stakeholder => stakeholder.potential_decision_maker)
+                        .map((stakeholder, index) => (
                           <div
-                            key={stakeholderId}
-                            className="relative group"
+                            key={index}
+                            className="flex items-center justify-between py-2.5 px-3 bg-blue-50 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors"
                           >
-                            <div 
-                              className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:scale-105 bg-blue-500 ${
-                                isTooltipVisible ? 'ring-2 ring-blue-300' : ''
-                              }`}
-                              onClick={() => toggleStakeholderTooltip(stakeholderId)}
-                              title="Click to see details"
-                            >
-                              {getInitials(stakeholder.name)}
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className="w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0"></div>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-gray-900">{stakeholder.name}</div>
+                                {stakeholder.title && (
+                                  <div className="text-xs text-gray-600 mt-0.5">{stakeholder.title}</div>
+                                )}
+                              </div>
                             </div>
-                            {/* Tooltip */}
-                            <div className={`absolute bottom-full left-0 transform mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg transition-opacity duration-200 whitespace-nowrap pointer-events-auto ${
-                              isTooltipVisible ? 'opacity-100 visible' : 'opacity-0 invisible group-hover:opacity-100 group-hover:visible'
-                            } -translate-x-1/2 sm:translate-x-0`} style={{ zIndex: 999999 }}>
-                              <div className="font-semibold">{stakeholder.name}</div>
-                              {stakeholder.title && <div className="text-gray-300">{stakeholder.title}</div>}
-                              <div className="text-gray-300">{stakeholder.email}</div>
-                              <div className="text-xs text-green-300 mt-1">Decision Maker</div>
-                              <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+                            <div className="flex items-center gap-2 ml-4">
+                              <span className="text-xs text-gray-600 truncate max-w-[180px]">
+                                {stakeholder.email}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(stakeholder.email);
+                                }}
+                                className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-100 rounded transition-colors flex-shrink-0"
+                                title="Copy email"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                              </button>
                             </div>
                           </div>
-                        );
-                      })}
-                    {stakeholders.filter(s => s.potential_decision_maker).length === 0 && (
-                      <span className="text-gray-500 text-sm italic">No decision makers identified</span>
-                    )}
+                        ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Others */}
-                <div>
-                  <h4 className="font-medium text-gray-600 mb-3 text-sm">
-                    Others ({stakeholders.filter(s => !s.potential_decision_maker).length})
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {stakeholders
-                      .filter(stakeholder => !stakeholder.potential_decision_maker)
-                      .map((stakeholder, index) => {
-                        const stakeholderId = `other-${index}`;
-                        const isTooltipVisible = visibleStakeholderTooltips.has(stakeholderId);
-                        
-                        return (
+                {stakeholders.filter(s => !s.potential_decision_maker).length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-gray-500 mb-3 text-xs uppercase tracking-wider sticky top-0 bg-white pb-2">
+                      Others ({stakeholders.filter(s => !s.potential_decision_maker).length})
+                    </h4>
+                    <div className="space-y-1.5">
+                      {stakeholders
+                        .filter(stakeholder => !stakeholder.potential_decision_maker)
+                        .map((stakeholder, index) => (
                           <div
-                            key={stakeholderId}
-                            className="relative group"
+                            key={index}
+                            className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors"
                           >
-                            <div 
-                              className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm cursor-pointer transition-all duration-200 hover:scale-105 bg-gray-500 ${
-                                isTooltipVisible ? 'ring-2 ring-blue-300' : ''
-                              }`}
-                              onClick={() => toggleStakeholderTooltip(stakeholderId)}
-                              title="Click to see details"
-                            >
-                              {getInitials(stakeholder.name)}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-gray-900 text-sm">{stakeholder.name}</div>
+                              {stakeholder.title && (
+                                <div className="text-xs text-gray-500 mt-0.5">{stakeholder.title}</div>
+                              )}
                             </div>
-                            {/* Tooltip */}
-                            <div className={`absolute bottom-full left-0 transform mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg transition-opacity duration-200 whitespace-nowrap pointer-events-auto ${
-                              isTooltipVisible ? 'opacity-100 visible' : 'opacity-0 invisible group-hover:opacity-100 group-hover:visible'
-                            } -translate-x-1/2 sm:translate-x-0`} style={{ zIndex: 999999 }}>
-                              <div className="font-semibold">{stakeholder.name}</div>
-                              {stakeholder.title && <div className="text-gray-300">{stakeholder.title}</div>}
-                              <div className="text-gray-300">{stakeholder.email}</div>
-                              <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+                            <div className="flex items-center gap-2 ml-4">
+                              <span className="text-xs text-gray-500 truncate max-w-[180px]">
+                                {stakeholder.email}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(stakeholder.email);
+                                }}
+                                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
+                                title="Copy email"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                              </button>
                             </div>
                           </div>
-                        );
-                      })}
-                    {stakeholders.filter(s => !s.potential_decision_maker).length === 0 && (
-                      <span className="text-gray-500 text-sm italic">No other stakeholders</span>
-                    )}
+                        ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
           ) : null}
-
-          {/* Last Touch Point Section */}
-          {dealInfo && (
-            <div className={`bg-white p-4 rounded-lg shadow-sm border ${
-              calculateDaysPassed(dealInfo.endDate) > 10 
-                ? 'border-red-200 bg-red-50' 
-                : 'border-green-200 bg-green-50'
-            }`}>
-              <div className="flex items-center justify-between">
-                <div className="text-sm">
-                  <span className="text-gray-500">Last Touch Point:</span>
-                  <div className="font-medium text-gray-900 dark:text-white">{formatDate(dealInfo.endDate)}</div>
-                </div>
-                <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  calculateDaysPassed(dealInfo.endDate) > 10 
-                    ? 'bg-red-100 text-red-700' 
-                    : 'bg-green-100 text-green-700'
-                }`}>
-                  {calculateDaysPassed(dealInfo.endDate)} days ago
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Sentiment and Intent Summary Boxes */}
           {timelineData && timelineData.events && (

@@ -155,3 +155,13 @@ body {
     background: var(--muted-foreground);
   }
 }
+
+/* Blinking dots animation */
+@keyframes blink {
+  0%, 100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 1;
+  }
+}

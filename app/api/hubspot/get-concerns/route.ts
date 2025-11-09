@@ -3,7 +3,10 @@ import { API_CONFIG } from '@/app/utils/config';
 import { getBackendUrl } from '@/app/utils/api';
 
 export async function GET(request: Request) {
+  const startTime = Date.now();
   try {
+    console.log('[get-concerns] Route handler started at:', new Date().toISOString());
+
     // Get the browser ID and session ID from the request headers
     const browserId = request.headers.get('X-Browser-ID');
     const sessionId = request.headers.get('X-Session-ID');
@@ -17,7 +20,7 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const dealName = searchParams.get('dealName');
-    
+
     if (!dealName) {
       return NextResponse.json(
         { error: 'Deal name parameter is required' },
@@ -25,14 +28,17 @@ export async function GET(request: Request) {
       );
     }
 
-    console.log(`Fetching concerns for deal: ${dealName}`);
-    
+    console.log(`[get-concerns] Fetching concerns for deal: ${dealName}`);
+
     const apiPath = API_CONFIG.getApiPath('/get-concerns');
     const backendUrl = getBackendUrl(`${apiPath}?dealName=${encodeURIComponent(dealName)}`);
-    
+
     // Log the actual URL being called
-    console.log('Making request to backend URL:', backendUrl);
-    
+    console.log('[get-concerns] Backend URL:', backendUrl);
+    console.log('[get-concerns] Making backend request at:', new Date().toISOString(), `(${Date.now() - startTime}ms elapsed)`);
+
+    const fetchStartTime = Date.now();
+
     // Forward the request to the backend server
     const response = await fetch(backendUrl, {
       headers: {
@@ -40,19 +46,23 @@ export async function GET(request: Request) {
         'X-Session-ID': sessionId || '',
       },
     });
-    
-    console.log(`Backend response status: ${response.status}`);
-    
+
+    const fetchDuration = Date.now() - fetchStartTime;
+    console.log(`[get-concerns] Backend responded in ${fetchDuration}ms with status: ${response.status}`);
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Backend error response:', errorText);
+      console.error('[get-concerns] Backend error response:', errorText);
       return NextResponse.json(
         { error: `Backend error: ${response.status}` },
         { status: response.status }
       );
     }
 
+    const jsonStartTime = Date.now();
     const data = await response.json();
+    const jsonDuration = Date.now() - jsonStartTime;
+    console.log(`[get-concerns] JSON parsing took ${jsonDuration}ms`);
 
     // Create a new response with the data
     const nextResponse = NextResponse.json(data);
@@ -63,9 +73,13 @@ export async function GET(request: Request) {
       nextResponse.headers.set('X-Session-ID', backendSessionId);
     }
 
+    const totalDuration = Date.now() - startTime;
+    console.log(`[get-concerns] Total route handler duration: ${totalDuration}ms`);
+
     return nextResponse;
   } catch (error) {
-    console.error('Error fetching concerns:', error);
+    const totalDuration = Date.now() - startTime;
+    console.error(`[get-concerns] Error after ${totalDuration}ms:`, error);
     return NextResponse.json(
       { error: 'Failed to fetch concerns' },
       { status: 500 }

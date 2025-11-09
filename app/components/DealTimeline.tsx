@@ -2075,219 +2075,138 @@ const EventDrawer = () => {
             })()}
           </div>
         ) : eventsForDate.length > 0 ? (
-          <div>
-            <p className="text-gray-600 mb-4">Total events: {eventsForDate.length}</p>
-            
+          <div className="space-y-3">
             {eventsForDate.map((event, index) => (
-              <div 
-                id={`event-section-${index}`} 
-                key={index} 
-                className="mb-4 border border-gray-200 rounded-lg overflow-hidden"
+              <div
+                id={`event-section-${index}`}
+                key={index}
+                className="bg-white border border-gray-100 rounded-xl p-4 hover:shadow-md transition-shadow"
               >
-                {/* Header - always visible and clickable */}
-                <div 
-                  className={`p-3 flex items-center gap-2 cursor-pointer hover:bg-gray-50 ${
-                    expandedSections[index] ? 'bg-blue-50' : 'bg-white'
-                  }`}
-                  onClick={() => toggleSection(index)}
-                >
-                  <span className={`w-4 h-4 rounded-full ${
-                    event.type === 'Meeting' ? 'bg-red-400' : 
-                    event.type === 'Incoming Email' ? 'bg-green-400' : 
-                    event.type === 'Outgoing Email' ? 'bg-blue-400' : 'bg-teal-300'
-                  }`}></span>
-                  <span className="font-bold">{event.type}</span>
-                  {event.time_str && (
-                    <span className="text-gray-500 ml-auto mr-2">{event.time_str}</span>
-                  )}
-                  
-                  {/* Toggle icon */}
-                  <svg 
-                    xmlns="http://www.w3.org/2000/svg" 
-                    className={`h-5 w-5 transition-transform ${expandedSections[index] ? 'rotate-180' : ''}`} 
-                    fill="none" 
-                    viewBox="0 0 24 24" 
-                    stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-                
-                {/* Content - only visible when expanded */}
-                {expandedSections[index] && (
-                  <div className="p-3 border-t border-gray-200">
-                    {/* Email-specific header for email events */}
-                    {(event.type === 'Incoming Email' || event.type === 'Outgoing Email') && (
-                      <div className="mb-4 bg-gray-50 p-3 rounded-lg">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                            event.type === 'Incoming Email' ? 'bg-green-100' : 'bg-blue-100'
-                          }`}>
-                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${
-                              event.type === 'Incoming Email' ? 'text-green-600' : 'text-blue-600'
-                            }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                          <div>
-                            <h4 className="font-semibold text-gray-900 dark:text-white">{event.subject}</h4>
-                            <p className="text-sm text-gray-500">
-                              {event.type === 'Incoming Email' ? 'Received' : 'Sent'} at {event.time_str}
-                            </p>
-                          </div>
-                        </div>
-                        
-                        {/* Sentiment indicator */}
-                        {event.sentiment && (
-                          <div className="flex items-center gap-2 mt-2">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              event.sentiment === 'positive' 
-                                ? 'bg-green-100 text-green-800' 
-                                : event.sentiment === 'negative'
-                                ? 'bg-red-100 text-red-800'
-                                : event.sentiment === 'neutral'
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : 'bg-gray-100 text-gray-800'
-                            }`}>
-                              {event.sentiment.charAt(0).toUpperCase() + event.sentiment.slice(1)} Sentiment
-                            </span>
-                          </div>
-                        )}
-                        </div>
-                    )}
-
-                    {/* Meeting-specific header for meeting events */}
-                    {event.type === 'Meeting' && (
-                      <div className="mb-4 bg-gray-50 p-3 rounded-lg">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                          <div>
-                            <h4 className="font-semibold text-gray-900 dark:text-white">{event.subject}</h4>
-                            <p className="text-sm text-gray-500">Meeting at {event.time_str}</p>
-                          </div>
-                        </div>
-                        
-                        {/* Buyer Intent indicator */}
-                    {event.buyer_intent && (
-                          <div className="flex items-center gap-2 mt-2">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              event.buyer_intent === 'Very likely to buy' || event.buyer_intent === 'Likely to buy'
-                                ? 'bg-green-100 text-green-800'
-                            : event.buyer_intent === 'Less likely to buy' 
-                                ? 'bg-red-100 text-red-800'
-                                : event.buyer_intent === 'Neutral'
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {event.buyer_intent === 'Likely to buy' ? 'Positive Signal' : 
-                           event.buyer_intent === 'Less likely to buy' ? 'Negative Signal' : event.buyer_intent}
-                            </span>
-                      </div>
-                    )}
-                      </div>
-                    )}
-                    
-                    {/* Content section */}
-                    <div className="mt-4">
-                      {loadingContents[event.id] ? (
-                          <div className="flex items-center text-blue-600 mb-2">
-                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Loading content...
-                          </div>
-                      ) : (
-                        <div className="prose prose-sm max-w-none">
-                          {formatEmailContent(eventContents[event.id] || event.content || '')}
-                          </div>
-                        )}
+                {/* Event Header */}
+                <div className="flex items-start gap-3 mb-3">
+                  <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
+                    event.type === 'Meeting' ? 'bg-red-500' :
+                    event.type === 'Incoming Email' ? 'bg-green-500' :
+                    event.type === 'Outgoing Email' ? 'bg-blue-500' : 'bg-teal-500'
+                  }`}></div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        {event.type}
+                      </span>
+                      {event.time_str && (
+                        <span className="text-xs text-gray-400">{event.time_str}</span>
+                      )}
                     </div>
+                    <h4 className="font-semibold text-gray-900 mb-2 line-clamp-2">
+                      {event.subject || 'No subject'}
+                    </h4>
 
-                    {/* Buyer Intent Explanation for meetings */}
-                    {event.type === 'Meeting' && event.buyer_intent_explanation && event.buyer_intent_explanation !== 'N/A' && (
-                      <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <h4 className="font-semibold text-blue-900">Meeting Insights</h4>
-                          </div>
-                          <button
-                            onClick={() => copyMeetingInsightsToClipboard(event.id || '', event.buyer_intent_explanation)}
-                            className={`p-2 rounded-lg transition-colors ${
-                              meetingInsightsCopyFeedback[event.id || ''] 
-                                ? 'text-green-600 bg-green-100' 
-                                : 'text-blue-500 hover:text-blue-700 hover:bg-blue-100'
-                            }`}
-                            title={meetingInsightsCopyFeedback[event.id || ''] ? "Copied!" : "Copy meeting insights to clipboard"}
-                          >
-                            {meetingInsightsCopyFeedback[event.id || ''] ? (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            ) : (
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                              </svg>
-                            )}
-                          </button>
-                        </div>
-                        <div className="space-y-6">
-                          {(() => {
-                            const sections = parseBuyerIntentExplanation(event.buyer_intent_explanation);
-
-                            return sections.map((section, sectionIndex) => (
-                              <div key={sectionIndex} className="space-y-2">
-                                <h5 className="font-bold text-blue-900">{section.title}</h5>
-                                <ul className="list-disc pl-5 space-y-1">
-                                  {section.bulletPoints.map((point, pointIndex) => (
-                                    <li key={pointIndex} className="text-sm text-blue-800 leading-relaxed">
-                                      {point}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            ));
-                          })()}
-                        </div>
-                      </div>
+                    {/* Sentiment or Intent Badge */}
+                    {event.type === 'Meeting' && event.buyer_intent && (
+                      <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${
+                        event.buyer_intent === 'Very likely to buy' || event.buyer_intent === 'Likely to buy'
+                          ? 'bg-green-50 text-green-700 border border-green-200'
+                          : event.buyer_intent === 'Less likely to buy'
+                          ? 'bg-red-50 text-red-700 border border-red-200'
+                          : event.buyer_intent === 'Neutral'
+                          ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                          : 'bg-gray-50 text-gray-700 border border-gray-200'
+                      }`}>
+                        {event.buyer_intent === 'Likely to buy' ? 'Positive Signal' :
+                         event.buyer_intent === 'Less likely to buy' ? 'Negative Signal' : event.buyer_intent}
+                      </span>
                     )}
 
-                    {/* Champion Information for Meetings */}
-                    {event.type === 'Meeting' && event.subject && event.date_str && (
-                      <div className="mt-4">
-                        <h4 className="font-semibold mb-2 text-gray-900 dark:text-white">Attendees</h4>
-                        {meetingContacts[`${event.subject}_${event.date_str}`]?.contacts?.length > 0 ? (
-                          meetingContacts[`${event.subject}_${event.date_str}`].contacts.map((contact, idx) => (
-                            <div key={idx} className="p-2 bg-white rounded border border-gray-100">
-                              <div className="flex flex-col">
-                                <span className="font-medium text-sm">
-                                  {contact.name !== 'Unknown name' ? contact.name : (contact.email || 'No email available')}
-                                </span>
-                                <span className="text-xs text-gray-600">
-                                  {contact.title !== 'Unknown title' ? contact.title : 'No title available'}
-                                </span>
-                              </div>
-                            </div>
-                          ))
+                    {(event.type === 'Incoming Email' || event.type === 'Outgoing Email') && event.sentiment && (
+                      <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${
+                        event.sentiment === 'positive'
+                          ? 'bg-green-50 text-green-700 border border-green-200'
+                          : event.sentiment === 'negative'
+                          ? 'bg-red-50 text-red-700 border border-red-200'
+                          : event.sentiment === 'neutral'
+                          ? 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                          : 'bg-gray-50 text-gray-700 border border-gray-200'
+                      }`}>
+                        {event.sentiment.charAt(0).toUpperCase() + event.sentiment.slice(1)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Meeting Insights */}
+                {event.type === 'Meeting' && event.buyer_intent_explanation && event.buyer_intent_explanation !== 'N/A' && (
+                  <div className="mt-3 bg-blue-50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h5 className="text-base font-bold text-blue-900 uppercase tracking-wide">Insights</h5>
+                      <button
+                        onClick={() => copyMeetingInsightsToClipboard(event.id || '', event.buyer_intent_explanation)}
+                        className={`p-1.5 rounded-lg transition-colors ${
+                          meetingInsightsCopyFeedback[event.id || '']
+                            ? 'text-green-600 bg-green-100'
+                            : 'text-blue-600 hover:text-blue-800 hover:bg-blue-100'
+                        }`}
+                        title={meetingInsightsCopyFeedback[event.id || ''] ? "Copied!" : "Copy insights"}
+                      >
+                        {meetingInsightsCopyFeedback[event.id || ''] ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
                         ) : (
-                          <p className="text-sm text-gray-500 italic">No attendees in this call</p>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
                         )}
-                      </div>
-                    )}
+                      </button>
+                    </div>
+                    <div className="space-y-4">
+                      {(() => {
+                        const sections = parseBuyerIntentExplanation(event.buyer_intent_explanation);
+                        return sections.map((section, sectionIndex) => (
+                          <div key={sectionIndex}>
+                            <h6 className="text-base font-bold text-blue-900 mb-2">{section.title}</h6>
+                            <ul className="space-y-2">
+                              {section.bulletPoints.map((point, pointIndex) => (
+                                <li key={pointIndex} className="text-sm text-blue-800 leading-relaxed pl-4 relative before:content-['•'] before:absolute before:left-0 before:text-blue-600">
+                                  {point}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
+
+                {/* Attendees for Meetings */}
+                {event.type === 'Meeting' && event.subject && event.date_str && meetingContacts[`${event.subject}_${event.date_str}`]?.contacts?.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <h5 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">Attendees</h5>
+                    <div className="flex flex-wrap gap-2">
+                      {meetingContacts[`${event.subject}_${event.date_str}`].contacts.map((contact, idx) => (
+                        <div key={idx} className="inline-flex items-center gap-2 px-2.5 py-1.5 bg-gray-50 rounded-lg border border-gray-100">
+                          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-medium">
+                            {(contact.name !== 'Unknown name' ? contact.name : contact.email || 'U').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium text-gray-900">
+                              {contact.name !== 'Unknown name' ? contact.name : (contact.email || 'Unknown')}
+                            </span>
+                            {contact.title !== 'Unknown title' && (
+                              <span className="text-[10px] text-gray-500">{contact.title}</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-center text-gray-500 my-8">No events found for this date.</p>
+          <p className="text-center text-gray-400 text-sm my-8">No events found for this date.</p>
         )}
       </div>
     </div>
@@ -2485,41 +2404,60 @@ return (
                   <div className="grid grid-cols-12 gap-4">
                     {/* Date */}
                     <div className="col-span-2">
-                      <span className={`text-gray-500 font-mono ${
-                        eventDate && isFutureDate(eventDate) ? 'text-blue-600 font-medium' : ''
-                      }`}>
-                        {(() => {
-                          if (!eventDate) return 'No date';
-                          
-                          const dateObj = new Date(eventDate);
-                          
-                          // Check if time is 15:00 or later and add a day if needed
-                          const timeStr = event.time_str || event.event_date?.split('T')[1];
-                          if (timeStr) {
-                            const timeParts = timeStr.split(':');
-                            const hours = parseInt(timeParts[0], 10);
-                            
-                            if (hours >= 15) {
-                              dateObj.setDate(dateObj.getDate() + 1);
+                      <div className="flex flex-col">
+                        <span className={`font-mono ${
+                          eventDate && isFutureDate(eventDate) ? 'text-blue-600 font-medium' : 'text-gray-500'
+                        }`}>
+                          {(() => {
+                            if (!eventDate) return 'No date';
+
+                            const dateObj = new Date(eventDate);
+
+                            // Check if time is 15:00 or later and add a day if needed
+                            const timeStr = event.time_str || event.event_date?.split('T')[1];
+                            if (timeStr) {
+                              const timeParts = timeStr.split(':');
+                              const hours = parseInt(timeParts[0], 10);
+
+                              if (hours >= 15) {
+                                dateObj.setDate(dateObj.getDate() + 1);
+                              }
                             }
-                          }
-                          
-                          return (
-                            <span className="flex items-center gap-1">
-                              {dateObj.toLocaleDateString('en-US', { 
-                                day: '2-digit', 
-                                month: 'short',
-                                year: 'numeric'
-                              })}
-                              {isFutureDate(eventDate) && (
-                                <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full">
-                                  Upcoming
-                                </span>
-                              )}
-                            </span>
-                          );
-                        })()}
-                      </span>
+
+                            return (
+                              <span className="flex items-center gap-1">
+                                {dateObj.toLocaleDateString('en-US', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })}
+                                {isFutureDate(eventDate) && (
+                                  <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full">
+                                    Upcoming
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          })()}
+                        </span>
+                        {eventDate && !isFutureDate(eventDate) && (
+                          <span className="text-xs text-gray-400 font-bold mt-0.5">
+                            {(() => {
+                              const dateObj = new Date(eventDate);
+                              const today = new Date();
+                              today.setHours(0, 0, 0, 0);
+                              dateObj.setHours(0, 0, 0, 0);
+
+                              const diffTime = today.getTime() - dateObj.getTime();
+                              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+                              if (diffDays === 0) return 'Today';
+                              if (diffDays === 1) return '1 day ago';
+                              return `${diffDays} days ago`;
+                            })()}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Event Type */}

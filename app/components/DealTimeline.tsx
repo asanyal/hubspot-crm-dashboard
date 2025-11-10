@@ -69,6 +69,8 @@ interface DealInfo {
   startDate: string;
   endDate: string;
   dealStage: string;
+  createdate?: string;
+  createdDate?: string;
 }
 
 interface SelectOption {
@@ -998,6 +1000,13 @@ const DealTimeline: React.FC = () => {
       if (response) {
         const info = await response.json();
         console.log('[fetchDealInfo] Response received at:', new Date().toISOString());
+        console.log('[fetchDealInfo] Full response data:', info);
+        console.log('[fetchDealInfo] Available date fields:', {
+          startDate: info.startDate,
+          createdate: info.createdate,
+          createdDate: info.createdDate,
+          allKeys: Object.keys(info)
+        });
         setDealInfo(info);
         setAllDealsInfo(prev => ({
           ...prev,
@@ -3731,9 +3740,11 @@ useEffect(() => {
           <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-100">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               <div className="space-y-1">
-                <span className="text-xs text-gray-400 uppercase tracking-wide">Started</span>
+                <span className="text-xs text-gray-400 uppercase tracking-wide">Activities</span>
                 {dealInfo ? (
-                  <div className="font-semibold text-gray-900 dark:text-white text-sm">{formatDate(dealInfo.startDate)}</div>
+                  <div className="font-semibold text-gray-900 dark:text-white text-sm">
+                    {dealInfo.activityCount || 0}
+                  </div>
                 ) : (
                   <div className="animate-pulse h-5 w-24 bg-gray-200 rounded"></div>
                 )}
@@ -3780,7 +3791,7 @@ useEffect(() => {
               ? 'bg-red-50 border-red-200 animate-pulse'
               : 'bg-white border-gray-100'
           }`}>
-            <h3 className="font-semibold text-gray-700 dark:text-white mb-3">Latest Activity</h3>
+            <h3 className="font-semibold text-gray-700 dark:text-white mb-3 text-xl">Latest Activity</h3>
             {loadingOverview ? (
               <div className="flex items-center text-red-600 font-medium">
                 <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -3795,9 +3806,9 @@ useEffect(() => {
                 </span>
               </div>
             ) : companyOverview ? (
-              <p className="text-sm text-gray-700 leading-relaxed">{companyOverview}</p>
+              <p className="text-base text-gray-700 leading-relaxed">{companyOverview}</p>
             ) : (
-              <p className="text-sm text-gray-400 italic">No latest activity available</p>
+              <p className="text-base text-gray-400 italic">No latest activity available</p>
             )}
           </div>
 

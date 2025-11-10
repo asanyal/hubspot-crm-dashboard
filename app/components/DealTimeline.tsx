@@ -3526,7 +3526,7 @@ useEffect(() => {
         {/* Regular Deals Section - Scrollable */}
         <div className="flex-1 overflow-y-auto">
           <div className="p-6">
-            <div className="mb-4 space-y-3">
+            <div className="mb-4 space-y-3 overflow-visible">
               {/* Title row */}
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium text-gray-600">
@@ -3538,7 +3538,7 @@ useEffect(() => {
               </div>
               
               {/* Controls row */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 overflow-visible">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500">Sort by:</span>
                   <select
@@ -3551,19 +3551,32 @@ useEffect(() => {
                     <option value="activities">Activities</option>
                   </select>
                 </div>
-                
+
                 {activeFilterTab !== 'bookmarks' && (
-                  <button
-                    onClick={() => setShowOnlyActiveDeals(!showOnlyActiveDeals)}
-                    className={`px-2.5 py-1 text-xs rounded transition-colors ${
-                      showOnlyActiveDeals 
-                        ? 'bg-blue-50 text-blue-600 border border-blue-200' 
-                        : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
-                    }`}
-                    title={showOnlyActiveDeals ? 'Show all deals' : 'Show only deals with activities'}
-                  >
-                    {showOnlyActiveDeals ? 'All Deals' : 'Active Deals'}
-                  </button>
+                  <div className="relative inline-block group">
+                    <label className="flex items-center gap-px cursor-pointer">
+                      <span className="text-xs text-gray-600 group-hover:text-gray-800 transition-colors">
+                        Active Deals
+                      </span>
+                      <div
+                        onClick={() => setShowOnlyActiveDeals(!showOnlyActiveDeals)}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                          showOnlyActiveDeals
+                            ? 'bg-blue-500'
+                            : 'bg-gray-200'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                            showOnlyActiveDeals ? 'translate-x-5' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </div>
+                    </label>
+                    <div className="invisible group-hover:visible absolute z-50 -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                      Deals with 1 or more Activities
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
@@ -3824,6 +3837,33 @@ useEffect(() => {
               <div className="grid grid-cols-2 gap-4">
                 {/* Positives Card */}
                 {(() => {
+                  // Check if there are any activities first
+                  const hasActivities = timelineData?.events && timelineData.events.length > 0;
+
+                  if (!hasActivities) {
+                    // If no activities, show 0 positives
+                    return (
+                      <button
+                        onClick={() => {
+                          setSelectedConcern('positives');
+                          setSelectedDate(null);
+                          setSelectedEventId(null);
+                          setIsDrawerOpen(true);
+                        }}
+                        className="p-6 rounded-lg border-2 border-green-200 bg-green-50 hover:bg-green-100 transition-all hover:shadow-md text-left"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-semibold text-green-800 text-lg">Positives</h4>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <div className="text-3xl font-bold text-green-700 mb-1">0</div>
+                        <div className="text-sm text-green-600">positive signals</div>
+                      </button>
+                    );
+                  }
+
                   const processedConcerns = processConcernsArray(concerns);
                   const positiveEmails = timelineData?.events?.filter(e =>
                     (e.type === 'Incoming Email' || e.type === 'Outgoing Email') && e.sentiment === 'positive'
@@ -3864,6 +3904,33 @@ useEffect(() => {
 
                 {/* Risks Card */}
                 {(() => {
+                  // Check if there are any activities first
+                  const hasActivities = timelineData?.events && timelineData.events.length > 0;
+
+                  if (!hasActivities) {
+                    // If no activities, show 0 risks
+                    return (
+                      <button
+                        onClick={() => {
+                          setSelectedConcern('risks');
+                          setSelectedDate(null);
+                          setSelectedEventId(null);
+                          setIsDrawerOpen(true);
+                        }}
+                        className="p-6 rounded-lg border-2 border-red-200 bg-red-50 hover:bg-red-100 transition-all hover:shadow-md text-left"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-semibold text-red-800 text-lg">Risks</h4>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                        </div>
+                        <div className="text-3xl font-bold text-red-700 mb-1">0</div>
+                        <div className="text-sm text-red-600">risk factors</div>
+                      </button>
+                    );
+                  }
+
                   const processedConcerns = processConcernsArray(concerns);
                   const lessLikelySignals = timelineData?.events?.filter(e =>
                     e.type === 'Meeting' && e.buyer_intent === 'Less likely to buy'

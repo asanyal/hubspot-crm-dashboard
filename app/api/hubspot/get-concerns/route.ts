@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { API_CONFIG } from '@/app/utils/config';
 import { getBackendUrl } from '@/app/utils/api';
+import axios from 'axios';
 
 export async function GET(request: Request) {
   const startTime = Date.now();
@@ -39,42 +40,30 @@ export async function GET(request: Request) {
 
     const fetchStartTime = Date.now();
 
-    // Forward the request to the backend server
-    const response = await fetch(backendUrl, {
+    // Use axios instead of fetch to bypass Next.js fetch issues
+    const response = await axios.get(backendUrl, {
       headers: {
         'X-Browser-ID': browserId,
         'X-Session-ID': sessionId || '',
       },
+      timeout: 60000, // 60 second timeout
     });
 
     const fetchDuration = Date.now() - fetchStartTime;
     console.log(`[get-concerns] Backend responded in ${fetchDuration}ms with status: ${response.status}`);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[get-concerns] Backend error response:', errorText);
-      return NextResponse.json(
-        { error: `Backend error: ${response.status}` },
-        { status: response.status }
-      );
-    }
-
-    const jsonStartTime = Date.now();
-    const data = await response.json();
-    const jsonDuration = Date.now() - jsonStartTime;
-    console.log(`[get-concerns] JSON parsing took ${jsonDuration}ms`);
+    const data = response.data;
+    const totalDuration = Date.now() - startTime;
+    console.log(`[get-concerns] Total route handler duration: ${totalDuration}ms`);
 
     // Create a new response with the data
     const nextResponse = NextResponse.json(data);
 
     // Forward any session ID from the backend response
-    const backendSessionId = response.headers.get('X-Session-ID');
+    const backendSessionId = response.headers['x-session-id'];
     if (backendSessionId) {
       nextResponse.headers.set('X-Session-ID', backendSessionId);
     }
-
-    const totalDuration = Date.now() - startTime;
-    console.log(`[get-concerns] Total route handler duration: ${totalDuration}ms`);
 
     return nextResponse;
   } catch (error) {

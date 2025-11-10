@@ -268,7 +268,6 @@ const DealTimeline: React.FC = () => {
   // Loading state variables
   const [dealsLoading, setDealsLoading] = useState<boolean>(true);
   const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
-  const [loadingStage, setLoadingStage] = useState<number>(1); // 1, 2, 3, or 4 for error
   const [loadingError, setLoadingError] = useState<boolean>(false);
   const [fetchingActivities, setFetchingActivities] = useState<boolean>(false);
   const [isUrlProcessed, setIsUrlProcessed] = useState<boolean>(false);
@@ -303,8 +302,6 @@ const DealTimeline: React.FC = () => {
   const [browserId, setBrowserId] = useState<string>('');
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Add new state for dynamic loading message
-  const [loadingMessage, setLoadingMessage] = useState<string>('');
 
   // Add state for company overview
   const [companyOverview, setCompanyOverview] = useState<string | null>(null);
@@ -812,29 +809,38 @@ const DealTimeline: React.FC = () => {
 
   // Utility function for making API calls with session management
   const makeApiCall = useCallback(async (url: string, options: RequestInit = {}) => {
-    if (!isInitialized) {
-      return null;
-    }
+    const startTime = Date.now();
+    console.log('[makeApiCall] Starting API call to:', url, 'at', new Date().toISOString());
 
-    if (!browserId) {
-      console.error('Browser ID not initialized yet');
-      throw new Error('Browser ID not initialized');
+    // Get browserId directly from localStorage to avoid async initialization delays
+    let currentBrowserId = browserId;
+    if (!currentBrowserId && typeof window !== 'undefined') {
+      currentBrowserId = localStorage.getItem('browserId') || '';
+      if (!currentBrowserId) {
+        currentBrowserId = crypto.randomUUID();
+        localStorage.setItem('browserId', currentBrowserId);
+      }
     }
 
     const sessionId = localStorage.getItem('sessionId') || '';
-    
+
     const headers = {
-      'X-Browser-ID': browserId,
+      'X-Browser-ID': currentBrowserId,
       'X-Session-ID': sessionId,
       ...options.headers,
     };
 
+    console.log('[makeApiCall] About to call fetch for:', url, 'elapsed:', Date.now() - startTime, 'ms');
+
     try {
-      
+      const fetchStartTime = Date.now();
       const response = await fetch(url, {
         ...options,
         headers,
       });
+
+      const fetchDuration = Date.now() - fetchStartTime;
+      console.log('[makeApiCall] Fetch completed for:', url, 'in', fetchDuration, 'ms');
 
       // Store session ID from response headers if present
       const newSessionId = response.headers.get('X-Session-ID');
@@ -901,24 +907,22 @@ const DealTimeline: React.FC = () => {
     }
   }, [browserId, isInitialized]);
 
-  // Function to fetch company overview
+  // Function to fetch company overview - simplified
   const fetchCompanyOverview = useCallback(async (dealName: string) => {
+    console.log('[fetchCompanyOverview] Starting at:', new Date().toISOString());
+    setLoadingOverview(true);
+
     try {
-      console.log('[fetchCompanyOverview] Starting fetch at:', new Date().toISOString());
-      setLoadingOverview(true);
-      // Use Next.js API route, not direct backend URL
-      const apiPath = '/api/hubspot/company-overview';
-      console.log('[fetchCompanyOverview] Making API call to:', apiPath);
-      const response = await makeApiCall(`${apiPath}?dealName=${encodeURIComponent(dealName)}`);
-      console.log('[fetchCompanyOverview] Received response at:', new Date().toISOString());
+      // Call backend directly like other working APIs
+      const response = await makeApiCall(`${API_CONFIG.getApiPath('/company-overview')}?dealName=${encodeURIComponent(dealName)}`);
 
       if (response) {
         const data = await response.json();
         setCompanyOverview(data.overview);
-        console.log('[fetchCompanyOverview] Data set at:', new Date().toISOString());
+        console.log('[fetchCompanyOverview] Completed at:', new Date().toISOString());
       }
     } catch (error) {
-      console.error('Error fetching company overview:', error);
+      console.error('[fetchCompanyOverview] Error:', error);
       setCompanyOverview(null);
     } finally {
       setLoadingOverview(false);
@@ -927,22 +931,27 @@ const DealTimeline: React.FC = () => {
 
   // Function to fetch stakeholders
   const fetchStakeholders = useCallback(async (dealName: string) => {
+    console.log('[fetchStakeholders] ===== FUNCTION CALLED =====');
+    console.log('[fetchStakeholders] Deal name:', dealName);
+    console.log('[fetchStakeholders] Timestamp:', new Date().toISOString());
+
     try {
       setLoadingStakeholders(true);
-      
+
       // Check if we have cached data for this deal
       const cacheKey = `stakeholders_${dealName}`;
       const cachedData = localStorage.getItem(cacheKey);
-      
+
       if (cachedData) {
         try {
           const parsed = JSON.parse(cachedData);
           const now = Date.now();
           const cacheAge = now - parsed.timestamp;
           const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
-          
+
           // Use cached data if it's less than 30 minutes old
           if (cacheAge < CACHE_DURATION) {
+            console.log('[fetchStakeholders] Using cached data:', parsed.data);
             setStakeholders(parsed.data);
             setLoadingStakeholders(false);
             return;
@@ -952,21 +961,16 @@ const DealTimeline: React.FC = () => {
         }
       }
 
-      // Fetch fresh data from API - call backend v2 directly for now
-      // TODO: Create a proper Next.js proxy route for this
-      const backendUrl = `${process.env.NEXT_PUBLIC_API_URL}/api/hubspot/v2/get-stakeholders`;
-      const response = await fetch(`${backendUrl}?deal_name=${encodeURIComponent(dealName)}`, {
-        headers: {
-          'X-Browser-ID': browserId || '',
-          'X-Session-ID': localStorage.getItem('sessionId') || '',
-        },
-      });
-      
+      // Fetch fresh data from API - use makeApiCall like other working APIs
+      const response = await makeApiCall(`${API_CONFIG.getApiPath('/get-stakeholders')}?deal_name=${encodeURIComponent(dealName)}`);
+
       if (response) {
         const data: StakeholdersData = await response.json();
+        console.log('[fetchStakeholders] API Response data:', data);
         const stakeholdersData = data.stakeholders || [];
+        console.log('[fetchStakeholders] Setting stakeholders:', stakeholdersData);
         setStakeholders(stakeholdersData);
-        
+
         // Cache the data
         const cacheData = {
           data: stakeholdersData,
@@ -984,11 +988,16 @@ const DealTimeline: React.FC = () => {
 
   // Update fetchDealInfo to use API_CONFIG
   const fetchDealInfo = useCallback(async (dealName: string) => {
+    console.log('[fetchDealInfo] ===== FUNCTION CALLED =====');
+    console.log('[fetchDealInfo] Deal name:', dealName);
+    console.log('[fetchDealInfo] Timestamp:', new Date().toISOString());
+
     try {
       const response = await makeApiCall(`${API_CONFIG.getApiPath('/deal-info')}?dealName=${encodeURIComponent(dealName)}`);
-      
+
       if (response) {
         const info = await response.json();
+        console.log('[fetchDealInfo] Response received at:', new Date().toISOString());
         setDealInfo(info);
         setAllDealsInfo(prev => ({
           ...prev,
@@ -1026,33 +1035,13 @@ const DealTimeline: React.FC = () => {
   const loadTimelineDirectly = useCallback(async (dealName: string) => {
     if (isUnmounting) return;
     
-    // Ensure browser ID is initialized before making API calls
-    if (!browserId || !isInitialized) {
-      console.warn('[Timeline] Browser ID not initialized, waiting...');
-      setLoadingMessage(`Initializing browser session for ${dealName}...`);
-      
-      // Wait a bit and try again
-      setTimeout(() => {
-        if (!isUnmounting && browserId && isInitialized) {
-          loadTimelineDirectly(dealName);
-        } else {
-          setLoadingMessage(`Failed to initialize browser session for ${dealName}. Please refresh the page.`);
-          updateState('dealTimeline.error', 'Failed to initialize browser session. Please refresh the page.');
-          updateState('dealTimeline.loading', false);
-        }
-      }, 1000);
-      return;
-    }
-    
     // Check if we already have cached data for this deal
     if (selectedDealRef.current?.name === dealName && timelineDataRef.current && lastFetched) {
       const currentTime = Date.now();
       if (currentTime - lastFetched < DATA_EXPIRY_TIME) {
         // If data is fresh and for the same deal, just use the cached data
-        setLoadingMessage(`Using cached data for ${dealName}...`);
-        if (!dealInfoRef.current) {
-          fetchDealInfo(dealName);
-        }
+        // REMOVED: setLoadingMessage
+        // REMOVED: fetchDealInfo call - now handled by API Handler 1
         return;
       }
     }
@@ -1074,7 +1063,7 @@ const DealTimeline: React.FC = () => {
     // Reset loading states
     updateState('dealTimeline.loading', false);
     setLoadingStartTime(null);
-    setLoadingStage(1);
+    // REMOVED: setLoadingStage
     setLoadingError(false);
     
     // Clear chart data
@@ -1084,50 +1073,48 @@ const DealTimeline: React.FC = () => {
     updateState('dealTimeline.loading', true);
     updateState('dealTimeline.error', null);
     setLoadingStartTime(Date.now());
-    setLoadingStage(1);
+    // REMOVED: setLoadingStage
     setLoadingError(false);
-    setLoadingMessage(`Initializing timeline data for ${dealName} from URL...`);
+    // REMOVED: setLoadingMessage
     
     try {
       // Fetch all data in parallel for faster loading
-      setLoadingMessage(`Loading all data for ${dealName}...`);
+      // REMOVED: setLoadingMessage
       
       // Run all API calls in parallel
       const startTime = Date.now();
       
-      const [count, dealInfoResult, timelineResponse] = await Promise.all([
+      const [count, timelineResponse] = await Promise.all([
         fetchActivitiesCount(dealName).then(result => {
-          return result;
-        }),
-        fetchDealInfo(dealName).then(result => {
           return result;
         }),
         (async () => {
           const result = await makeApiCall(`${API_CONFIG.getApiPath('/deal-timeline')}?dealName=${encodeURIComponent(dealName)}`);
           return result;
         })()
+        // dealInfo, companyOverview and stakeholders now fire independently via useEffect
       ]);
       
       if (timelineResponse) {
-        setLoadingMessage(`Processing timeline data for ${dealName}...`);
+        // REMOVED: setLoadingMessage
         const data = await timelineResponse.json();
         
         // Verify the deal name matches before updating state
         if (selectedDealRef.current?.name === dealName) {
           updateState('dealTimeline.activities', data);
           updateState('dealTimeline.lastFetched', Date.now());
-          setLoadingMessage(`Timeline data loaded successfully for ${dealName}!`);
+          // REMOVED: setLoadingMessage
           
           // After timeline loads, explicitly fetch concerns (similar to refresh button)
-          setLoadingMessage(`Timeline data loaded for ${dealName}, loading concerns...`);
+          // REMOVED: setLoadingMessage
           // Note: fetchConcerns will be called by the useEffect that watches timelineData
         } else {
           console.warn(`Deal name mismatch: URL deal=${dealName}, current deal=${selectedDealRef.current?.name}`);
-          setLoadingMessage(`Error: Deal name mismatch. Please refresh the page.`);
+          // REMOVED: setLoadingMessage
         }
       } else {
         console.warn('[Timeline] No response received from timeline API');
-        setLoadingMessage(`No response received for ${dealName}. Please try again.`);
+        // REMOVED: setLoadingMessage
       }
     } catch (error) {
       console.error('[Timeline] Error fetching timeline:', error);
@@ -1147,7 +1134,7 @@ const DealTimeline: React.FC = () => {
         }
       }
       
-      setLoadingMessage(`Error loading timeline data for ${dealName}: ${errorMessage}`);
+      // REMOVED: setLoadingMessage
       updateState('dealTimeline.error', errorMessage);
     } finally {
       updateState('dealTimeline.loading', false);
@@ -1161,8 +1148,7 @@ const DealTimeline: React.FC = () => {
     isUnmounting,
     makeApiCall,
     cleanupState,
-    browserId,
-    isInitialized
+    browserId
   ]);
 
   // Format dates for display
@@ -1263,45 +1249,7 @@ const DealTimeline: React.FC = () => {
   // EFFECTS USING THE ABOVE CALLBACKS
   // =====================================================================
 
-  // Handle the loading stages based on elapsed time
-  useEffect(() => {
-    let loadingTimer: NodeJS.Timeout | null = null;
-    let timeoutTimer: NodeJS.Timeout | null = null;
-    
-    if (loading && loadingStartTime) {
-      // Calculate elapsed time since loading started (in seconds)
-      const checkLoadingStage = () => {
-        const elapsedSeconds = (Date.now() - loadingStartTime) / 1000;
-        
-        if (elapsedSeconds >= 80 && elapsedSeconds < 250) {
-          setLoadingStage(3); // Almost done...
-        } else if (elapsedSeconds >= 15 && elapsedSeconds < 80) {
-          setLoadingStage(2); // Hang on a minute! Still loading...
-        } else if (elapsedSeconds < 15) {
-          setLoadingStage(1); // Loading timeline data...
-        }
-      };
-      
-      // Set a timer to check loading stage every second
-      loadingTimer = setInterval(checkLoadingStage, 1000);
-      
-      // Set a timeout to automatically fail after 80 seconds
-      timeoutTimer = setTimeout(() => {
-        if (loading) {
-          setLoadingStage(4);
-          setLoadingError(true);
-          updateState('dealTimeline.loading', false);
-          updateState('dealTimeline.error', 'Request timed out. Please try again.');
-        }
-      }, 1800000);
-    }
-    
-    return () => {
-      // Clean up timers when component unmounts or loading state changes
-      if (loadingTimer) clearInterval(loadingTimer);
-      if (timeoutTimer) clearTimeout(timeoutTimer);
-    };
-  }, [loading, loadingStartTime, updateState]);
+  // REMOVED: Loading stage logic - no longer showing full-page loading messages
 
   // Process URL parameters only once after mount
   useEffect(() => {
@@ -1309,8 +1257,8 @@ const DealTimeline: React.FC = () => {
     
     const searchParams = new URLSearchParams(window.location.search);
     const dealName = searchParams.get('dealName') || searchParams.get('deal_name');
-    const autoload = searchParams.get('autoload') === 'true' || searchParams.get('auto_load') === 'true';
-    
+    // REMOVED: autoload parameter - no longer needed with modular API system
+
     if (dealName) {
       const decodedDealName = decodeURIComponent(dealName);
       // store the deal name in local storage
@@ -1324,10 +1272,10 @@ const DealTimeline: React.FC = () => {
         updateState('dealTimeline.selectedDeal', matchingDeal);
         setSelectedOption({ value: matchingDeal.id, label: matchingDeal.name });
         setCurrentDealId(matchingDeal.id);
-        
-        if (autoload) {
-          loadTimelineDirectly(decodedDealName);
-        }
+
+        // REMOVED: loadTimelineDirectly call - API Handler 1 automatically handles data fetching
+        // when selectedDeal changes
+
         // Mark as processed only when we successfully find and process the deal
         setIsUrlProcessed(true);
       } else if (allDeals.length === 0) {
@@ -1342,21 +1290,21 @@ const DealTimeline: React.FC = () => {
         };
         updateState('dealTimeline.selectedDeal', tempDeal);
         setSelectedOption({ value: 'pending', label: decodedDealName });
-        
-        if (autoload) {
-          loadTimelineDirectly(decodedDealName);
-        }
+
+        // REMOVED: loadTimelineDirectly call - API Handler 1 automatically handles data fetching
+        // when selectedDeal changes
+
         setIsUrlProcessed(true);
       }
     } else {
       // No dealName in URL, mark as processed
       setIsUrlProcessed(true);
     }
-  }, [hasMounted, isUrlProcessed, allDeals, updateState, loadTimelineDirectly]);
+  }, [hasMounted, isUrlProcessed, allDeals, updateState]);
 
 // Fetch all deals after component mounts and when needed
   useEffect(() => {
-    if (!hasMounted || !isInitialized) return;
+    if (!hasMounted) return;
     
     // Track if component is mounted (for async operations)
     let isMounted = true;
@@ -1434,7 +1382,7 @@ const DealTimeline: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [hasMounted, isInitialLoad, makeApiCall, updateState, selectedDeal, isInitialized]);
+  }, [hasMounted, isInitialLoad, makeApiCall, updateState, selectedDeal]);
 
   useEffect(() => {
     if (timelineData && timelineData.events && timelineData.events.length > 0) {
@@ -1549,17 +1497,15 @@ const DealTimeline: React.FC = () => {
         const validFormattedData = formattedData.filter(item => isValidDate(item.date));
         
         setChartData(validFormattedData);
-        
-        // Update dealInfo if we have timeline data but not dealInfo
-        if (selectedDeal && !dealInfo) {
-          fetchDealInfo(selectedDeal.name);
-        }
+
+        // REMOVED: fetchDealInfo call - now handled by API Handler 1
+        // API Handler 1 automatically fetches dealInfo when selectedDeal changes
       } catch (error) {
         console.error('Error processing timeline data:', error);
         setChartData([]);
       }
     }
-  }, [timelineData, selectedDeal, dealInfo, fetchDealInfo]);
+  }, [timelineData, selectedDeal]);
 
   // Update end index when chart data changes
   useEffect(() => {
@@ -1979,7 +1925,9 @@ const EventDrawer = () => {
             <p className="text-sm text-gray-500 mt-1">
               {selectedConcern === 'pricing_concerns' ? 'Pricing Concerns' :
                selectedConcern === 'no_decision_maker' ? 'Decision Maker' :
-               selectedConcern === 'already_has_vendor' ? 'Competitor Mentions' : 'Unknown Concern'}
+               selectedConcern === 'already_has_vendor' ? 'Competitor Mentions' :
+               selectedConcern === 'positives' ? 'Positive Signals' :
+               selectedConcern === 'risks' ? 'Risk Factors' : 'Unknown Concern'}
             </p>
           )}
         </div>
@@ -1998,11 +1946,170 @@ const EventDrawer = () => {
           <div>
             {(() => {
               const processedConcerns = processConcernsArray(concerns);
+
+              // For positives and risks, we'll render a different view
+              if (selectedConcern === 'positives' || selectedConcern === 'risks') {
+                const positiveEmails = timelineData?.events?.filter(e =>
+                  (e.type === 'Incoming Email' || e.type === 'Outgoing Email') && e.sentiment === 'positive'
+                ).length || 0;
+                const buyingSignals = timelineData?.events?.filter(e =>
+                  e.type === 'Meeting' && (e.buyer_intent === 'Likely to buy' || e.buyer_intent === 'Very likely to buy')
+                ).length || 0;
+                const lessLikelySignals = timelineData?.events?.filter(e =>
+                  e.type === 'Meeting' && e.buyer_intent === 'Less likely to buy'
+                ).length || 0;
+                const hasDecisionMaker = stakeholders.some(s => s.potential_decision_maker);
+
+                const signals = selectedConcern === 'positives' ? [
+                  {
+                    label: 'Positive Emails',
+                    value: positiveEmails,
+                    status: positiveEmails > 0,
+                    description: `${positiveEmails} email${positiveEmails !== 1 ? 's' : ''} with positive sentiment detected`
+                  },
+                  {
+                    label: 'Buying Signals',
+                    value: buyingSignals,
+                    status: buyingSignals > 0,
+                    description: `${buyingSignals} meeting${buyingSignals !== 1 ? 's' : ''} with likely to buy intent`
+                  },
+                  {
+                    label: 'No Competitors',
+                    value: !processedConcerns.hasCompetitor,
+                    status: !processedConcerns.hasCompetitor,
+                    description: processedConcerns.hasCompetitor ? 'Competitors mentioned in conversation' : 'No competitor mentions detected'
+                  },
+                  {
+                    label: 'No Pricing Concerns',
+                    value: !processedConcerns.hasPricingConcerns,
+                    status: !processedConcerns.hasPricingConcerns,
+                    description: processedConcerns.hasPricingConcerns ? 'Pricing concerns identified' : 'No pricing concerns detected'
+                  },
+                  {
+                    label: 'Decision Maker Present',
+                    value: hasDecisionMaker,
+                    status: hasDecisionMaker,
+                    description: hasDecisionMaker ? 'Decision maker identified in stakeholders' : 'No decision maker identified'
+                  }
+                ] : [
+                  {
+                    label: 'No Decision Maker',
+                    value: !hasDecisionMaker,
+                    status: !hasDecisionMaker,
+                    description: hasDecisionMaker ? 'Decision maker identified in stakeholders' : 'No decision maker identified'
+                  },
+                  {
+                    label: 'Competitor Mentioned',
+                    value: processedConcerns.hasCompetitor,
+                    status: processedConcerns.hasCompetitor,
+                    description: processedConcerns.hasCompetitor && processedConcerns.competitorExplanation
+                      ? processedConcerns.competitorExplanation
+                      : processedConcerns.hasCompetitor
+                        ? 'Competitors mentioned in conversation'
+                        : 'No competitor mentions detected'
+                  },
+                  {
+                    label: 'Less Likely to Buy',
+                    value: lessLikelySignals,
+                    status: lessLikelySignals > 0,
+                    description: `${lessLikelySignals} meeting${lessLikelySignals !== 1 ? 's' : ''} with less likely to buy intent`
+                  },
+                  {
+                    label: 'Pricing Concerns',
+                    value: processedConcerns.hasPricingConcerns,
+                    status: processedConcerns.hasPricingConcerns,
+                    description: processedConcerns.hasPricingConcerns && processedConcerns.pricingConcernsExplanation
+                      ? processedConcerns.pricingConcernsExplanation
+                      : processedConcerns.hasPricingConcerns
+                        ? 'Pricing concerns identified'
+                        : 'No pricing concerns detected'
+                  }
+                ];
+
+                return (
+                  <div>
+                    <div className="mb-6">
+                      <h2 className={`text-2xl font-bold mb-2 ${selectedConcern === 'positives' ? 'text-green-700' : 'text-red-700'}`}>
+                        {selectedConcern === 'positives' ? 'Positive Signals' : 'Risk Factors'}
+                      </h2>
+                      <p className="text-gray-600 text-sm">
+                        {selectedConcern === 'positives'
+                          ? 'Indicators that suggest a favorable deal outcome'
+                          : 'Potential concerns that may impact deal success'}
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      {signals.map((signal, index) => (
+                        <div
+                          key={index}
+                          className={`p-4 rounded-lg border-2 ${
+                            signal.status
+                              ? selectedConcern === 'positives'
+                                ? 'bg-green-50 border-green-200'
+                                : 'bg-red-50 border-red-200'
+                              : 'bg-gray-50 border-gray-200 opacity-50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className={`h-5 w-5 ${
+                                  signal.status
+                                    ? selectedConcern === 'positives'
+                                      ? 'text-green-600'
+                                      : 'text-red-600'
+                                    : 'text-gray-400'
+                                }`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                {signal.status ? (
+                                  selectedConcern === 'positives' ? (
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  ) : (
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                  )
+                                ) : (
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                )}
+                              </svg>
+                              <h3 className={`font-semibold ${
+                                signal.status
+                                  ? selectedConcern === 'positives'
+                                    ? 'text-green-800'
+                                    : 'text-red-800'
+                                  : 'text-gray-600'
+                              }`}>
+                                {signal.label}
+                              </h3>
+                            </div>
+                            {typeof signal.value === 'number' && signal.value > 0 && (
+                              <span className={`font-bold text-lg ${
+                                selectedConcern === 'positives' ? 'text-green-700' : 'text-red-700'
+                              }`}>
+                                {signal.value}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-700 ml-7">
+                            {signal.description}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+
+              // Original concern view for pricing_concerns, no_decision_maker, already_has_vendor
               let concernTitle = '';
               let concernExplanation = '';
               let concernStatus = '';
               let concernColor = '';
-              
+
               switch (selectedConcern) {
                 case 'pricing_concerns':
                   concernTitle = 'Pricing Concerns';
@@ -2386,8 +2493,8 @@ return (
         </div>
       </div>
       
-      {/* Fixed height container with scrolling */}
-      <div className="h-[400px] overflow-y-auto border border-gray-100 rounded-lg">
+      {/* Dynamic height container - fits content up to 5 rows, then scrolls */}
+      <div className={`${filteredEvents.length > 5 ? 'max-h-[500px] overflow-y-auto' : ''} border border-gray-100 rounded-lg`}>
         {/* Header row */}
         <div className="sticky top-0 bg-gray-50 border-b border-gray-200 p-4 grid grid-cols-12 gap-4 font-semibold text-gray-600">
           <div className="col-span-2">Date</div>
@@ -2633,7 +2740,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
       try {
         const savedContacts = JSON.parse(saved);
         if (savedContacts[key]) {
-          setLoadingMessage(`Loading stored contact data for "${subject || 'Meeting'}" on ${date}`);
+          // REMOVED: setLoadingMessage
           // Update state with saved data
           setMeetingContacts(prev => ({
             ...prev,
@@ -2648,7 +2755,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
   }
   
   try {
-    setLoadingMessage(`Analyzing transcripts for "${subject || 'Meeting'}" on ${date}...`);
+    // REMOVED: setLoadingMessage
     
     // Ensure we have a valid deal name
     if (!selectedDealRef.current?.name) {
@@ -2661,26 +2768,26 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
     const response = await makeApiCall(url);
     
     if (response) {
-      setLoadingMessage(`Processing contact data for "${subject || 'Meeting'}" on ${date}...`);
+      // REMOVED: setLoadingMessage
       const data = await response.json();
       
       // Validate the response data
       if (!data || typeof data !== 'object') {
         console.error('Invalid response format for contacts:', data);
-        setLoadingMessage(`Error: Invalid contact data for "${subject || 'Meeting'}" on ${date}`);
+        // REMOVED: setLoadingMessage
         return null;
       }
       
       // Validate required fields
       if (!Array.isArray(data.contacts)) {
         console.error('Missing or invalid contacts array in response:', data);
-        setLoadingMessage(`Error: Missing contact data for "${subject || 'Meeting'}" on ${date}`);
+        // REMOVED: setLoadingMessage
         return null;
       }
       
       // Only update state if we're still working with the same deal
       if (selectedDealRef.current?.name) {
-        setLoadingMessage(`Found ${data.total_contacts} contacts with ${data.champions_count} champions for "${subject || 'Meeting'}" on ${date}`);
+        // REMOVED: setLoadingMessage
         // Use functional update to avoid stale state
         setMeetingContacts(prev => {
           // Don't update if we already have this data
@@ -2697,7 +2804,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes('409')) {
-        setLoadingMessage('Request was cancelled, proceeding with next step...');
+        // REMOVED: setLoadingMessage
       } else {
         console.error('Error fetching meeting contacts:', {
           error: error.message,
@@ -2706,12 +2813,12 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
           dealName: selectedDealRef.current?.name,
           stack: error.stack
         });
-        setLoadingMessage(`Error analyzing contacts for "${subject || 'Meeting'}" on ${date}: ${error.message}`);
+        // REMOVED: setLoadingMessage
       }
     }
     return null;
   }
-}, [makeApiCall, meetingContacts, setLoadingMessage]);
+}, [makeApiCall, meetingContacts]);
 
   // Update handleGetTimeline to use API_CONFIG
   const handleGetTimeline = useCallback(async (deal: Deal | null = null, forceRefresh = false) => {
@@ -2737,24 +2844,24 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
     updateState('dealTimeline.loading', true);
     updateState('dealTimeline.error', null);
     setLoadingStartTime(Date.now());
-    setLoadingStage(1);
+    // REMOVED: setLoadingStage
     setLoadingError(false);
-    setLoadingMessage(`Initializing timeline data for ${dealToUse.name}...`);
+    // REMOVED: setLoadingMessage
     
     try {
       
       // Fetch activities count and deal info in parallel
-      setLoadingMessage(`Fetching activities count and deal info for ${dealToUse.name}...`);
+      // REMOVED: setLoadingMessage
       // Fetch all data in parallel for faster loading
-      setLoadingMessage(`Loading all data for ${dealToUse.name}...`);
-      const [count, dealInfoResponse, response] = await Promise.all([
+      // REMOVED: setLoadingMessage
+      const [count, response] = await Promise.all([
         fetchActivitiesCount(dealToUse.name),
-        fetchDealInfo(dealToUse.name),
         makeApiCall(`${API_CONFIG.getApiPath('/deal-timeline')}?dealName=${encodeURIComponent(dealToUse.name)}`)
+        // dealInfo now fires independently via useEffect
       ]);
       
       if (response) {
-        setLoadingMessage(`Processing timeline data for ${dealToUse.name}...`);
+        // REMOVED: setLoadingMessage
         const data = await response.json();
         
         // Only update state if we're still working with the same deal
@@ -2774,7 +2881,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
           const meetingEvents = data.events.filter((event: Event) => event.type === 'Meeting');
           if (meetingEvents.length > 0) {
             setLoadingChampions(true);
-            setLoadingMessage(`Found ${meetingEvents.length} meetings. Fetching contact details...`);
+            // REMOVED: setLoadingMessage
             
             // Process meetings sequentially with a delay between each
             let completedCount = 0;
@@ -2784,28 +2891,28 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
                   // Add a small delay between requests to prevent overwhelming the server
                   await new Promise(resolve => setTimeout(resolve, 100));
                   completedCount++;
-                  setLoadingMessage(`Fetching contacts for meeting ${completedCount}/${meetingEvents.length}: ${event.subject || 'Untitled Meeting'}...`);
+                  // REMOVED: setLoadingMessage
                   await fetchMeetingContacts(event.subject || '', event.date_str);
                 } catch (error) {
                   if (error instanceof Error && error.message.includes('409')) {
                   } else {
                     console.error('[Timeline] Error fetching meeting contacts:', error);
-                    setLoadingMessage(`Error fetching contacts for meeting: ${event.subject || 'Untitled Meeting'}`);
+                    // REMOVED: setLoadingMessage
                   }
                 }
               }
             }
-            setLoadingMessage(`Completing timeline data analysis for ${dealToUse.name}...`);
+            // REMOVED: setLoadingMessage
             setLoadingChampions(false);
           } else {
-            setLoadingMessage(`No meetings found for ${dealToUse.name}. Finalizing timeline...`);
+            // REMOVED: setLoadingMessage
           }
         }
       }
     } catch (error) {
       console.error('[Timeline] Error fetching timeline:', error);
       setLoadingError(true);
-      setLoadingMessage(`Error loading timeline data for ${dealToUse.name}`);
+      // REMOVED: setLoadingMessage
       updateState('dealTimeline.error', 'Failed to load timeline data. Please try again.');
       // Clear chart data on error
       setChartData([]);
@@ -2819,25 +2926,29 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
 
 // Update handleDealChange to ensure champions are fetched for new deals
 const handleDealChange = useCallback(async (selectedOption: any) => {
-  const deal = selectedOption ? { 
-    id: selectedOption.value, 
+  console.log('[handleDealChange] ===== DEAL CARD CLICKED =====', new Date().toISOString());
+  const deal = selectedOption ? {
+    id: selectedOption.value,
     name: selectedOption.label,
     createdate: '',
     owner: ''
   } : null;
-  
+
+  console.log('[handleDealChange] Deal:', deal?.name);
+
   // If we're selecting the same deal, don't do anything
   if (deal?.id === currentDealId) {
+    console.log('[handleDealChange] Same deal selected, returning');
     return;
   }
 
-  
+  console.log('[handleDealChange] Cleaning up state');
   // Clean up previous state
   cleanupState();
   setMeetingContacts({}); // Clear meeting contacts when changing deals
-  
 
-  
+
+  console.log('[handleDealChange] Updating state with new deal');
   updateState('dealTimeline.selectedDeal', deal);
   setSelectedOption(selectedOption);
   
@@ -2856,55 +2967,33 @@ const handleDealChange = useCallback(async (selectedOption: any) => {
   // Update URL with selected deal
   const url = new URL(window.location.href);
   url.searchParams.set('dealName', deal.name);
-  url.searchParams.set('autoload', 'true');
+  // REMOVED: autoload parameter - no longer needed with modular API system
   window.history.pushState({}, '', url.toString());
 
-  // Only fetch new data if we don't have it already
-  const currentTimeline = timelineDataRef.current;
-  const shouldLoadTimeline = !currentTimeline || 
-    (selectedDealRef.current && deal.name !== selectedDealRef.current.name);
-    
-  if (shouldLoadTimeline) {
-    handleGetTimeline(deal);
-  } else {
-    if (currentTimeline) {
-      fetchDealInfo(deal.name);
-    }
-  }
-}, [updateState, fetchDealInfo, handleGetTimeline, cleanupState, currentDealId]);
+  // Data fetching is now handled by independent useEffect API handlers
+  // No need to call handleGetTimeline here - the modular API system handles it
+  console.log('[handleDealChange] Deal change complete. Independent API handlers will fire.');
+}, [updateState, cleanupState, currentDealId]);
 
 // Add new function to fetch concerns
 const fetchConcerns = useCallback(async (dealName: string) => {
   if (!dealName) return;
 
-  console.log('[fetchConcerns] Starting fetch at:', new Date().toISOString());
-  console.log('[fetchConcerns] Making API call to fetch concerns for:', dealName);
+  console.log('[fetchConcerns] Starting at:', new Date().toISOString());
   setLoadingConcerns(true);
+
   try {
-    // Use Next.js API route, not direct backend URL
-    const apiPath = '/api/hubspot/get-concerns';
-    console.log('[fetchConcerns] Making API call to:', apiPath);
-    const response = await makeApiCall(
-      `${apiPath}?dealName=${encodeURIComponent(dealName)}`
-    );
-    console.log('[fetchConcerns] Received response at:', new Date().toISOString());
+    // Call backend directly like other working APIs
+    const response = await makeApiCall(`${API_CONFIG.getApiPath('/get-concerns')}?dealName=${encodeURIComponent(dealName)}`);
 
     if (response) {
       const data = await response.json();
-      // Handle empty responses properly - set to empty array if null/undefined/empty object
-      if (Array.isArray(data)) {
-        setConcerns(data);
-      } else {
-        setConcerns([]);
-      }
-      console.log('[fetchConcerns] Data set at:', new Date().toISOString());
-    } else {
-      // If no response, set to empty array
-      setConcerns([]);
+      setConcerns(Array.isArray(data) ? data : []);
+      console.log('[fetchConcerns] Completed at:', new Date().toISOString());
     }
   } catch (error) {
-    console.error('Error fetching concerns:', error);
-    setConcerns([]); // Set to empty array instead of null to prevent infinite loops
+    console.error('[fetchConcerns] Error:', error);
+    setConcerns([]);
   } finally {
     setLoadingConcerns(false);
   }
@@ -2913,7 +3002,7 @@ const fetchConcerns = useCallback(async (dealName: string) => {
 // Update handleRefresh to refresh all data including champions
 const handleRefresh = useCallback(() => {
   if (selectedDealRef.current) {
-    setLoadingMessage(`Starting refresh for ${selectedDealRef.current.name}...`);
+    // REMOVED: setLoadingMessage
     
     // Reset all state
     cleanupState();
@@ -2934,25 +3023,23 @@ const handleRefresh = useCallback(() => {
     // Reset loading states
     updateState('dealTimeline.loading', false);
     setLoadingStartTime(null);
-    setLoadingStage(1);
+    // REMOVED: setLoadingStage
     setLoadingError(false);
     
     // Clear chart data
     setChartData([]);
-    
-    // Force a fresh fetch of all data by passing true as second argument
-    handleGetTimeline(selectedDealRef.current, true).then(() => {
-      // After timeline loads, the useEffect will automatically fetch concerns
-      setLoadingMessage(`Timeline data loaded for ${selectedDealRef.current?.name}, loading concerns...`);
-    }).catch(error => {
-      console.error('[Refresh] Error during refresh sequence:', error);
-      setLoadingMessage(`Error refreshing data for ${selectedDealRef.current?.name}: ${error.message}`);
-    });
+
+    // Trigger all API handlers to re-fetch by temporarily clearing and resetting selectedDeal
+    const currentDeal = selectedDealRef.current;
+    updateState('dealTimeline.selectedDeal', null);
+    setTimeout(() => {
+      updateState('dealTimeline.selectedDeal', currentDeal);
+    }, 10);
   } else {
     setIsInitialLoad(true);
-    setLoadingMessage('Initializing deal data...');
+    // REMOVED: setLoadingMessage
   }
-}, [handleGetTimeline, cleanupState, updateState]);
+}, [cleanupState, updateState]);
 
   // Concerns are now fetched in parallel with other secondary data (see consolidated useEffect below)
 
@@ -3053,42 +3140,146 @@ useEffect(() => {
   }
 }, [browserId]);
 
-// Fetch all secondary data in parallel when timeline loads
-// This ensures Latest Activity, Stakeholders, and Concerns load simultaneously
-// without blocking each other, providing a faster user experience
+// ========================================================================
+// MODULAR API CALL SYSTEM - Each component has independent API handler
+// ========================================================================
+
+// API Handler 1: Deal Info (for header banner)
 useEffect(() => {
-  // Only fetch after timeline has loaded
-  if (selectedDeal?.name && !loading && timelineData) {
-    console.log('[Parallel Fetch] Starting all secondary data fetches at:', new Date().toISOString());
+  if (!selectedDeal?.name) return;
 
-    // TEMPORARY: Test sequential fetching to diagnose blocking issue
-    console.log('[Sequential Test] Starting sequential fetches...');
+  const dealName = selectedDeal.name;
+  console.log('[API-DealInfo] ===== API HANDLER 1 TRIGGERED =====');
+  console.log('[API-DealInfo] Fetching for:', dealName);
+  console.log('[API-DealInfo] Timestamp:', new Date().toISOString());
 
-    fetchConcerns(selectedDeal.name).then(() => {
-      console.log('[Sequential Test] Concerns completed at:', new Date().toISOString());
-    });
+  // Clear previous data immediately for new deal
+  setDealInfo(null);
 
-    fetchCompanyOverview(selectedDeal.name).then(() => {
-      console.log('[Sequential Test] Company Overview completed at:', new Date().toISOString());
-    });
-
-    fetchStakeholders(selectedDeal.name).then(() => {
-      console.log('[Sequential Test] Stakeholders completed at:', new Date().toISOString());
-    });
-  }
-}, [selectedDeal?.name, fetchCompanyOverview, fetchStakeholders, fetchConcerns, loading, timelineData]);
-
-// Removed redundant useEffect to prevent infinite loops
-
-
-
-// Clear stakeholders when deal changes to prevent stale data
-useEffect(() => {
-  if (selectedDeal?.name) {
-    setStakeholders([]);
-    setLoadingStakeholders(false);
-  }
+  // Fire API call
+  fetchDealInfo(dealName);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [selectedDeal?.name]);
+
+// API Handler 2: Company Overview (for Latest Activity section)
+useEffect(() => {
+  if (!selectedDeal?.name) return;
+
+  const dealName = selectedDeal.name;
+  console.log('[API-CompanyOverview] Fetching for:', dealName);
+
+  // Clear previous data immediately for new deal
+  setCompanyOverview(null);
+
+  // Fire API call
+  fetchCompanyOverview(dealName);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [selectedDeal?.name]);
+
+// API Handler 3: Stakeholders (for Stakeholders section)
+useEffect(() => {
+  if (!selectedDeal?.name) return;
+
+  const dealName = selectedDeal.name;
+  console.log('[API-Stakeholders] Fetching for:', dealName);
+
+  // Don't clear stakeholders here - let fetchStakeholders handle it
+  // This prevents clearing cached data that loads instantly
+
+  // Fire API call
+  fetchStakeholders(dealName);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [selectedDeal?.name]);
+
+// API Handler 4: Timeline Data (for Deal Logs section)
+useEffect(() => {
+  if (!selectedDeal?.name) return;
+  const dealName = selectedDeal.name;
+
+  console.log('[API-Timeline] Fetching for:', dealName);
+
+  // Clear previous timeline data immediately for new deal
+  updateState('dealTimeline.activities', { events: [], start_date: '', end_date: '' });
+  setMeetingContacts({});
+  setChartData([]);
+  updateState('dealTimeline.loading', true);
+
+  const fetchTimeline = async () => {
+    try {
+      // Fetch timeline and activities count in parallel
+      const [count, response] = await Promise.all([
+        fetchActivitiesCount(dealName),
+        makeApiCall(`${API_CONFIG.getApiPath('/deal-timeline')}?dealName=${encodeURIComponent(dealName)}`)
+      ]);
+
+      if (response && selectedDeal?.name === dealName) {
+        const data = await response.json();
+
+        if (!data.events || !Array.isArray(data.events) || data.events.length === 0) {
+          setChartData([]);
+          updateState('dealTimeline.activities', { events: [], start_date: '', end_date: '' });
+          updateState('dealTimeline.lastFetched', Date.now());
+          updateState('dealTimeline.loading', false);
+          return;
+        }
+
+        updateState('dealTimeline.activities', data);
+        updateState('dealTimeline.lastFetched', Date.now());
+
+        // Process meeting contacts sequentially
+        const meetingEvents = data.events.filter((event: Event) => event.type === 'Meeting');
+        if (meetingEvents.length > 0) {
+          setLoadingChampions(true);
+
+          for (const event of meetingEvents) {
+            if (event.date_str && selectedDeal?.name === dealName) {
+              try {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                await fetchMeetingContacts(event.subject || '', event.date_str);
+              } catch (error) {
+                if (!(error instanceof Error && error.message.includes('409'))) {
+                  console.error('[Timeline] Error fetching meeting contacts:', error);
+                }
+              }
+            }
+          }
+
+          setLoadingChampions(false);
+        }
+
+        updateState('dealTimeline.loading', false);
+      }
+    } catch (error) {
+      console.error('[API-Timeline] Error:', error);
+      updateState('dealTimeline.error', 'Failed to load timeline data.');
+      updateState('dealTimeline.loading', false);
+      setChartData([]);
+    }
+  };
+
+  fetchTimeline();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [selectedDeal?.name]);
+
+// API Handler 5: Concerns (for Concerns section)
+useEffect(() => {
+  if (!selectedDeal?.name) return;
+
+  const dealName = selectedDeal.name;
+  console.log('[API-Concerns] Fetching for:', dealName);
+
+  // Clear previous data immediately for new deal
+  setConcerns([]);
+
+  // Fire API call
+  fetchConcerns(dealName);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [selectedDeal?.name]);
+
+
+
+// REMOVED: This was conflicting with API Handler 3 and clearing stakeholders after cache loaded
+// API Handler 3 now handles fetching stakeholders when deal changes
 
 // Clear stakeholders cache on page refresh
 useEffect(() => {
@@ -3382,18 +3573,8 @@ useEffect(() => {
                     }`}
                     onClick={() => {
                       if (deal.name) {
-                        const url = new URL(window.location.href);
-                        url.searchParams.set('dealName', deal.name);
-                        url.searchParams.set('autoload', 'true');
-                        window.history.pushState({}, '', url.toString());
-                        
-                        // Update selected deal
-                        updateState('dealTimeline.selectedDeal', deal);
-                        setSelectedOption({ value: deal.id, label: deal.name });
-                        setCurrentDealId(deal.id);
-                        
-                        // Load timeline without resetting selectedStages
-                        handleGetTimeline(deal);
+                        // Use the unified deal change handler
+                        handleDealChange({ value: deal.id, label: deal.name });
                       }
                     }}
                   >
@@ -3527,26 +3708,8 @@ useEffect(() => {
         </div>
       )}
       
-      {loading && selectedDeal ? (
-        <div className="text-center py-10">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-          <p className="mt-3 text-lg font-medium">
-            {loadingMessage ? (
-              <span className={`text-blue-600 ${elapsedTime > 15 ? 'text-orange-500' : ''} ${elapsedTime > 80 ? 'text-red-500' : ''}`}>
-                {loadingMessage}
-              </span>
-            ) : (
-              <span className={`${elapsedTime > 15 ? 'text-orange-500' : ''} ${elapsedTime > 80 ? 'text-red-500' : ''}`}>
-                Loading deal timeline for <b>{selectedDeal?.name}</b>...
-              </span>
-            )}
-          </p>
-
-          <div className="mt-2 text-gray-600 font-mono">
-          {formatElapsedTime(elapsedTime)}
-          </div>
-        </div>
-      ) : loadingError ? (
+      {/* REMOVED: Full-page loading screen - components now show immediately with individual loading states */}
+      {loadingError && !selectedDeal ? (
         <div className="text-center py-10">
           <div className="text-red-500 mb-3">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -3554,33 +3717,46 @@ useEffect(() => {
             </svg>
           </div>
           <p className="mb-4">Encountered an error while loading. Try again?</p>
-          <button 
-            onClick={() => selectedDeal && handleGetTimeline(selectedDeal)} 
+          <button
+            onClick={() => handleRefresh()}
             className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded transition-colors"
             disabled={loading}
           >
             Load Timeline
           </button>
         </div>
-      ) : timelineData ? (
+      ) : selectedDeal ? (
         <div className="space-y-6">
-          {dealInfo && (
-            <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-100">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <div className="space-y-1">
-                  <span className="text-xs text-gray-400 uppercase tracking-wide">Started</span>
+          {/* Deal Info Banner - Always show, with loading state if needed */}
+          <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-100">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              <div className="space-y-1">
+                <span className="text-xs text-gray-400 uppercase tracking-wide">Started</span>
+                {dealInfo ? (
                   <div className="font-semibold text-gray-900 dark:text-white text-sm">{formatDate(dealInfo.startDate)}</div>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-xs text-gray-400 uppercase tracking-wide">Owner</span>
+                ) : (
+                  <div className="animate-pulse h-5 w-24 bg-gray-200 rounded"></div>
+                )}
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-gray-400 uppercase tracking-wide">Owner</span>
+                {dealInfo ? (
                   <div className="font-semibold text-gray-900 dark:text-white text-sm">{dealInfo.dealOwner}</div>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-xs text-gray-400 uppercase tracking-wide">Stage</span>
+                ) : (
+                  <div className="animate-pulse h-5 w-32 bg-gray-200 rounded"></div>
+                )}
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-gray-400 uppercase tracking-wide">Stage</span>
+                {dealInfo ? (
                   <div className="font-semibold text-gray-900 dark:text-white text-sm">{dealInfo.dealStage}</div>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-xs text-gray-400 uppercase tracking-wide">Last Touch</span>
+                ) : (
+                  <div className="animate-pulse h-5 w-28 bg-gray-200 rounded"></div>
+                )}
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-gray-400 uppercase tracking-wide">Last Touch</span>
+                {dealInfo ? (
                   <div className="flex items-center gap-2">
                     <div className="font-semibold text-gray-900 dark:text-white text-sm">{formatDate(dealInfo.endDate)}</div>
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
@@ -3591,64 +3767,139 @@ useEffect(() => {
                       {calculateDaysPassed(dealInfo.endDate)}d
                     </span>
                   </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Latest Activity Section */}
-          {selectedDeal && (
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-gray-700 dark:text-white">Latest Activity</h3>
-                {companyOverview && (
-                  <button
-                    onClick={copyLatestActivityToClipboard}
-                    className={`p-1.5 rounded-lg transition-colors ${
-                      latestActivityCopyFeedback
-                        ? 'text-green-600 bg-green-100'
-                        : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
-                    }`}
-                    title={latestActivityCopyFeedback ? "Copied!" : "Copy to clipboard"}
-                  >
-                    {latestActivityCopyFeedback ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                    )}
-                  </button>
+                ) : (
+                  <div className="animate-pulse h-5 w-24 bg-gray-200 rounded"></div>
                 )}
               </div>
-              {loadingOverview ? (
-                <div className="flex items-center text-gray-500">
-                  <span>Loading</span>
-                  <span className="inline-flex ml-1">
-                    <span className="animate-[blink_1.4s_ease-in-out_infinite]">.</span>
-                    <span className="animate-[blink_1.4s_ease-in-out_0.2s_infinite]">.</span>
-                    <span className="animate-[blink_1.4s_ease-in-out_0.4s_infinite]">.</span>
-                  </span>
-                </div>
-              ) : companyOverview ? (
-                <p className="text-sm text-gray-700 leading-relaxed">{companyOverview}</p>
-              ) : (
-                <p className="text-sm text-gray-400 italic">No latest activity available</p>
-              )}
             </div>
-          )}
+          </div>
+
+          {/* Latest Activity Section */}
+          <div className={`p-6 rounded-lg shadow-sm border transition-all duration-500 ${
+            loadingOverview
+              ? 'bg-red-50 border-red-200 animate-pulse'
+              : 'bg-white border-gray-100'
+          }`}>
+            <h3 className="font-semibold text-gray-700 dark:text-white mb-3">Latest Activity</h3>
+            {loadingOverview ? (
+              <div className="flex items-center text-red-600 font-medium">
+                <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Generating AI summary</span>
+                <span className="inline-flex ml-1">
+                  <span className="animate-[blink_1.4s_ease-in-out_infinite]">.</span>
+                  <span className="animate-[blink_1.4s_ease-in-out_0.2s_infinite]">.</span>
+                  <span className="animate-[blink_1.4s_ease-in-out_0.4s_infinite]">.</span>
+                </span>
+              </div>
+            ) : companyOverview ? (
+              <p className="text-sm text-gray-700 leading-relaxed">{companyOverview}</p>
+            ) : (
+              <p className="text-sm text-gray-400 italic">No latest activity available</p>
+            )}
+          </div>
+
+          {/* Concerns Section */}
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+            <h3 className="font-semibold text-gray-700 dark:text-white mb-4">Deal Insights</h3>
+            {loadingConcerns ? (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="animate-pulse h-32 bg-gray-200 rounded-lg"></div>
+                <div className="animate-pulse h-32 bg-gray-200 rounded-lg"></div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {/* Positives Card */}
+                {(() => {
+                  const processedConcerns = processConcernsArray(concerns);
+                  const positiveEmails = timelineData?.events?.filter(e =>
+                    (e.type === 'Incoming Email' || e.type === 'Outgoing Email') && e.sentiment === 'positive'
+                  ).length || 0;
+                  const buyingSignals = timelineData?.events?.filter(e =>
+                    e.type === 'Meeting' && (e.buyer_intent === 'Likely to buy' || e.buyer_intent === 'Very likely to buy')
+                  ).length || 0;
+                  const hasDecisionMaker = stakeholders.some(s => s.potential_decision_maker);
+
+                  const positivesCount =
+                    (positiveEmails > 0 ? 1 : 0) +
+                    buyingSignals +
+                    (!processedConcerns.hasCompetitor ? 1 : 0) +
+                    (!processedConcerns.hasPricingConcerns ? 1 : 0) +
+                    (hasDecisionMaker ? 1 : 0);
+
+                  return (
+                    <button
+                      onClick={() => {
+                        setSelectedConcern('positives');
+                        setSelectedDate(null);
+                        setSelectedEventId(null);
+                        setIsDrawerOpen(true);
+                      }}
+                      className="p-6 rounded-lg border-2 border-green-200 bg-green-50 hover:bg-green-100 transition-all hover:shadow-md text-left"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold text-green-800 text-lg">Positives</h4>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div className="text-3xl font-bold text-green-700 mb-1">{positivesCount}</div>
+                      <div className="text-sm text-green-600">positive signals</div>
+                    </button>
+                  );
+                })()}
+
+                {/* Risks Card */}
+                {(() => {
+                  const processedConcerns = processConcernsArray(concerns);
+                  const lessLikelySignals = timelineData?.events?.filter(e =>
+                    e.type === 'Meeting' && e.buyer_intent === 'Less likely to buy'
+                  ).length || 0;
+                  const hasDecisionMaker = stakeholders.some(s => s.potential_decision_maker);
+
+                  const risksCount =
+                    (!hasDecisionMaker ? 1 : 0) +
+                    (processedConcerns.hasCompetitor ? 1 : 0) +
+                    lessLikelySignals +
+                    (processedConcerns.hasPricingConcerns ? 1 : 0);
+
+                  return (
+                    <button
+                      onClick={() => {
+                        setSelectedConcern('risks');
+                        setSelectedDate(null);
+                        setSelectedEventId(null);
+                        setIsDrawerOpen(true);
+                      }}
+                      className="p-6 rounded-lg border-2 border-red-200 bg-red-50 hover:bg-red-100 transition-all hover:shadow-md text-left"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold text-red-800 text-lg">Risks</h4>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </div>
+                      <div className="text-3xl font-bold text-red-700 mb-1">{risksCount}</div>
+                      <div className="text-sm text-red-600">risk factors</div>
+                    </button>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
 
           {/* Stakeholders Section */}
-          {loadingStakeholders ? (
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-              <h3 className="font-semibold text-gray-700 dark:text-white mb-4">Stakeholders</h3>
-              <div className="text-gray-500">Loading...</div>
-            </div>
-          ) : stakeholders.length > 0 ? (
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-              <h3 className="font-semibold text-gray-700 dark:text-white mb-4">Stakeholders</h3>
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+            <h3 className="font-semibold text-gray-700 dark:text-white mb-4">Stakeholders</h3>
+            {loadingStakeholders ? (
+              <div className="animate-pulse space-y-3">
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+              </div>
+            ) : stakeholders.length > 0 ? (
               <div className="max-h-[240px] overflow-y-auto space-y-4 pr-2">
                 {/* Decision Makers */}
                 {stakeholders.filter(s => s.potential_decision_maker).length > 0 && (
@@ -3740,281 +3991,58 @@ useEffect(() => {
                   </div>
                 )}
               </div>
-            </div>
-          ) : null}
-
-          {/* Sentiment and Intent Summary Boxes */}
-          {timelineData && timelineData.events && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Positive Sentiment Incoming Emails */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-                <div className="flex items-center">
-                  <div className="p-2 bg-green-50 rounded-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <h4 className="text-sm font-medium text-gray-600">Positive Emails</h4>
-                    <button 
-                      onClick={() => handleMetricClick('positive-incoming')}
-                      className="text-xl font-bold text-green-600 hover:text-green-700 transition-colors cursor-pointer"
-                    >
-                      {timelineData.events.filter(e => e.type === 'Incoming Email' && e.sentiment === 'positive').length}
-                    </button>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Likely/Very Likely to Buy */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-                <div className="flex items-center">
-                  <div className="p-2 bg-green-50 rounded-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <h4 className="text-sm font-medium text-gray-600">Buying Signals</h4>
-                    <button 
-                      onClick={() => handleMetricClick('likely-buy')}
-                      className="text-xl font-bold text-green-600 hover:text-green-700 transition-colors cursor-pointer"
-                    >
-                      {timelineData.events.filter(e => 
-                        e.type === 'Meeting' && 
-                        (e.buyer_intent === 'Likely to buy' || e.buyer_intent === 'Very likely to buy')
-                      ).length}
-                    </button>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Less Likely to Buy */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
-                <div className="flex items-center">
-                  <div className="p-2 bg-red-50 rounded-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <h4 className="text-sm font-medium text-gray-600">Less Likely to Buy</h4>
-                    <button 
-                      onClick={() => handleMetricClick('less-likely')}
-                      className="text-xl font-bold text-red-600 hover:text-red-700 transition-colors cursor-pointer"
-                    >
-                      {timelineData.events.filter(e => 
-                        e.type === 'Meeting' && e.buyer_intent === 'Less likely to buy'
-                      ).length}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Add Challenges section */}
-          {timelineData && timelineData.events && (
-            <div className="space-y-4">
-              {/* Debug controls for concerns */}
-              {process.env.NODE_ENV === 'development' && (
-                <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-yellow-800">Debug: Concerns Status</span>
-                    <button
-                      onClick={() => {
-                        if (selectedDeal?.name) {
-                          console.log('Manually triggering concerns fetch for:', selectedDeal.name);
-                          setConcerns([]);
-                          setLoadingConcerns(true);
-                          makeApiCall(`${API_CONFIG.getApiPath('/get-concerns')}?dealName=${encodeURIComponent(selectedDeal.name)}`)
-                            .then(response => {
-                              if (response) {
-                                return response.json();
-                              }
-                              return null;
-                            })
-                            .then(data => {
-                              console.log('Manual concerns fetch result:', data);
-                              if (Array.isArray(data)) {
-                                setConcerns(data);
-                              } else {
-                                setConcerns([]);
-                              }
-                            })
-                            .catch(error => {
-                              console.error('Manual concerns fetch error:', error);
-                              setConcerns([]);
-                            })
-                            .finally(() => {
-                              setLoadingConcerns(false);
-                            });
-                        }
-                      }}
-                      className="px-3 py-1 text-xs bg-yellow-200 text-yellow-800 rounded hover:bg-yellow-300 transition-colors"
-                    >
-                      Re-fetch Concerns
-                    </button>
-                  </div>
-                  <div className="text-xs text-yellow-700 mt-1">
-                    Concerns loaded: {concerns.length} | Loading: {loadingConcerns ? 'true' : 'false'}
-                  </div>
-                </div>
-              )}
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Pricing Concerns */}
-                <div 
-                  className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => handleConcernClick('pricing_concerns')}
-                >
-                <div className="flex items-center">
-                  {(() => {
-                    const processedConcerns = processConcernsArray(concerns);
-                    return (
-                      <>
-                        <div className={`p-2 rounded-lg ${
-                          !concerns || concerns.length === 0 ? 'bg-gray-100' : 
-                          processedConcerns.hasPricingConcerns ? 'bg-orange-100' : 'bg-green-100'
-                        }`}>
-                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                            !concerns || concerns.length === 0 ? 'text-gray-400' :
-                            processedConcerns.hasPricingConcerns ? 'text-orange-600' : 'text-green-600'
-                          }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </div>
-                        <div className="ml-4">
-                          <h4 className="text-sm font-medium text-gray-600">Pricing Concerns</h4>
-                          {loadingConcerns ? (
-                            <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                          ) : !concerns || concerns.length === 0 ? (
-                            <span className="text-gray-400">N/A</span>
-                          ) : (
-                            <div className="relative">
-                              <span className={`text-lg font-bold ${
-                                processedConcerns.hasPricingConcerns ? 'text-red-600' : 'text-green-600'
-                              }`}>
-                                {processedConcerns.hasPricingConcerns ? 'Yes' : 'No'}
-                              </span>
-                            </div>
-                          )}
-
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* Decision Maker */}
-              <div 
-                className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => handleConcernClick('no_decision_maker')}
-              >
-                <div className="flex items-center">
-                  {(() => {
-                    const processedConcerns = processConcernsArray(concerns);
-                    return (
-                      <>
-                        <div className={`p-2 rounded-lg ${
-                          !concerns || concerns.length === 0 ? 'bg-gray-100' :
-                          processedConcerns.hasDecisionMaker ? 'bg-green-100' : 'bg-orange-100'
-                        }`}>
-                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                            !concerns || concerns.length === 0 ? 'text-gray-400' :
-                            processedConcerns.hasDecisionMaker ? 'text-green-600' : 'text-orange-600'
-                          }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                          </svg>
-                        </div>
-                        <div className="ml-4">
-                          <h4 className="text-sm font-medium text-gray-600">Decision Maker</h4>
-                          {loadingConcerns ? (
-                            <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                          ) : !concerns || concerns.length === 0 ? (
-                            <span className="text-gray-400">N/A</span>
-                          ) : (
-                            <div className="relative">
-                              <span className={`text-lg font-bold ${
-                                processedConcerns.hasDecisionMaker ? 'text-green-600' : 'text-red-600'
-                              }`}>
-                                {processedConcerns.hasDecisionMaker ? 'Yes' : 'No'}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* Existing Vendor */}
-              <div 
-                className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => handleConcernClick('already_has_vendor')}
-              >
-                <div className="flex items-center">
-                  {(() => {
-                    const processedConcerns = processConcernsArray(concerns);
-                    return (
-                      <>
-                        <div className={`p-2 rounded-lg ${
-                          !concerns || concerns.length === 0 ? 'bg-gray-100' :
-                          processedConcerns.hasCompetitor ? 'bg-orange-100' : 'bg-green-100'
-                        }`}>
-                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${
-                            !concerns || concerns.length === 0 ? 'text-gray-400' :
-                            processedConcerns.hasCompetitor ? 'text-orange-600' : 'text-green-600'
-                          }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                          </svg>
-                        </div>
-                        <div className="ml-4">
-                          <h4 className="text-sm font-medium text-gray-600">Using a Competitor?</h4>
-                          {loadingConcerns ? (
-                            <div className="animate-pulse h-6 w-16 bg-gray-200 rounded"></div>
-                          ) : !concerns || concerns.length === 0 ? (
-                            <span className="text-gray-400">N/A</span>
-                          ) : (
-                            <div className="relative">
-                              <span className={`text-lg font-bold ${
-                                processedConcerns.hasCompetitor ? 'text-red-600' : 'text-green-600'
-                              }`}>
-                                {processedConcerns.hasCompetitor ? 'Yes' : 'No'}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-            </div>
+            ) : (
+              <div className="text-sm text-gray-400 italic">No stakeholders found</div>
+            )}
           </div>
-          )}
 
-          {/* Add DealLogs component */}
-          {timelineData.events && timelineData.events.length > 0 && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-100">
-              <DealLogs 
-                events={timelineData.events} 
+          {/* Deal Logs Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-100">
+            {!timelineData || loading ? (
+              <div className="p-6">
+                <div className="animate-pulse space-y-4">
+                  <div className="h-6 bg-gray-200 rounded w-1/4"></div>
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                </div>
+              </div>
+            ) : timelineData.events && timelineData.events.length > 0 ? (
+              <DealLogs
+                events={timelineData.events}
                 activeFilters={activeEventFilters}
                 onFilterChange={setActiveEventFilters}
                 selectedEventId={selectedEventId}
                 onRowClick={(date, eventId) => {
                   setSelectedDate(date);
                   setSelectedEventId(eventId);
-                  setSelectedConcern(null); // Clear any selected concern to show events instead
+                  setSelectedConcern(null);
                   setIsDrawerOpen(true);
                 }}
               />
-            </div>
+            ) : (
+              <div className="p-6 text-center text-gray-500">
+                No timeline events found
+              </div>
+            )}
+          </div>
+
+          {/* OTHER COMPONENTS STILL DISABLED */}
+          {false && (
+          <>
+          {/* REMOVED: Latest Activity - now shown above */}
+          {/* REMOVED: Stakeholders - now shown above between Latest Activity and Deal Logs */}
+
+          {/* All components now shown above - this block kept for future use */}
+          </>
           )}
+
+          {/* End of disabled components */}
         </div>
-      ) : selectedDeal ? (
+      ) : null}
+
+      {/* Remove this duplicate conditional */}
+      {false && selectedDeal ? (
         <div className="text-center py-10">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
           <p className="mt-3 text-lg font-medium text-gray-600">

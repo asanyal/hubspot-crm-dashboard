@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getBackendUrl } from '@/app/utils/api';
+import axios from 'axios';
 
 export async function GET(request: Request) {
   try {
@@ -28,37 +29,21 @@ export async function GET(request: Request) {
       sessionId: sessionId ? 'present' : 'missing'
     });
 
-    // Forward the request to the backend server
-    const response = await fetch(backendUrl, {
+    const startTime = Date.now();
+
+    // Use axios instead of fetch to bypass Next.js fetch issues
+    const response = await axios.get(backendUrl, {
       headers: {
         'X-Browser-ID': browserId || '',
         'X-Session-ID': sessionId || '',
       },
+      timeout: 60000, // 60 second timeout
     });
 
-    console.log('Backend response status:', response.status);
+    const duration = Date.now() - startTime;
+    console.log(`[deal-timeline-v2] Completed in ${duration}ms with status: ${response.status}`);
 
-    // Check if the backend response is successful
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Backend error response:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorText
-      });
-      throw new Error(`Backend server error: ${response.status} - ${errorText}`);
-    }
-
-    // Get the response data
-    let data;
-    try {
-      data = await response.json();
-    } catch (jsonError) {
-      console.error('Failed to parse backend response as JSON:', jsonError);
-      const responseText = await response.text();
-      console.error('Raw response text:', responseText);
-      throw new Error('Backend returned invalid JSON response');
-    }
+    const data = response.data;
 
     console.log('Backend data received:', {
       hasData: !!data,
@@ -70,7 +55,7 @@ export async function GET(request: Request) {
     const nextResponse = NextResponse.json(data);
 
     // Forward any session ID from the backend response
-    const backendSessionId = response.headers.get('X-Session-ID');
+    const backendSessionId = response.headers['x-session-id'];
     if (backendSessionId) {
       nextResponse.headers.set('X-Session-ID', backendSessionId);
     }

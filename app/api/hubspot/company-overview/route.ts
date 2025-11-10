@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { API_CONFIG } from '@/app/utils/config';
 import { getBackendUrl } from '@/app/utils/api';
+import axios from 'axios';
 
 export async function GET(request: Request) {
   try {
@@ -14,11 +15,18 @@ export async function GET(request: Request) {
     const apiPath = API_CONFIG.getApiPath('/company-overview');
     const backendUrl = getBackendUrl(`${apiPath}?dealName=${encodeURIComponent(dealName)}`);
 
-    // Forward the request to the backend server
-    const response = await fetch(backendUrl);
-    const data = await response.json();
+    console.log('[company-overview] Fetching from:', backendUrl);
+    const startTime = Date.now();
 
-    return NextResponse.json(data);
+    // Use axios instead of fetch
+    const response = await axios.get(backendUrl, {
+      timeout: 60000, // 60 second timeout
+    });
+
+    const duration = Date.now() - startTime;
+    console.log(`[company-overview] Completed in ${duration}ms`);
+
+    return NextResponse.json(response.data);
   } catch (error) {
     console.error('Error fetching company overview:', error);
     return NextResponse.json({ error: 'Failed to fetch company overview' }, { status: 500 });

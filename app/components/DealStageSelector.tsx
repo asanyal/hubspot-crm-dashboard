@@ -979,7 +979,7 @@ const DealStageSelector: React.FC = () => {
     if (!selectedStage || !dealsByStage[selectedStage]) return;
 
     const dealNames = dealsByStage[selectedStage].map(deal => deal.Deal_Name);
-    
+
     // Try to load from storage first
     if (loadSignalsFromStorage(selectedStage)) {
       return;
@@ -992,6 +992,18 @@ const DealStageSelector: React.FC = () => {
 
     return () => clearTimeout(timeoutId);
   }, [selectedStage, dealsByStage, fetchSignals, loadSignalsFromStorage]);
+
+  // Auto-sort by positive_signal once signals data loads
+  useEffect(() => {
+    // Only auto-sort if we have signals data and we're not already sorted by positive_signal
+    if (signalsData && Object.keys(signalsData).length > 0 && !signalsLoading) {
+      const currentSort = sorting[0];
+      // If not already sorted by positive_signal, set it to descending
+      if (!currentSort || currentSort.id !== 'positive_signal') {
+        setSorting([{ id: 'positive_signal', desc: true }]);
+      }
+    }
+  }, [signalsData, signalsLoading]);
 
 
 

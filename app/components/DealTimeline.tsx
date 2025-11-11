@@ -3806,16 +3806,21 @@ useEffect(() => {
           }`}>
             <h3 className="font-semibold text-gray-700 dark:text-white mb-3 text-xl">Latest Activity</h3>
             {loadingOverview ? (
-              <div className="flex items-center text-red-600 font-medium">
-                <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span>Generating AI summary</span>
-                <span className="inline-flex ml-1">
-                  <span className="animate-[blink_1.4s_ease-in-out_infinite]">.</span>
-                  <span className="animate-[blink_1.4s_ease-in-out_0.2s_infinite]">.</span>
-                  <span className="animate-[blink_1.4s_ease-in-out_0.4s_infinite]">.</span>
+              <div className="flex items-center gap-2">
+                <div className="relative flex items-center gap-1">
+                  {/* Sparkle 1 */}
+                  <span className="inline-block w-1.5 h-1.5 bg-blue-400 rounded-full animate-[ping_1s_ease-in-out_infinite]" style={{ animationDelay: '0ms' }}></span>
+                  {/* Sparkle 2 */}
+                  <span className="inline-block w-2 h-2 bg-purple-400 rounded-full animate-[ping_1s_ease-in-out_infinite]" style={{ animationDelay: '200ms' }}></span>
+                  {/* Sparkle 3 */}
+                  <span className="inline-block w-1.5 h-1.5 bg-pink-400 rounded-full animate-[ping_1s_ease-in-out_infinite]" style={{ animationDelay: '400ms' }}></span>
+                  {/* Sparkle 4 */}
+                  <span className="inline-block w-2 h-2 bg-blue-400 rounded-full animate-[ping_1s_ease-in-out_infinite]" style={{ animationDelay: '600ms' }}></span>
+                  {/* Sparkle 5 */}
+                  <span className="inline-block w-1.5 h-1.5 bg-purple-400 rounded-full animate-[ping_1s_ease-in-out_infinite]" style={{ animationDelay: '800ms' }}></span>
+                </div>
+                <span className="text-sm font-medium bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent animate-pulse">
+                  Generating AI summary...
                 </span>
               </div>
             ) : companyOverview ? (

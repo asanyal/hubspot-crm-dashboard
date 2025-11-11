@@ -37,6 +37,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [loadingInsights, setLoadingInsights] = useState<Set<string>>(new Set());
   const [processedWithoutInsights, setProcessedWithoutInsights] = useState<Set<string>>(new Set());
+  const [scrollToSection, setScrollToSection] = useState<string | null>(null);
   const router = useRouter();
 
   // Feature flag to disable buyer intent explanation fetching if CORS issues persist
@@ -329,10 +330,10 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
       badgeText = 'Very Likely to Buy';
       badgeColor = 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
     } else if (lowerIntent === 'likely to buy') {
-      badgeText = 'Positive Signal'; // Match Deal Logs display
+      badgeText = 'Positive';
       badgeColor = 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
     } else if (lowerIntent === 'less likely to buy') {
-      badgeText = 'Negative Signal';
+      badgeText = 'Negative';
       badgeColor = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
     } else if (lowerIntent === 'neutral' || lowerIntent.includes('neutral')) {
       badgeText = 'Neutral';
@@ -522,14 +523,16 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   };
 
   // Handle modal open
-  const handleOpenModal = (meeting: Meeting) => {
+  const handleOpenModal = (meeting: Meeting, sectionTitle?: string) => {
     setSelectedMeeting(meeting);
+    setScrollToSection(sectionTitle || null);
     setIsModalOpen(true);
   };
 
   // Handle modal close
   const handleCloseModal = () => {
     setSelectedMeeting(null);
+    setScrollToSection(null);
     setIsModalOpen(false);
   };
 
@@ -611,7 +614,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!isModalOpen) return;
-      
+
       switch (event.key) {
         case 'Escape':
           handleCloseModal();
@@ -638,6 +641,19 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
       };
     }
   }, [isModalOpen, canNavigatePrevious, canNavigateNext, navigateToPreviousMeeting, navigateToNextMeeting]);
+
+  // Handle scrolling to specific section when modal opens
+  useEffect(() => {
+    if (isModalOpen && scrollToSection) {
+      // Use setTimeout to ensure the modal is fully rendered before scrolling
+      setTimeout(() => {
+        const sectionElement = document.getElementById(`insight-section-${scrollToSection}`);
+        if (sectionElement) {
+          sectionElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    }
+  }, [isModalOpen, scrollToSection]);
 
   // Function to fetch deal owner information
   const fetchDealOwner = useCallback(async (dealId: string): Promise<string | null> => {
@@ -1124,26 +1140,23 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
       ) : (
         <>
           {/* Desktop Table View */}
-          <div className="hidden md:block overflow-x-auto max-h-64 overflow-y-auto">
+          <div className="hidden md:block overflow-x-auto max-h-80 overflow-y-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead>
                 <tr>
-                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Deal Timeline
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-[8%]">
+                    Insights
                   </th>
-                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Deal Name
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-[25%]">
+                    Deal
                   </th>
-                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Meeting Subject
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-[40%]">
+                    TLDR
                   </th>
-                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                    Deal Stage
-                  </th>
-                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-[15%]">
                     Date
                   </th>
-                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-[12%]">
                     Signal
                   </th>
 
@@ -1152,28 +1165,38 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
               <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {filteredMeetings.map((meeting, index) => {
                   const buyerIntentBadge = getBuyerIntentBadge(meeting.buyer_intent);
+
+                  // Parse buyer intent explanation to get signal titles
+                  const isLoadingSignals = loadingInsights.has(meeting.event_id) || (ENABLE_BUYER_INTENT_ENHANCEMENT && !processedWithoutInsights.has(meeting.event_id) && !hasValidInsights(meeting));
+                  const signalSections = hasValidInsights(meeting) ? parseBuyerIntentExplanation(meeting.buyer_intent_explanation) : [];
+
                   return (
                     <tr key={index} className="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
                       <td className="px-4 py-3 whitespace-nowrap text-center">
                         <button
                           onClick={() => navigateToDealTimeline(meeting.deal_id)}
-                          className="p-2 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                          className="group inline-flex items-center justify-center p-2 text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200"
                           title="Open deal timeline"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transform rotate-[-45deg] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                           </svg>
                         </button>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
                         <div className="flex items-center gap-2">
-                          <button 
-                            onClick={() => handleOpenModal(meeting)}
-                            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-left cursor-pointer"
-                          >
-                            {meeting.deal_id}
-                          </button>
-                          {(loadingInsights.has(meeting.event_id) || (ENABLE_BUYER_INTENT_ENHANCEMENT && !processedWithoutInsights.has(meeting.event_id) && !hasValidInsights(meeting))) && (
+                          <div className="flex flex-col">
+                            <button
+                              onClick={() => handleOpenModal(meeting)}
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline text-left cursor-pointer"
+                            >
+                              {meeting.deal_id}
+                            </button>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              {meeting.subject}
+                            </span>
+                          </div>
+                          {isLoadingSignals && (
                             <div className="flex-shrink-0" title="Loading meeting insights...">
                               <svg className="animate-spin h-3 w-3 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -1183,18 +1206,48 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-white max-w-xs truncate">
-                        {meeting.subject}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-center">
-                        <div className="relative inline-block group">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStageColor(meeting.deal_stage).bg} ${getStageColor(meeting.deal_stage).text} border ${getStageColor(meeting.deal_stage).border} cursor-help`}>
-                            {getStageInitials(meeting.deal_stage)}
-                          </span>
-                          <div className="invisible group-hover:visible absolute z-50 -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                            {meeting.deal_stage}
+                      <td className="px-4 py-3 text-sm">
+                        {isLoadingSignals ? (
+                          <div className="flex items-center gap-1.5">
+                            <div className="relative flex items-center gap-1">
+                              {/* Sparkle 1 */}
+                              <span className="inline-block w-1.5 h-1.5 bg-blue-400 rounded-full animate-[ping_1s_ease-in-out_infinite]" style={{ animationDelay: '0ms' }}></span>
+                              {/* Sparkle 2 */}
+                              <span className="inline-block w-2 h-2 bg-purple-400 rounded-full animate-[ping_1s_ease-in-out_infinite]" style={{ animationDelay: '200ms' }}></span>
+                              {/* Sparkle 3 */}
+                              <span className="inline-block w-1.5 h-1.5 bg-pink-400 rounded-full animate-[ping_1s_ease-in-out_infinite]" style={{ animationDelay: '400ms' }}></span>
+                              {/* Sparkle 4 */}
+                              <span className="inline-block w-2 h-2 bg-blue-400 rounded-full animate-[ping_1s_ease-in-out_infinite]" style={{ animationDelay: '600ms' }}></span>
+                              {/* Sparkle 5 */}
+                              <span className="inline-block w-1.5 h-1.5 bg-purple-400 rounded-full animate-[ping_1s_ease-in-out_infinite]" style={{ animationDelay: '800ms' }}></span>
+                            </div>
+                            <span className="text-xs font-medium bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent animate-pulse">
+                              Analyzing insights...
+                            </span>
                           </div>
-                        </div>
+                        ) : signalSections.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {signalSections.map((section, idx) => {
+                              const isUseCase = section.title.startsWith('Use Case:');
+                              const chipClasses = isUseCase
+                                ? 'inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors'
+                                : 'inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors';
+
+                              return (
+                                <button
+                                  key={idx}
+                                  className={chipClasses}
+                                  onClick={() => handleOpenModal(meeting, section.title)}
+                                  title="Click to view insights"
+                                >
+                                  {section.title}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400 dark:text-gray-500">No insights</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                         {formatDate(meeting.event_date)}
@@ -1555,7 +1608,11 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                         const sections = parseBuyerIntentExplanation(selectedMeeting.buyer_intent_explanation);
 
                         return sections.map((section, sectionIndex) => (
-                          <div key={sectionIndex} className="space-y-2">
+                          <div
+                            key={sectionIndex}
+                            id={`insight-section-${section.title}`}
+                            className="space-y-2 scroll-mt-4"
+                          >
                             <h5 className="font-bold text-blue-900 dark:text-blue-100">{section.title}</h5>
                             <ul className="list-disc pl-5 space-y-1">
                               {section.bulletPoints.map((point, pointIndex) => (

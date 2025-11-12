@@ -1694,9 +1694,7 @@ const DealTimeline: React.FC = () => {
 
 // Event Drawer Component
 const EventDrawer = () => {
-  // State for managing content display
-  const [eventContents, setEventContents] = useState<Record<string, string>>({});
-  const [loadingContents, setLoadingContents] = useState<Record<string, boolean>>({});
+  // State for managing display
   const [expandedSections, setExpandedSections] = useState<Record<number, boolean>>({});
   const [copyFeedback, setCopyFeedback] = useState<boolean>(false);
   const [meetingInsightsCopyFeedback, setMeetingInsightsCopyFeedback] = useState<Record<string, boolean>>({});
@@ -1788,129 +1786,20 @@ const EventDrawer = () => {
     }
   }, [isDrawerOpen, eventsForDate.length]);
 
-  // Function to fetch event content safely
-  const fetchEventContent = async (eventId: string) => {
-    if (!selectedDeal || !eventId) return;
-    
-    // Mark this event as loading
-    setLoadingContents(prev => ({ ...prev, [eventId]: true }));
-    
-    try {
-      // Extract the engagement ID by splitting at the first underscore
-      const engagementId = eventId.split('_')[0];
-      
-      // Try to fetch content, but use API check first
-      if (dealInfo && dealInfo.dealId) {
-        
-        // We'll use a timeout to prevent the request from hanging too long
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
-        try {
-          const response = await fetch(`/api/hubspot/event-content/${dealInfo.dealId}/${engagementId}`, {
-            signal: controller.signal
-          });
-          
-          clearTimeout(timeoutId);
-          
-          if (response.ok) {
-            const data = await response.json();
-            setEventContents(prev => ({ 
-              ...prev, 
-              [eventId]: data.content || 'No content available' 
-            }));
-            return;
-          }
-        } catch (fetchError) {
-          console.error('Fetch operation canceled or failed:', fetchError);
-        }
-      }
-      
-      // Use the content preview as fallback
-      const evt = eventsForDate.find(e => e.id === eventId);
-      const fallbackContent = evt?.content || evt?.content_preview || 'Content unavailable';
-      
-      // reduce font of fallbackContent to 12px
-      const reducedContent = fallbackContent.replace(/<[^>]*>/g, '').slice(0, 100);
-      setEventContents(prev => ({ 
-        ...prev, 
-        [eventId]: reducedContent
-      }));
-    } catch (error) {
-      console.error('Error handling event content:', error);
-      
-      // Use the content preview as fallback
-      const evt = eventsForDate.find(e => e.id === eventId);
-      const fallbackContent = evt?.content || evt?.content_preview || 'Content unavailable';
-      
-
-      // reduce font of fallbackContent to 12px
-      const reducedContent = fallbackContent.replace(/<[^>]*>/g, '').slice(0, 100);
-      setEventContents(prev => ({ 
-        ...prev, 
-        [eventId]: reducedContent
-      }));
-    } finally {
-      setLoadingContents(prev => ({ ...prev, [eventId]: false }));
-    }
+  // Simplified function to get event content directly from the event data
+  const getEventContent = (eventId: string): string => {
+    const evt = eventsForDate.find(e => e.id === eventId);
+    return evt?.content || 'No content available';
   };
   
-  // Clean content from special characters
+  // Clean content from special characters and format for display
   const cleanDrawerContent = (content: string) => {
     if (!content) return '';
     return content
-      .replace(/\\n/g, ' ')
-      .replace(/\\t/g, ' ')
-      .replace(/<([^>]*)>/g, '[Link]') // Match anything between angle brackets
-      .replace(/\s+/g, ' ')
+      .replace(/\\n/g, '\n')  // Convert escaped newlines to actual newlines
+      .replace(/\\t/g, '  ')  // Convert tabs to spaces
+      .replace(/<([^>]*)>/g, '[Link]')  // Replace angle brackets with [Link]
       .trim();
-  };
-
-  // Add new function to format email content
-  const formatEmailContent = (content: string) => {
-    if (!content) return '';
-    
-    // Split content into paragraphs
-    const paragraphs = content.split(/\n\s*\n/);
-    
-    // Process each paragraph
-    return paragraphs.map((paragraph, index) => {
-      // Clean up the paragraph
-      let cleanParagraph = paragraph
-        .replace(/\\n/g, ' ')
-        .replace(/\\t/g, ' ')
-        .replace(/<([^>]*)>/g, '[Link]')
-        .replace(/\s+/g, ' ')
-        .trim();
-      
-      // Skip empty paragraphs
-      if (!cleanParagraph) return null;
-      
-      // Check if this is a quoted section
-      if (cleanParagraph.startsWith('>')) {
-        return (
-          <div key={index} className="pl-4 border-l-2 border-gray-200 my-2 text-gray-500 italic">
-            {cleanParagraph.replace(/^>+/, '').trim()}
-          </div>
-        );
-      }
-      
-      // Check if this is a signature section
-      if (cleanParagraph.startsWith('--')) {
-        return (
-          <div key={index} className="mt-4 pt-4 border-t border-gray-200 text-gray-500 text-sm">
-            {cleanParagraph.replace(/^--+/, '').trim()}
-          </div>
-        );
-      }
-      
-      // Regular paragraph
-      return (
-        <div key={index} className="my-2">
-          {cleanParagraph}
-        </div>
-      );
-    }).filter(Boolean);
   };
 
   return (
@@ -2260,6 +2149,16 @@ const EventDrawer = () => {
                     )}
                   </div>
                 </div>
+
+                {/* Content Section - Display for all event types */}
+                {event.id && event.content && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <h5 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">Content</h5>
+                    <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto">
+                      {cleanDrawerContent(event.content)}
+                    </div>
+                  </div>
+                )}
 
                 {/* Meeting Insights */}
                 {event.type === 'Meeting' && event.buyer_intent_explanation && event.buyer_intent_explanation !== 'N/A' && (

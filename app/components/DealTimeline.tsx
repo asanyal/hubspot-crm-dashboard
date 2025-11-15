@@ -2249,35 +2249,67 @@ const isFutureDate = (dateStr: string | undefined): boolean => {
 };
 
 // New DealLogs component
-const DealLogs: React.FC<{ 
+const DealLogs: React.FC<{
   events: Event[];
   activeFilters: Record<string, boolean>;
   onFilterChange: (filters: Record<string, boolean>) => void;
   selectedEventId: string | null;
   onRowClick: (date: string | null, eventId: string | null) => void;
 }> = ({ events, activeFilters, onFilterChange, selectedEventId, onRowClick }) => {
+  // State to track whether to show "Not Recorded" rows
+  const [showNotRecorded, setShowNotRecorded] = React.useState(true);
+
   // Sort events by date and time in reverse chronological order
   const sortedEvents = [...events].sort((a, b) => {
     // Handle V2 format (event_date)
     if (a.event_date && b.event_date) {
       return b.event_date.localeCompare(a.event_date);
     }
-    
+
     // Handle V1 format (date_str + time_str)
     if (a.date_str && b.date_str) {
       const dateCompare = b.date_str.localeCompare(a.date_str);
       if (dateCompare !== 0) return dateCompare;
       return (b.time_str || '').localeCompare(a.time_str || '');
     }
-    
+
     // Fallback to comparing IDs if dates are not available
     return (b.id || b.event_id || '').localeCompare(a.id || a.event_id || '');
   });
 
-  // Filter events based on active filters
+  // Helper function to check if an event has a recorded signal
+  const hasRecordedSignal = (event: Event) => {
+    const eventType = event.type || event.event_type;
+
+    // Check for buyer_intent (for Meetings)
+    if (eventType === 'Meeting' && event.buyer_intent && event.buyer_intent !== 'N/A' && event.buyer_intent !== 'Not Available') {
+      return true;
+    }
+
+    // Check for sentiment (for Emails)
+    if (event.sentiment && event.sentiment !== 'Unknown' && event.sentiment !== 'Not Available') {
+      const sentimentLower = event.sentiment.toLowerCase();
+      if (['positive', 'positive signal', 'negative', 'negative signal', 'neutral'].includes(sentimentLower)) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  // Filter events based on active filters and "Not Recorded" toggle
   const filteredEvents = sortedEvents.filter(event => {
     const eventType = event.type || event.event_type;
-    return eventType ? activeFilters[eventType] || false : false;
+    const typeFilterPassed = eventType ? activeFilters[eventType] || false : false;
+
+    if (!typeFilterPassed) return false;
+
+    // If showNotRecorded is false, filter out events without recorded signals
+    if (!showNotRecorded && !hasRecordedSignal(event)) {
+      return false;
+    }
+
+    return true;
   });
 
   // Function to toggle a filter
@@ -2379,25 +2411,40 @@ return (
         <h3 className="text-lg font-semibold text-gray-800 dark:text-white">Deal Logs</h3>
         
         {/* Filter controls */}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
           {Object.keys(activeFilters).map(eventType => (
             <button
               key={eventType}
               onClick={() => toggleFilter(eventType)}
-              className={`px-3 py-1.5 text-sm rounded-full transition-colors border ${
-                activeFilters[eventType] 
-                  ? `${getEventTypeBackgroundColor(eventType)} border-gray-300 font-medium` 
-                  : 'bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100'
+              className={`px-2.5 py-1 text-xs rounded transition-all ${
+                activeFilters[eventType]
+                  ? `${getEventTypeBackgroundColor(eventType)} font-medium shadow-sm`
+                  : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
               }`}
             >
               <span className={activeFilters[eventType] ? getEventTypeColor(eventType) : ''}>
                 {eventType}
               </span>
-              <span className="ml-1 text-gray-500">
-                ({sortedEvents.filter(e => e.type === eventType).length})
+              <span className="ml-1.5 opacity-60">
+                {sortedEvents.filter(e => e.type === eventType).length}
               </span>
             </button>
           ))}
+
+          {/* Separator */}
+          <div className="h-4 w-px bg-gray-300"></div>
+
+          {/* Show/Hide Not Recorded toggle */}
+          <button
+            onClick={() => setShowNotRecorded(!showNotRecorded)}
+            className={`px-2.5 py-1 text-xs rounded transition-all ${
+              showNotRecorded
+                ? 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                : 'bg-purple-100 text-purple-700 font-medium shadow-sm'
+            }`}
+          >
+            {showNotRecorded ? 'Hide' : 'Show'} Not Recorded
+          </button>
         </div>
       </div>
       
@@ -2407,7 +2454,7 @@ return (
         <div className="sticky top-0 bg-gray-50 border-b border-gray-200 p-4 grid grid-cols-12 gap-4 font-semibold text-gray-600">
           <div className="col-span-2">Date</div>
           <div className="col-span-2">Event</div>
-          <div className="col-span-2">Sentiment</div>
+          <div className="col-span-2">Signal</div>
           <div className="col-span-6">Details</div>
         </div>
         <div className="divide-y divide-gray-100">
@@ -2495,18 +2542,48 @@ return (
 
                     {/* Intent/Sentiment */}
                     <div className="col-span-2">
-                      {(eventType === 'Meeting' && event.buyer_intent) ? (
-                        <span className={getIntentSentimentColor(event)}>
-                          {event.buyer_intent === 'Likely to buy' ? 'Positive Signal' : 
-                           event.buyer_intent === 'Less likely to buy' ? 'Negative Signal' : event.buyer_intent}
-                        </span>
-                      ) : event.sentiment ? (
-                        <span className={getIntentSentimentColor(event)}>
-                          {event.sentiment}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
+                      {(() => {
+                        let displayValue = '';
+                        let chipColor = '';
+
+                        // Check for buyer_intent first (for Meetings)
+                        if (eventType === 'Meeting' && event.buyer_intent && event.buyer_intent !== 'N/A' && event.buyer_intent !== 'Not Available') {
+                          displayValue = event.buyer_intent === 'Likely to buy' ? 'Positive Signal' :
+                                        event.buyer_intent === 'Less likely to buy' ? 'Negative Signal' : event.buyer_intent;
+                          chipColor = event.buyer_intent === 'Likely to buy' || event.buyer_intent === 'Very likely to buy'
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                            : event.buyer_intent === 'Less likely to buy'
+                            ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                            : 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300';
+                        }
+                        // Check for sentiment (for Emails)
+                        else if (event.sentiment && event.sentiment !== 'Unknown' && event.sentiment !== 'Not Available') {
+                          const sentimentLower = event.sentiment.toLowerCase();
+                          if (['positive', 'positive signal', 'negative', 'negative signal', 'neutral'].includes(sentimentLower)) {
+                            displayValue = event.sentiment;
+                            chipColor = sentimentLower === 'positive' || sentimentLower === 'positive signal'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                              : sentimentLower === 'negative' || sentimentLower === 'negative signal'
+                              ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                              : 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300';
+                          }
+                        }
+
+                        // Return appropriate chip
+                        if (displayValue) {
+                          return (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${chipColor}`}>
+                              {displayValue}
+                            </span>
+                          );
+                        } else {
+                          return (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                              Not Recorded
+                            </span>
+                          );
+                        }
+                      })()}
                     </div>
 
                     {/* Details */}

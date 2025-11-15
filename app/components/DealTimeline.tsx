@@ -2537,6 +2537,24 @@ const calculateDaysPassed = (startDate: string): number => {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
+const getLatestEventDate = (timelineData: TimelineData | null): string | null => {
+  if (!timelineData || !timelineData.events || timelineData.events.length === 0) {
+    return null;
+  }
+
+  // Filter events with valid date_str and sort in reverse chronological order
+  const sortedEvents = timelineData.events
+    .filter(event => event.date_str)
+    .sort((a, b) => {
+      const dateA = new Date(a.date_str!);
+      const dateB = new Date(b.date_str!);
+      return dateB.getTime() - dateA.getTime(); // Reverse chronological
+    });
+
+  // Return the most recent date or null if no valid dates
+  return sortedEvents.length > 0 ? sortedEvents[0].date_str! : null;
+};
+
 const getDaysColor = (days: number): string => {
   if (days < 30) return 'text-green-600';
   if (days < 90) return 'text-orange-600';
@@ -3680,16 +3698,23 @@ useEffect(() => {
               <div className="space-y-1">
                 <span className="text-xs text-gray-400 uppercase tracking-wide">Last Touch</span>
                 {dealInfo ? (
-                  <div className="flex items-center gap-2">
-                    <div className="font-semibold text-gray-900 dark:text-white text-sm">{formatDate(dealInfo.endDate)}</div>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                      calculateDaysPassed(dealInfo.endDate) > 10
-                        ? 'bg-red-100 text-red-700'
-                        : 'bg-green-100 text-green-700'
-                    }`}>
-                      {calculateDaysPassed(dealInfo.endDate)}d
-                    </span>
-                  </div>
+                  (() => {
+                    const latestDate = getLatestEventDate(timelineData);
+                    return latestDate ? (
+                      <div className="flex items-center gap-2">
+                        <div className="font-semibold text-gray-900 dark:text-white text-sm">{formatDate(latestDate)}</div>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          calculateDaysPassed(latestDate) > 10
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-green-100 text-green-700'
+                        }`}>
+                          {calculateDaysPassed(latestDate)}d
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="font-semibold text-gray-900 dark:text-white text-sm">-</div>
+                    );
+                  })()
                 ) : (
                   <div className="animate-pulse h-5 w-24 bg-gray-200 rounded"></div>
                 )}

@@ -681,12 +681,12 @@ const DealTimeline: React.FC = () => {
   // Set hasMounted to true after component mounts
   useEffect(() => {
     setHasMounted(true);
-    
+
     // Clear error when component mounts
     if (error) {
       updateState('dealTimeline.error', null);
     }
-    
+
     // Cleanup function
     return () => {
       setHasMounted(false);
@@ -694,6 +694,35 @@ const DealTimeline: React.FC = () => {
       setIsUrlProcessed(false);
     };
   }, []);
+
+  // Watch for URL changes and reset isUrlProcessed flag
+  useEffect(() => {
+    if (!hasMounted) return;
+
+    const handleUrlChange = () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const dealName = searchParams.get('dealName') || searchParams.get('deal_name') || searchParams.get('deal');
+
+      if (dealName) {
+        const decodedDealName = decodeURIComponent(dealName);
+        // If URL has a deal parameter and it's different from the current selected deal, reset processing flag
+        if (!selectedDeal || selectedDeal.name !== decodedDealName) {
+          console.log('URL changed to new deal:', decodedDealName);
+          setIsUrlProcessed(false);
+        }
+      }
+    };
+
+    // Check on mount
+    handleUrlChange();
+
+    // Listen for popstate events (back/forward navigation)
+    window.addEventListener('popstate', handleUrlChange);
+
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+    };
+  }, [hasMounted, selectedDeal]);
 
   // Timer effect to show loading time
   useEffect(() => {
@@ -1263,27 +1292,31 @@ const DealTimeline: React.FC = () => {
   // Process URL parameters only once after mount
   useEffect(() => {
     if (!hasMounted || isUrlProcessed) return;
-    
+
     const searchParams = new URLSearchParams(window.location.search);
-    const dealName = searchParams.get('dealName') || searchParams.get('deal_name');
+    const dealName = searchParams.get('dealName') || searchParams.get('deal_name') || searchParams.get('deal');
     // REMOVED: autoload parameter - no longer needed with modular API system
 
     if (dealName) {
       const decodedDealName = decodeURIComponent(dealName);
       // store the deal name in local storage
       localStorage.setItem('dealName', decodedDealName);
-      
+
       // Always process URL parameters for navigation, regardless of current state
       // First, try to find the deal in allDeals
       const matchingDeal = allDeals.find(d => d.name === decodedDealName);
-      
+
       if (matchingDeal) {
+        // Clear cached timeline data to force refresh for the new deal
+        updateState('dealTimeline.activities', null);
+        updateState('dealTimeline.lastFetched', null);
+
         updateState('dealTimeline.selectedDeal', matchingDeal);
         setSelectedOption({ value: matchingDeal.id, label: matchingDeal.name });
         setCurrentDealId(matchingDeal.id);
 
-        // REMOVED: loadTimelineDirectly call - API Handler 1 automatically handles data fetching
-        // when selectedDeal changes
+        // Load timeline data for the deal
+        loadTimelineDirectly(decodedDealName);
 
         // Mark as processed only when we successfully find and process the deal
         setIsUrlProcessed(true);
@@ -1297,11 +1330,16 @@ const DealTimeline: React.FC = () => {
           name: decodedDealName,
           id: 'pending'
         };
+
+        // Clear cached timeline data to force refresh for the new deal
+        updateState('dealTimeline.activities', null);
+        updateState('dealTimeline.lastFetched', null);
+
         updateState('dealTimeline.selectedDeal', tempDeal);
         setSelectedOption({ value: 'pending', label: decodedDealName });
 
-        // REMOVED: loadTimelineDirectly call - API Handler 1 automatically handles data fetching
-        // when selectedDeal changes
+        // Load timeline data for the deal
+        loadTimelineDirectly(decodedDealName);
 
         setIsUrlProcessed(true);
       }
@@ -1309,7 +1347,7 @@ const DealTimeline: React.FC = () => {
       // No dealName in URL, mark as processed
       setIsUrlProcessed(true);
     }
-  }, [hasMounted, isUrlProcessed, allDeals, updateState]);
+  }, [hasMounted, isUrlProcessed, allDeals, updateState, loadTimelineDirectly]);
 
 // Fetch all deals after component mounts and when needed
   useEffect(() => {
@@ -3856,7 +3894,7 @@ useEffect(() => {
                           setSelectedEventId(null);
                           setIsDrawerOpen(true);
                         }}
-                        className="p-6 rounded-lg border-2 border-green-200 bg-green-50 hover:bg-green-100 transition-all hover:shadow-md text-left"
+                        className="p-6 rounded-lg border-2 border-green-200 bg-green-50 hover:bg-green-100 transition-all hover:shadow-md text-left cursor-pointer"
                       >
                         <div className="flex items-center justify-between mb-3">
                           <h4 className="font-semibold text-green-800 text-lg">Positives</h4>
@@ -3894,7 +3932,7 @@ useEffect(() => {
                         setSelectedEventId(null);
                         setIsDrawerOpen(true);
                       }}
-                      className="p-6 rounded-lg border-2 border-green-200 bg-green-50 hover:bg-green-100 transition-all hover:shadow-md text-left"
+                      className="p-6 rounded-lg border-2 border-green-200 bg-green-50 hover:bg-green-100 transition-all hover:shadow-md text-left cursor-pointer"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="font-semibold text-green-800 text-lg">Positives</h4>
@@ -3923,7 +3961,7 @@ useEffect(() => {
                           setSelectedEventId(null);
                           setIsDrawerOpen(true);
                         }}
-                        className="p-6 rounded-lg border-2 border-red-200 bg-red-50 hover:bg-red-100 transition-all hover:shadow-md text-left"
+                        className="p-6 rounded-lg border-2 border-red-200 bg-red-50 hover:bg-red-100 transition-all hover:shadow-md text-left cursor-pointer"
                       >
                         <div className="flex items-center justify-between mb-3">
                           <h4 className="font-semibold text-red-800 text-lg">Risks</h4>
@@ -3957,7 +3995,7 @@ useEffect(() => {
                         setSelectedEventId(null);
                         setIsDrawerOpen(true);
                       }}
-                      className="p-6 rounded-lg border-2 border-red-200 bg-red-50 hover:bg-red-100 transition-all hover:shadow-md text-left"
+                      className="p-6 rounded-lg border-2 border-red-200 bg-red-50 hover:bg-red-100 transition-all hover:shadow-md text-left cursor-pointer"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="font-semibold text-red-800 text-lg">Risks</h4>

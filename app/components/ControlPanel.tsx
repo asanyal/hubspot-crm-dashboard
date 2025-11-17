@@ -1,11 +1,12 @@
 // app/components/ControlPanel.tsx
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppState } from '../context/AppContext';
 import { API_CONFIG } from '../utils/config';
 import LatestMeetings from './LatestMeetings';
+import UseCasesRisks from './UseCasesRisks';
 
 const ControlPanel: React.FC = () => {
   const { state } = useAppState();
@@ -254,7 +255,12 @@ const ControlPanel: React.FC = () => {
       {pipelineData.length > 0 && <StatBoxes />}
 
       {/* Latest Meetings Section */}
-      <LatestMeetings browserId={browserId} isInitialized={isInitialized} />
+      <div className="mb-8">
+        <LatestMeetings browserId={browserId} isInitialized={isInitialized} />
+      </div>
+
+      {/* Use Cases & Risks Section */}
+      <UseCasesRisks browserId={browserId} isInitialized={isInitialized} />
     </div>
   );
 };

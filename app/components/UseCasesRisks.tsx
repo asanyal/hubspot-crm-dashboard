@@ -210,6 +210,24 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
       );
     }
 
+    // Merge duplicate deal names by combining use cases
+    const mergedData = stageData.reduce((acc: Record<string, string[]>, item: UseCase) => {
+      if (!acc[item.deal_name]) {
+        acc[item.deal_name] = [];
+      }
+      // Only add unique use cases
+      if (!acc[item.deal_name].includes(item.use_case)) {
+        acc[item.deal_name].push(item.use_case);
+      }
+      return acc;
+    }, {});
+
+    // Convert to array for rendering
+    const deduplicatedData = Object.entries(mergedData).map(([dealName, useCases]) => ({
+      deal_name: dealName,
+      use_cases: useCases,
+    }));
+
     return (
       <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -219,12 +237,12 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
                 Deal Name
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                Use Case
+                Use Cases
               </th>
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-gray-700">
-            {stageData.map((item: UseCase, index: number) => (
+            {deduplicatedData.map((item, index: number) => (
               <tr key={index} className="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                   <div className="flex items-center gap-2">
@@ -243,7 +261,11 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
                   </div>
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
-                  {item.use_case}
+                  <ul className="list-disc list-inside space-y-1">
+                    {item.use_cases.map((useCase, idx) => (
+                      <li key={idx}>{useCase}</li>
+                    ))}
+                  </ul>
                 </td>
               </tr>
             ))}
@@ -305,10 +327,31 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
       );
     }
 
+    // Merge duplicate deal names by combining risks
+    const mergedRisks: Record<string, Array<{ riskType: string; explanation: string }>> = {};
+    allRisks.forEach(risk => {
+      if (!mergedRisks[risk.dealName]) {
+        mergedRisks[risk.dealName] = [];
+      }
+      mergedRisks[risk.dealName].push({
+        riskType: risk.riskType,
+        explanation: risk.explanation,
+      });
+    });
+
+    // Convert to array for filtering and rendering
+    const deduplicatedRisks = Object.entries(mergedRisks).map(([dealName, risks]) => ({
+      dealName,
+      risks,
+    }));
+
     // Filter risks based on selected risk types
     const filteredRisks = selectedRiskTypes.length > 0
-      ? allRisks.filter(risk => selectedRiskTypes.includes(risk.riskType))
-      : allRisks;
+      ? deduplicatedRisks.map(item => ({
+          dealName: item.dealName,
+          risks: item.risks.filter(risk => selectedRiskTypes.includes(risk.riskType)),
+        })).filter(item => item.risks.length > 0)
+      : deduplicatedRisks;
 
     const toggleRiskType = (riskType: string) => {
       setSelectedRiskTypes(prev => {
@@ -382,7 +425,7 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
 
         {/* Risk Count */}
         <div className="mb-2 text-sm text-gray-600 dark:text-gray-400">
-          Showing {filteredRisks.length} of {allRisks.length} risks
+          Showing {filteredRisks.length} deals with {filteredRisks.reduce((sum, item) => sum + item.risks.length, 0)} risks (total: {deduplicatedRisks.length} deals, {allRisks.length} risks)
         </div>
 
         {/* Risks Table */}
@@ -394,10 +437,7 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
                   Deal Name
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Risk Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Explanation
+                  Risks
                 </th>
               </tr>
             </thead>
@@ -405,7 +445,7 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
               {filteredRisks.length > 0 ? (
                 filteredRisks.map((item, index) => (
                   <tr key={index} className="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white align-top">
                       <div className="flex items-center gap-2">
                         <span>{item.dealName}</span>
                         <a
@@ -421,19 +461,25 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
                         </a>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRiskTypeColor(item.riskType)}`}>
-                        {item.riskType}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300 max-w-2xl">
-                      {item.explanation}
+                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
+                      <div className="space-y-3">
+                        {item.risks.map((risk, riskIdx) => (
+                          <div key={riskIdx} className="flex flex-col gap-1">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium w-fit ${getRiskTypeColor(risk.riskType)}`}>
+                              {risk.riskType}
+                            </span>
+                            <p className="text-sm text-gray-700 dark:text-gray-300 pl-1">
+                              {risk.explanation}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={3} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={2} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                     No risks match the selected filters.
                   </td>
                 </tr>

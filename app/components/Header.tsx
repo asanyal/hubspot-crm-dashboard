@@ -38,8 +38,8 @@ const Header: React.FC = () => {
   }, []);
 
   return (
-    <header className="bg-card border-b border-border shadow-sm transition-colors duration-200">
-      <div className="container mx-auto px-4">
+    <header className="bg-card border-b border-border shadow-sm transition-colors duration-200" suppressHydrationWarning>
+      <div className="container mx-auto px-4" suppressHydrationWarning>
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center">
             <Link href="/" className="flex-shrink-0 font-bold text-xl text-sky-600 dark:text-sky-400 flex items-center group transition-all duration-300">

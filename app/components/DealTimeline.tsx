@@ -229,15 +229,24 @@ interface ChartDataPoint {
 const DealTimeline: React.FC = () => {
   // Get state from context
   const { state, updateState } = useAppState();
-  const { 
-    selectedDeal, 
-    timeframe, 
-    deals: allDeals, 
-    activities: timelineData, 
-    loading, 
-    error, 
-    lastFetched 
+  const {
+    selectedDeal,
+    timeframe,
+    deals: allDeals,
+    activities: rawTimelineData,
+    loading,
+    error,
+    lastFetched
   } = state.dealTimeline;
+
+  // Normalize timelineData to ensure events is always an array
+  const timelineData = React.useMemo(() => {
+    if (!rawTimelineData) return null;
+    if (!rawTimelineData.events || !Array.isArray(rawTimelineData.events)) {
+      return { ...rawTimelineData, events: [] };
+    }
+    return rawTimelineData;
+  }, [rawTimelineData]);
 
   // Component-level UI state (doesn't need to persist)
   const [selectedOption, setSelectedOption] = useState<SelectOption | null>(null);
@@ -1432,8 +1441,8 @@ const DealTimeline: React.FC = () => {
   }, [hasMounted, isInitialLoad, makeApiCall, updateState, selectedDeal]);
 
   useEffect(() => {
-    if (timelineData && timelineData.events && timelineData.events.length > 0) {
-      
+    if (timelineData && timelineData.events && Array.isArray(timelineData.events) && timelineData.events.length > 0) {
+
       try {
         // Find the earliest and latest dates from the events
         const eventDates = timelineData.events
@@ -2653,7 +2662,7 @@ const calculateDaysPassed = (startDate: string): number => {
 };
 
 const getLatestEventDate = (timelineData: TimelineData | null): string | null => {
-  if (!timelineData || !timelineData.events || timelineData.events.length === 0) {
+  if (!timelineData || !timelineData.events || !Array.isArray(timelineData.events) || timelineData.events.length === 0) {
     return null;
   }
 
@@ -3091,14 +3100,14 @@ const handleRefresh = useCallback(() => {
 // Update the effect that fetches champions to be more robust
 // Effect to automatically fetch champions after timeline loads
 useEffect(() => {
-  if (!timelineData?.events || !selectedDeal?.name || isUnmounting) {
+  if (!timelineData?.events || !Array.isArray(timelineData.events) || !selectedDeal?.name || isUnmounting) {
     return;
   }
-  
+
   // Check if we need to fetch contacts for meetings
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   const meetingEvents = timelineData.events.filter(event => {
     if (event.type !== 'Meeting') return false;
     const meetingDate = new Date(event.date_str);

@@ -91,6 +91,9 @@ interface AppState {
   };
   controlPanel: {
     pipelineData: PipelineData[];
+    loading: boolean;
+    error: string | null;
+    lastFetched: number | null;
   };
 }
 
@@ -115,7 +118,10 @@ const initialState: AppState = {
     lastFetched: null
   },
   controlPanel: {
-    pipelineData: []
+    pipelineData: [],
+    loading: false,
+    error: null,
+    lastFetched: null
   },
 };
 

@@ -130,8 +130,7 @@ const DealStageSelector: React.FC = () => {
   const [insightsData, setInsightsData] = useState<DealInsights | null>(null);
   const [pinnedColumns, setPinnedColumns] = useState<Set<string>>(new Set(['deal_name']));
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set([
-    'deal_name', 'stage', 'owner', 'activity_count', 'positive_signal', 
-    'strong_buy_signal', 'negative_signal', 'using_competitor', 'pricing_concerns', 'decision_maker'
+    'deal_name', 'positives', 'risks', 'stage', 'activity_count'
   ]));
   const [isColumnMenuOpen, setIsColumnMenuOpen] = useState(false);
   const router = useRouter();
@@ -910,8 +909,7 @@ const DealStageSelector: React.FC = () => {
   // Function to show all columns
   const showAllColumns = useCallback(() => {
     setVisibleColumns(new Set([
-      'deal_name', 'stage', 'owner', 'activity_count', 'positive_signal', 
-      'strong_buy_signal', 'negative_signal', 'using_competitor', 'pricing_concerns', 'decision_maker'
+      'deal_name', 'positives', 'risks', 'stage', 'activity_count'
     ]));
   }, []);
 
@@ -923,15 +921,10 @@ const DealStageSelector: React.FC = () => {
   // Column display names mapping
   const columnDisplayNames = useMemo(() => ({
     deal_name: 'Deal Name',
+    positives: 'Positives',
+    risks: 'Risks',
     stage: 'Stage',
-    owner: 'Owner',
-    activity_count: 'Activity Count',
-    positive_signal: 'Positive Signal',
-    strong_buy_signal: 'Strong Buy Signal',
-    negative_signal: 'Negative Signal',
-    using_competitor: 'Competitor Mentions',
-    pricing_concerns: 'Pricing Concerns',
-    decision_maker: 'Decision Maker'
+    activity_count: 'Activity Count'
   }), []);
 
 
@@ -993,14 +986,14 @@ const DealStageSelector: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [selectedStage, dealsByStage, fetchSignals, loadSignalsFromStorage]);
 
-  // Auto-sort by positive_signal once signals data loads
+  // Auto-sort by positives once signals data loads
   useEffect(() => {
-    // Only auto-sort if we have signals data and we're not already sorted by positive_signal
+    // Only auto-sort if we have signals data and we're not already sorted by positives
     if (signalsData && Object.keys(signalsData).length > 0 && !signalsLoading) {
       const currentSort = sorting[0];
-      // If not already sorted by positive_signal, set it to descending
-      if (!currentSort || currentSort.id !== 'positive_signal') {
-        setSorting([{ id: 'positive_signal', desc: true }]);
+      // If not already sorted by positives, set it to descending
+      if (!currentSort || currentSort.id !== 'positives') {
+        setSorting([{ id: 'positives', desc: true }]);
       }
     }
   }, [signalsData, signalsLoading]);
@@ -1089,14 +1082,262 @@ const DealStageSelector: React.FC = () => {
     columnHelper.accessor('Deal_Name', {
       id: 'deal_name',
       header: 'Deal Name',
+      size: 250,
+      maxSize: 250,
       cell: info => (
-        <button
-          onClick={() => navigateToDealTimeline(info.getValue())}
-          className="font-medium text-sky-600 hover:text-sky-800 hover:underline text-left"
-        >
-          {info.getValue()}
-        </button>
+        <div className="max-w-[250px] truncate">
+          <button
+            onClick={() => navigateToDealTimeline(info.getValue())}
+            className="font-medium text-sky-600 hover:text-sky-800 hover:underline text-left truncate"
+            title={info.getValue()}
+          >
+            {info.getValue()}
+          </button>
+        </div>
       ),
+    }),
+    columnHelper.accessor((row) => {
+      const dealName = row.Deal_Name;
+      const signals = signalsData?.[dealName];
+      const hasNoCompetitorData = insightsData?.using_competitor_no_data?.includes(dealName) || false;
+      const hasCompetitor = insightsData?.using_competitor?.includes(dealName) || false;
+      const hasNoPricingData = insightsData?.pricing_concerns_no_data?.includes(dealName) || false;
+      const hasPricingConcerns = insightsData?.pricing_concerns?.includes(dealName) || false;
+      const hasNoDecisionMakerData = insightsData?.no_decision_maker_no_data?.includes(dealName) || false;
+      const noDecisionMaker = insightsData?.no_decision_maker?.includes(dealName) || false;
+
+      const buyingSignals = (signals?.likely_to_buy || 0) + (signals?.very_likely_to_buy || 0);
+
+      let count = buyingSignals;
+      if (!hasNoCompetitorData && !hasCompetitor) count += 1;
+      if (!hasNoPricingData && !hasPricingConcerns) count += 1;
+      if (!hasNoDecisionMakerData && !noDecisionMaker) count += 1;
+
+      return count;
+    }, {
+      id: 'positives',
+      header: 'Positives',
+      cell: info => {
+        const dealName = info.row.original.Deal_Name;
+        const signals = signalsData?.[dealName];
+        const hasNoCompetitorData = insightsData?.using_competitor_no_data?.includes(dealName) || false;
+        const hasCompetitor = insightsData?.using_competitor?.includes(dealName) || false;
+        const hasNoPricingData = insightsData?.pricing_concerns_no_data?.includes(dealName) || false;
+        const hasPricingConcerns = insightsData?.pricing_concerns?.includes(dealName) || false;
+        const hasNoDecisionMakerData = insightsData?.no_decision_maker_no_data?.includes(dealName) || false;
+        const noDecisionMaker = insightsData?.no_decision_maker?.includes(dealName) || false;
+
+        // Show loading if still loading data
+        if ((signalsLoading && !signals) || insightsLoading) {
+          return (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
+              <span className="text-gray-500 text-xs">Loading...</span>
+            </div>
+          );
+        }
+
+        const buyingSignals = (signals?.likely_to_buy || 0) + (signals?.very_likely_to_buy || 0);
+        const hasNoCompetitor = !hasNoCompetitorData && !hasCompetitor;
+        const hasNoPricing = !hasNoPricingData && !hasPricingConcerns;
+        const hasDecisionMaker = !hasNoDecisionMakerData && !noDecisionMaker;
+
+        const positivesCount =
+          buyingSignals +
+          (hasNoCompetitor ? 1 : 0) +
+          (hasNoPricing ? 1 : 0) +
+          (hasDecisionMaker ? 1 : 0);
+
+        // Build tooltip content - only show actual signals
+        const positiveSignals = [];
+        if (buyingSignals > 0) {
+          positiveSignals.push({
+            icon: '🎯',
+            title: 'Buying Signals',
+            value: `${buyingSignals} signal${buyingSignals > 1 ? 's' : ''}`,
+            color: 'bg-emerald-500'
+          });
+        }
+        if (hasNoCompetitor) {
+          positiveSignals.push({
+            icon: '🏆',
+            title: 'No Competitors',
+            color: 'bg-blue-500'
+          });
+        }
+        if (hasNoPricing) {
+          positiveSignals.push({
+            icon: '💰',
+            title: 'No Pricing Concerns',
+            color: 'bg-green-500'
+          });
+        }
+        if (hasDecisionMaker) {
+          positiveSignals.push({
+            icon: '👤',
+            title: 'Decision Maker Present',
+            color: 'bg-purple-500'
+          });
+        }
+
+        return (
+          <div className="group relative">
+            <div className={`inline-flex items-center justify-center min-w-[2.5rem] h-7 px-2.5 rounded-full text-xs font-medium cursor-pointer transition-all duration-300 border ${
+              positivesCount > 0
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 hover:shadow-sm'
+                : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+            }`}>
+              <span className="tabular-nums">{positivesCount}</span>
+            </div>
+            <div className="invisible group-hover:visible absolute z-[100] left-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
+              <div className="bg-gradient-to-r from-green-500 to-emerald-600 px-4 py-3">
+                <div className="font-semibold text-white text-sm">✨ Positive Signals</div>
+              </div>
+              <div className="p-3 max-h-96 overflow-y-auto">
+                {positiveSignals.length > 0 ? (
+                  <div className="space-y-3">
+                    {positiveSignals.map((signal, idx) => (
+                      <div key={idx} className="flex gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <div className={`flex-shrink-0 w-8 h-8 ${signal.color} rounded-lg flex items-center justify-center text-white text-sm`}>
+                          {signal.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-gray-900 text-xs">{signal.title}</div>
+                          {signal.value && <div className="text-xs text-green-700 font-medium mt-1">{signal.value}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-gray-500 text-sm">No positive signals detected</div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      },
+    }),
+    columnHelper.accessor((row) => {
+      const dealName = row.Deal_Name;
+      const signals = signalsData?.[dealName];
+      const hasNoCompetitorData = insightsData?.using_competitor_no_data?.includes(dealName) || false;
+      const hasCompetitor = insightsData?.using_competitor?.includes(dealName) || false;
+      const hasNoPricingData = insightsData?.pricing_concerns_no_data?.includes(dealName) || false;
+      const hasPricingConcerns = insightsData?.pricing_concerns?.includes(dealName) || false;
+      const hasNoDecisionMakerData = insightsData?.no_decision_maker_no_data?.includes(dealName) || false;
+      const noDecisionMaker = insightsData?.no_decision_maker?.includes(dealName) || false;
+
+      const lessLikelySignals = signals?.less_likely_to_buy || 0;
+
+      let count = 0;
+      if (!hasNoDecisionMakerData && noDecisionMaker) count += 1;
+      if (!hasNoCompetitorData && hasCompetitor) count += 1;
+      count += lessLikelySignals;
+      if (!hasNoPricingData && hasPricingConcerns) count += 1;
+
+      return count;
+    }, {
+      id: 'risks',
+      header: 'Risks',
+      cell: info => {
+        const dealName = info.row.original.Deal_Name;
+        const signals = signalsData?.[dealName];
+        const hasNoCompetitorData = insightsData?.using_competitor_no_data?.includes(dealName) || false;
+        const hasCompetitor = insightsData?.using_competitor?.includes(dealName) || false;
+        const hasNoPricingData = insightsData?.pricing_concerns_no_data?.includes(dealName) || false;
+        const hasPricingConcerns = insightsData?.pricing_concerns?.includes(dealName) || false;
+        const hasNoDecisionMakerData = insightsData?.no_decision_maker_no_data?.includes(dealName) || false;
+        const noDecisionMaker = insightsData?.no_decision_maker?.includes(dealName) || false;
+
+        // Show loading if still loading data
+        if ((signalsLoading && !signals) || insightsLoading) {
+          return (
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
+              <span className="text-gray-500 text-xs">Loading...</span>
+            </div>
+          );
+        }
+
+        const lessLikelySignals = signals?.less_likely_to_buy || 0;
+        const hasNoDecisionMakerFlag = !hasNoDecisionMakerData && noDecisionMaker;
+        const hasCompetitorFlag = !hasNoCompetitorData && hasCompetitor;
+        const hasPricingFlag = !hasNoPricingData && hasPricingConcerns;
+
+        const risksCount =
+          (hasNoDecisionMakerFlag ? 1 : 0) +
+          (hasCompetitorFlag ? 1 : 0) +
+          lessLikelySignals +
+          (hasPricingFlag ? 1 : 0);
+
+        // Build tooltip content - only show actual risks
+        const riskSignals = [];
+        if (hasNoDecisionMakerFlag) {
+          riskSignals.push({
+            icon: '⚠️',
+            title: 'No Decision Maker',
+            color: 'bg-orange-500'
+          });
+        }
+        if (hasCompetitorFlag) {
+          riskSignals.push({
+            icon: '🥊',
+            title: 'Competitor Mentioned',
+            color: 'bg-red-500'
+          });
+        }
+        if (lessLikelySignals > 0) {
+          riskSignals.push({
+            icon: '📉',
+            title: 'Less Likely to Buy',
+            value: `${lessLikelySignals} signal${lessLikelySignals > 1 ? 's' : ''}`,
+            color: 'bg-red-600'
+          });
+        }
+        if (hasPricingFlag) {
+          riskSignals.push({
+            icon: '💸',
+            title: 'Pricing Concerns',
+            color: 'bg-amber-500'
+          });
+        }
+
+        return (
+          <div className="group relative">
+            <div className={`inline-flex items-center justify-center min-w-[2.5rem] h-7 px-2.5 rounded-full text-xs font-medium cursor-pointer transition-all duration-300 border ${
+              risksCount > 0
+                ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 hover:border-rose-300 hover:shadow-sm'
+                : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+            }`}>
+              <span className="tabular-nums">{risksCount}</span>
+            </div>
+            <div className="invisible group-hover:visible absolute z-[100] right-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
+              <div className="bg-gradient-to-r from-red-500 to-rose-600 px-4 py-3">
+                <div className="font-semibold text-white text-sm">⚡ Risk Factors</div>
+              </div>
+              <div className="p-3 max-h-96 overflow-y-auto">
+                {riskSignals.length > 0 ? (
+                  <div className="space-y-3">
+                    {riskSignals.map((signal, idx) => (
+                      <div key={idx} className="flex gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <div className={`flex-shrink-0 w-8 h-8 ${signal.color} rounded-lg flex items-center justify-center text-white text-sm`}>
+                          {signal.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-gray-900 text-xs">{signal.title}</div>
+                          {signal.value && <div className="text-xs text-red-700 font-medium mt-1">{signal.value}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-gray-500 text-sm">No risk factors detected</div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      },
     }),
     columnHelper.accessor('Deal_Name', {
       id: 'stage',
@@ -1115,30 +1356,13 @@ const DealStageSelector: React.FC = () => {
         );
       },
     }),
-    columnHelper.accessor('Owner', {
-      id: 'owner',
-      header: 'Owner',
-      cell: info => {
-        const owner = info.getValue();
-        const bgColor = generateColor(owner);
-        const textColor = getTextColor(bgColor);
-        return (
-          <span
-            className="px-2 py-1 rounded-full text-xs font-medium"
-            style={{ backgroundColor: bgColor, color: textColor }}
-          >
-            {formatOwnerInitials(owner)}
-          </span>
-        );
-      },
-    }),
     columnHelper.accessor('Deal_Name', {
       id: 'activity_count',
       header: 'Activity Count',
       cell: info => {
         const dealName = info.getValue();
         const count = activityCounts[dealName];
-        
+
         if (activityCountsLoading) {
           return (
             <div className="flex items-center">
@@ -1147,202 +1371,19 @@ const DealStageSelector: React.FC = () => {
             </div>
           );
         }
-        
+
         if (count === undefined) {
           return <span className="text-gray-400">-</span>;
         }
-        
+
         if (count === 'N/A') {
           return <span className="text-gray-500">N/A</span>;
         }
-        
+
         return <span>{count}</span>;
       },
     }),
-    columnHelper.accessor((row) => {
-      const signals = signalsData?.[row.Deal_Name];
-      return signals ? signals.likely_to_buy : 0;
-    }, {
-      id: 'positive_signal',
-      header: 'Positive Signal',
-      cell: info => {
-        const dealName = info.row.original.Deal_Name;
-        const signals = signalsData?.[dealName];
-        
-        // Show loading only if we're still loading AND don't have data for this specific deal
-        if (signalsLoading && !signals) {
-          return (
-            <div className="flex items-center">
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
-              <span className="text-gray-500 text-xs">Loading...</span>
-            </div>
-          );
-        }
-        
-        if (!signals) {
-          return <span className="text-gray-400">-</span>;
-        }
-        
-        const value = signals.likely_to_buy;
-        if (value === 0) {
-          return <span>{value}</span>;
-        }
-        
-        return (
-          <span className="px-2 py-1 rounded-full text-xs font-medium bg-lime-600 text-white">
-            {value}
-          </span>
-        );
-      },
-    }),
-    columnHelper.accessor((row) => {
-      const signals = signalsData?.[row.Deal_Name];
-      return signals ? signals.very_likely_to_buy : 0;
-    }, {
-      id: 'strong_buy_signal',
-      header: 'Strong Buy Signal',
-      cell: info => {
-        const dealName = info.row.original.Deal_Name;
-        const signals = signalsData?.[dealName];
-        
-        // Show loading only if we're still loading AND don't have data for this specific deal
-        if (signalsLoading && !signals) {
-          return (
-            <div className="flex items-center">
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
-              <span className="text-gray-500 text-xs">Loading...</span>
-            </div>
-          );
-        }
-        
-        if (!signals) {
-          return <span className="text-gray-400">-</span>;
-        }
-        
-        const value = signals.very_likely_to_buy;
-        if (value === 0) {
-          return <span>{value}</span>;
-        }
-        
-        return (
-          <span className="px-2 py-1 rounded-full text-xs font-medium bg-emerald-500 text-white">
-            {value}
-          </span>
-        );
-      },
-    }),
-    columnHelper.accessor((row) => {
-      const signals = signalsData?.[row.Deal_Name];
-      return signals ? signals.less_likely_to_buy : 0;
-    }, {
-      id: 'negative_signal',
-      header: 'Negative Signal',
-      cell: info => {
-        const dealName = info.row.original.Deal_Name;
-        const signals = signalsData?.[dealName];
-        
-        // Show loading only if we're still loading AND don't have data for this specific deal
-        if (signalsLoading && !signals) {
-          return (
-            <div className="flex items-center">
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
-              <span className="text-gray-500 text-xs">Loading...</span>
-            </div>
-          );
-        }
-        
-        if (!signals) {
-          return <span className="text-gray-400">-</span>;
-        }
-        
-        const value = signals.less_likely_to_buy;
-        if (value === 0) {
-          return <span>{value}</span>;
-        }
-        
-        return (
-          <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-700 text-white">
-            {value}
-          </span>
-        );
-      },
-    }),
-    columnHelper.accessor('Deal_Name', {
-      id: 'using_competitor',
-      header: 'Competitor Mentions',
-      cell: info => {
-        const dealName = info.getValue();
-        const hasNoData = insightsData?.using_competitor_no_data?.includes(dealName) || false;
-        const hasCompetitor = insightsData?.using_competitor?.includes(dealName) || false;
-        
-        if (hasNoData) {
-          return (
-            <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-              N/A
-            </span>
-          );
-        }
-        
-        return (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-            hasCompetitor ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-          }`}>
-            {hasCompetitor ? 'Yes' : 'No'}
-          </span>
-        );
-      },
-    }),
-    columnHelper.accessor('Deal_Name', {
-      id: 'pricing_concerns',
-      header: 'Pricing Concerns?',
-      cell: info => {
-        const dealName = info.getValue();
-        const hasNoData = insightsData?.pricing_concerns_no_data?.includes(dealName) || false;
-        const hasPricingConcerns = insightsData?.pricing_concerns?.includes(dealName) || false;
-        
-        if (hasNoData) {
-          return (
-            <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-              N/A
-            </span>
-          );
-        }
-        
-        return (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-            hasPricingConcerns ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-          }`}>
-            {hasPricingConcerns ? 'Yes' : 'No'}
-          </span>
-        );
-      },
-    }),
-    columnHelper.accessor('Deal_Name', {
-      id: 'decision_maker',
-      header: 'Decision Maker?',
-      cell: info => {
-        const dealName = info.getValue();
-        const hasNoData = insightsData?.no_decision_maker_no_data?.includes(dealName) || false;
-        const noDecisionMaker = insightsData?.no_decision_maker?.includes(dealName) || false;
-        
-        if (hasNoData) {
-          return (
-            <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-              N/A
-            </span>
-          );
-        }
-        
-        return (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-            noDecisionMaker ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-          }`}>
-            {noDecisionMaker ? 'No' : 'Yes'}
-          </span>
-        );
-      },
-    }),
-  ], [columnHelper, navigateToDealTimeline, selectedStage, insightsData, activityCounts, activityCountsLoading, signalsData, signalsLoading]);
+  ], [columnHelper, navigateToDealTimeline, selectedStage, insightsData, activityCounts, activityCountsLoading, signalsData, signalsLoading, insightsLoading]);
 
   // Filter columns based on visibility
   const columns = useMemo(() => {
@@ -1413,7 +1454,7 @@ const DealStageSelector: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold">Deals Overview</h1>
@@ -1571,8 +1612,8 @@ const DealStageSelector: React.FC = () => {
               <p className="mt-3">Loading deals for {selectedStage}...</p>
             </div>
           ) : filteredDeals.length > 0 ? (
-            <div className="overflow-x-auto border border-gray-200 rounded-lg">
-              <table className="min-w-full bg-white" style={{ minWidth: '1200px' }}>
+            <div className="overflow-x-auto overflow-y-visible border border-gray-200 rounded-lg">
+                <table className="min-w-full bg-white" style={{ minWidth: '1200px' }}>
                 <thead className="bg-gray-100">
                   {table.getHeaderGroups().map(headerGroup => (
                     <tr key={headerGroup.id}>
@@ -1587,7 +1628,7 @@ const DealStageSelector: React.FC = () => {
                             className={`py-3 px-4 text-left font-medium text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors ${
                               isPinned ? 'sticky z-20 bg-gray-100 shadow-sm' : ''
                             }`}
-                            style={isPinned ? { left: leftPosition, minWidth: '200px' } : {}}
+                            style={isPinned ? { left: leftPosition, minWidth: '250px', maxWidth: '250px' } : {}}
                             onClick={header.column.getToggleSortingHandler()}
                           >
                             <div className="flex items-center justify-between">
@@ -1632,19 +1673,19 @@ const DealStageSelector: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {table.getRowModel().rows.map(row => (
-                    <tr key={row.id} className="hover:bg-gray-50">
+                    <tr key={row.id} className="hover:bg-sky-50 transition-colors">
                       {row.getVisibleCells().map((cell, index) => {
                         const isPinned = pinnedColumns.has(cell.column.id);
                         const pinnedIndex = Array.from(pinnedColumns).indexOf(cell.column.id);
                         const leftPosition = pinnedIndex >= 0 ? `${pinnedIndex * 250}px` : 'auto';
-                        
+
                         return (
-                          <td 
-                            key={cell.id} 
+                          <td
+                            key={cell.id}
                             className={`py-3 px-4 ${
-                              isPinned ? 'sticky z-20 bg-white shadow-sm' : ''
+                              isPinned ? 'sticky z-20 bg-white hover:bg-sky-50 shadow-sm transition-colors' : ''
                             }`}
-                            style={isPinned ? { left: leftPosition, minWidth: '200px' } : {}}
+                            style={isPinned ? { left: leftPosition, minWidth: '250px', maxWidth: '250px' } : {}}
                           >
                             {flexRender(
                               cell.column.columnDef.cell,

@@ -9,8 +9,8 @@ import LatestMeetings from './LatestMeetings';
 import UseCasesRisks from './UseCasesRisks';
 
 const ControlPanel: React.FC = () => {
-  const { state } = useAppState();
-  const { pipelineData } = state.controlPanel;
+  const { state, updateState } = useAppState();
+  const { pipelineData, loading } = state.controlPanel;
   const router = useRouter();
 
   // Add session management state
@@ -48,6 +48,97 @@ const ControlPanel: React.FC = () => {
     }
   }, []); // Empty dependency array = run once
 
+  // Utility function for making API calls with session management
+  const makeApiCall = useCallback(async (url: string, options: RequestInit = {}) => {
+    if (!isInitialized) {
+      console.log('Waiting for browser ID initialization...');
+      return null;
+    }
+
+    if (!browserId) {
+      console.error('Browser ID not initialized yet');
+      throw new Error('Browser ID not initialized');
+    }
+
+    const sessionId = localStorage.getItem('sessionId') || '';
+
+    const headers = {
+      'X-Browser-ID': browserId,
+      'X-Session-ID': sessionId,
+      ...options.headers,
+    };
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      });
+
+      // Store session ID from response headers if present
+      const newSessionId = response.headers.get('X-Session-ID');
+      if (newSessionId) {
+        localStorage.setItem('sessionId', newSessionId);
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API call failed: ${response.status} - ${errorText}`);
+      }
+
+      return response;
+    } catch (error) {
+      console.error('API call error:', error);
+      throw error;
+    }
+  }, [browserId, isInitialized]);
+
+  // Function to fetch pipeline data
+  const fetchPipelineData = useCallback(async () => {
+    try {
+      // Set loading state
+      updateState('controlPanel.loading', true);
+      updateState('controlPanel.error', null);
+
+      console.log('Fetching pipeline data...');
+
+      // Make the API call
+      const response = await makeApiCall(`${API_CONFIG.getApiPath('/pipeline-summary')}`);
+
+      if (response) {
+        const data = await response.json();
+        console.log('Pipeline data fetched:', data ? `${data.length} items` : 'no data');
+
+        // Update the state with the new data
+        updateState('controlPanel.pipelineData', data);
+        updateState('controlPanel.lastFetched', Date.now());
+      }
+
+      // Always update loading state regardless of result
+      updateState('controlPanel.loading', false);
+    } catch (error) {
+      console.error('Error fetching pipeline data:', error);
+      updateState('controlPanel.loading', false);
+      updateState('controlPanel.error', 'Failed to load pipeline data');
+    }
+  }, [updateState, makeApiCall]);
+
+  // Effect to load pipeline data on mount
+  useEffect(() => {
+    if (!isInitialized) return;
+
+    console.log('Pipeline data effect running', {
+      isInitialized,
+      hasPipelineData: pipelineData.length > 0,
+      loading
+    });
+
+    // Check if we need to load data
+    if (pipelineData.length === 0 && !loading) {
+      console.log('No pipeline data and not loading - fetching data');
+      const loadData = () => fetchPipelineData();
+      loadData();
+    }
+  }, [isInitialized, pipelineData.length, loading, fetchPipelineData]);
 
   // Format number as abbreviated currency (e.g., $7.5M, $155K)
   const formatAbbreviatedCurrency = (amount: number): string => {
@@ -189,22 +280,32 @@ const ControlPanel: React.FC = () => {
           
           {/* Cards Container */}
           <div className="flex gap-3">
-            {currentCards.map((stageData, index) => (
-              <div key={startIndex + index} className="bg-white dark:bg-slate-800 rounded-lg shadow p-4 flex flex-col items-center justify-center text-center transition-colors min-h-[120px] w-32 flex-shrink-0">
-                <h3 className="text-xs font-medium text-black dark:text-gray-400 mb-2 text-center leading-tight">
-                  <b>{getDisplayName(stageData.stage)}</b>
-                </h3>
-                <button 
-                  onClick={() => navigateToStageDetails(stageData.stage)}
-                  className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-1 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
-                >
-                  {stageData.count}
-                </button>
-                <p className="text-xs text-gray-500 dark:text-gray-400 text-center leading-tight">
-                  {formatAbbreviatedCurrency(stageData.amount)}
-                </p>
-              </div>
-            ))}
+            {currentCards.map((stageData, index) => {
+              // Determine background color based on stage
+              let bgColorClass = "bg-white dark:bg-slate-800";
+              if (stageData.stage === "3. Technical Validation" || stageData.stage === "4. Proposal & Negotiation") {
+                bgColorClass = "bg-red-50 dark:bg-red-950/20";
+              } else if (stageData.stage === "Closed Won") {
+                bgColorClass = "bg-green-50 dark:bg-green-950/20";
+              }
+
+              return (
+                <div key={startIndex + index} className={`${bgColorClass} rounded-lg shadow p-4 flex flex-col items-center text-center transition-colors min-h-[120px] w-32 flex-shrink-0`}>
+                  <h3 className="text-xs font-medium text-black dark:text-gray-400 mb-2 text-center leading-tight h-8 flex items-center justify-center">
+                    <b>{getDisplayName(stageData.stage)}</b>
+                  </h3>
+                  <button
+                    onClick={() => navigateToStageDetails(stageData.stage)}
+                    className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-1 hover:text-blue-800 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                  >
+                    {formatAbbreviatedCurrency(stageData.amount)}
+                  </button>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 text-center leading-tight">
+                    {stageData.count} {stageData.count === 1 ? 'deal' : 'deals'}
+                  </p>
+                </div>
+              );
+            })}
           </div>
           
           {/* Right Carat */}

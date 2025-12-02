@@ -29,7 +29,11 @@ interface UseCasesRisksProps {
 
 const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized }) => {
   const [stages, setStages] = useState<Stage[]>([]);
-  const [selectedStage, setSelectedStage] = useState<string | null>('3. Technical Validation');
+  const [selectedStages, setSelectedStages] = useState<string[]>([
+    '0. Identification',
+    '1. Sales Qualification',
+    '2. Needs Analysis & Solution Mapping'
+  ]);
   const [selectedDateRange, setSelectedDateRange] = useState<string | null>('3m');
   const [insightType, setInsightType] = useState<'use-cases' | 'risks' | null>('use-cases');
   const [loading, setLoading] = useState(false);
@@ -95,12 +99,12 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
 
   // Auto-load default insights on component mount
   useEffect(() => {
-    if (isInitialized && browserId && !hasAutoLoaded && selectedStage && selectedDateRange && insightType) {
+    if (isInitialized && browserId && !hasAutoLoaded && selectedStages.length > 0 && selectedDateRange && insightType) {
       console.log('Auto-loading insights for default selection');
       setHasAutoLoaded(true);
       handleGetInsights();
     }
-  }, [isInitialized, browserId, hasAutoLoaded, selectedStage, selectedDateRange, insightType]);
+  }, [isInitialized, browserId, hasAutoLoaded, selectedStages.length, selectedDateRange, insightType]);
 
   const fetchStages = async () => {
     setStagesLoading(true);
@@ -155,7 +159,7 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
   };
 
   const handleGetInsights = async () => {
-    if (!selectedStage || !selectedDateRange || !insightType) return;
+    if (selectedStages.length === 0 || !selectedDateRange || !insightType) return;
 
     setLoading(true);
     setError(null);
@@ -167,25 +171,50 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
 
       const { start_date, end_date } = calculateDateRange(option);
 
-      // Use Next.js API routes (proxy pattern)
-      const endpoint = insightType === 'use-cases'
-        ? `/api/hubspot/stage-insights/use-cases?stage=${encodeURIComponent(selectedStage)}&start_date=${start_date}&end_date=${end_date}`
-        : `/api/hubspot/stage-insights/risks?stage=${encodeURIComponent(selectedStage)}&start_date=${start_date}&end_date=${end_date}`;
+      // Fetch insights for each stage individually and merge results
+      const fetchPromises = selectedStages.map(async (stage) => {
+        const endpoint = insightType === 'use-cases'
+          ? `/api/hubspot/stage-insights/use-cases?stage=${encodeURIComponent(stage)}&start_date=${start_date}&end_date=${end_date}`
+          : `/api/hubspot/stage-insights/risks?stage=${encodeURIComponent(stage)}&start_date=${start_date}&end_date=${end_date}`;
 
-      console.log('Fetching insights from:', endpoint);
+        console.log('Fetching insights from:', endpoint);
 
-      const response = await fetch(endpoint, {
-        headers: {
-          'X-Browser-ID': browserId,
-          'X-Session-ID': localStorage.getItem('sessionId') || '',
-        },
+        const response = await fetch(endpoint, {
+          headers: {
+            'X-Browser-ID': browserId,
+            'X-Session-ID': localStorage.getItem('sessionId') || '',
+          },
+        });
+
+        if (response.ok) {
+          return response.json();
+        } else {
+          console.error(`Failed to fetch insights for stage: ${stage}`);
+          return null;
+        }
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setInsights(data);
+      const results = await Promise.all(fetchPromises);
+
+      // Merge all results into a single insights object
+      const mergedData: Record<string, any> = {};
+      let filters: any = null;
+
+      results.forEach((result) => {
+        if (result?.data) {
+          Object.keys(result.data).forEach((stage) => {
+            mergedData[stage] = result.data[stage];
+          });
+          if (!filters && result.filters) {
+            filters = result.filters;
+          }
+        }
+      });
+
+      if (Object.keys(mergedData).length > 0) {
+        setInsights({ data: mergedData, filters });
       } else {
-        setError('Failed to fetch insights');
+        setError('No insights found for the selected stages');
       }
     } catch (error) {
       console.error('Error fetching insights:', error);
@@ -195,23 +224,30 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
     }
   };
 
-  const isButtonEnabled = selectedStage && selectedDateRange && insightType;
+  const isButtonEnabled = selectedStages.length > 0 && selectedDateRange && insightType;
 
   const renderUseCases = () => {
-    if (!insights?.data || !selectedStage) return null;
+    if (!insights?.data || selectedStages.length === 0) return null;
 
-    const stageData = insights.data[selectedStage];
+    // Combine data from all selected stages
+    const allStageData: UseCase[] = [];
+    selectedStages.forEach(stage => {
+      const stageData = insights.data[stage];
+      if (Array.isArray(stageData)) {
+        allStageData.push(...stageData);
+      }
+    });
 
-    if (!stageData || !Array.isArray(stageData) || stageData.length === 0) {
+    if (allStageData.length === 0) {
       return (
         <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-          No use cases found for this stage and date range.
+          No use cases found for the selected stages and date range.
         </div>
       );
     }
 
     // Merge duplicate deal names by combining use cases
-    const mergedData = stageData.reduce((acc: Record<string, string[]>, item: UseCase) => {
+    const mergedData = allStageData.reduce((acc: Record<string, string[]>, item: UseCase) => {
       if (!acc[item.deal_name]) {
         acc[item.deal_name] = [];
       }
@@ -276,16 +312,7 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
   };
 
   const renderRisks = () => {
-    if (!insights?.data || !selectedStage) return null;
-
-    const stageData = insights.data[selectedStage];
-    if (!stageData || typeof stageData !== 'object') {
-      return (
-        <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-          No risks found for this stage and date range.
-        </div>
-      );
-    }
+    if (!insights?.data || selectedStages.length === 0) return null;
 
     const allRisks: Array<{ dealName: string; riskType: string; explanation: string }> = [];
     const availableRiskTypes: string[] = [];
@@ -296,17 +323,25 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
     };
 
     try {
-      Object.keys(stageData).forEach(riskType => {
-        const riskItems = stageData[riskType];
-        if (Array.isArray(riskItems) && riskItems.length > 0) {
-          const displayRiskType = getDisplayRiskType(riskType);
-          availableRiskTypes.push(displayRiskType);
-          riskItems.forEach((item: RiskItem) => {
-            allRisks.push({
-              dealName: item.deal_name,
-              riskType: displayRiskType,
-              explanation: item.explanation,
-            });
+      // Process data from all selected stages
+      selectedStages.forEach(stage => {
+        const stageData = insights.data[stage];
+        if (stageData && typeof stageData === 'object') {
+          Object.keys(stageData).forEach(riskType => {
+            const riskItems = stageData[riskType];
+            if (Array.isArray(riskItems) && riskItems.length > 0) {
+              const displayRiskType = getDisplayRiskType(riskType);
+              if (!availableRiskTypes.includes(displayRiskType)) {
+                availableRiskTypes.push(displayRiskType);
+              }
+              riskItems.forEach((item: RiskItem) => {
+                allRisks.push({
+                  dealName: item.deal_name,
+                  riskType: displayRiskType,
+                  explanation: item.explanation,
+                });
+              });
+            }
           });
         }
       });
@@ -322,7 +357,7 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
     if (allRisks.length === 0) {
       return (
         <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-          No risks found for this stage and date range.
+          No risks found for the selected stages and date range.
         </div>
       );
     }
@@ -495,38 +530,169 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
     <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6 transition-colors">
       <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Pipe Insights</h2>
 
-      {/* Compact Single Row Filters */}
-      <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-4 mb-6">
-        <div className="flex flex-wrap items-center gap-6">
-          {/* Stage Selector */}
-          <div className="flex items-center gap-3">
-            <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
-              Stage
-            </label>
-            {stagesLoading ? (
-              <div className="flex items-center h-10">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-              </div>
-            ) : (
-              <select
-                value={selectedStage || ''}
-                onChange={(e) => setSelectedStage(e.target.value)}
-                className="inline-block px-3 py-2 bg-white dark:bg-slate-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-colors"
-                style={{ width: 'auto', minWidth: '200px' }}
-              >
-                <option value="">Select stage...</option>
-                {stages.map((stage) => (
-                  <option key={stage.stage_name} value={stage.stage_name}>
-                    {stage.stage_name}
-                  </option>
-                ))}
-              </select>
-            )}
+      {/* Filters */}
+      <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-4 mb-6 space-y-4">
+        {/* Stage Multi-Select - Grouped by Funnel */}
+        {stagesLoading ? (
+          <div className="flex justify-center items-center h-8">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
           </div>
+        ) : (
+          <div className="space-y-2">
+            {/* Top of Funnel */}
+            {(() => {
+              const topStages = ['0. Identification', '1. Sales Qualification', '2. Needs Analysis & Solution Mapping'];
+              const existingTopStages = topStages.filter(s => stages.some(st => st.stage_name === s));
+              const allTopSelected = existingTopStages.length > 0 && existingTopStages.every(s => selectedStages.includes(s)) && selectedStages.every(s => existingTopStages.includes(s));
+              return (
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    onClick={() => {
+                      setSelectedStages(allTopSelected ? [] : [...existingTopStages]);
+                    }}
+                    className={`text-xs font-medium w-12 cursor-pointer transition-all ${
+                      allTopSelected
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200 px-2 py-0.5 rounded-full'
+                        : 'text-green-600 dark:text-green-400 hover:underline'
+                    }`}
+                  >
+                    Top
+                  </button>
+                  <div className="flex flex-wrap gap-1">
+                    {topStages.map((stageName) => {
+                      const isSelected = selectedStages.includes(stageName);
+                      const stageExists = stages.some(s => s.stage_name === stageName);
+                      if (!stageExists) return null;
+                      return (
+                        <button
+                          key={stageName}
+                          onClick={() => {
+                            setSelectedStages(prev =>
+                              isSelected
+                                ? prev.filter(s => s !== stageName)
+                                : [...prev, stageName]
+                            );
+                          }}
+                          className={`px-2.5 py-0.5 rounded-full text-xs transition-all ${
+                            isSelected
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200'
+                              : 'bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          {stageName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
-          {/* Vertical Divider */}
-          <div className="h-8 w-px bg-gray-300 dark:bg-gray-600"></div>
+            {/* Mid Funnel */}
+            {(() => {
+              const midStages = ['3. Technical Validation', '4. Proposal & Negotiation', 'Proposal'];
+              const existingMidStages = midStages.filter(s => stages.some(st => st.stage_name === s));
+              const allMidSelected = existingMidStages.length > 0 && existingMidStages.every(s => selectedStages.includes(s)) && selectedStages.every(s => existingMidStages.includes(s));
+              return (
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    onClick={() => {
+                      setSelectedStages(allMidSelected ? [] : [...existingMidStages]);
+                    }}
+                    className={`text-xs font-medium w-12 cursor-pointer transition-all ${
+                      allMidSelected
+                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200 px-2 py-0.5 rounded-full'
+                        : 'text-yellow-600 dark:text-yellow-400 hover:underline'
+                    }`}
+                  >
+                    Mid
+                  </button>
+                  <div className="flex flex-wrap gap-1">
+                    {midStages.map((stageName) => {
+                      const isSelected = selectedStages.includes(stageName);
+                      const stageExists = stages.some(s => s.stage_name === stageName);
+                      if (!stageExists) return null;
+                      return (
+                        <button
+                          key={stageName}
+                          onClick={() => {
+                            setSelectedStages(prev =>
+                              isSelected
+                                ? prev.filter(s => s !== stageName)
+                                : [...prev, stageName]
+                            );
+                          }}
+                          className={`px-2.5 py-0.5 rounded-full text-xs transition-all ${
+                            isSelected
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200'
+                              : 'bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          {stageName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
+            {/* Bottom Funnel */}
+            {(() => {
+              const bottomStages = ['Assessment', 'Closed Active Nurture', 'Closed Lost', 'Closed Marketing Nurture', 'Closed Won', 'Renew/Closed won', 'Churned'];
+              const existingBottomStages = bottomStages.filter(s => stages.some(st => st.stage_name === s));
+              const allBottomSelected = existingBottomStages.length > 0 && existingBottomStages.every(s => selectedStages.includes(s)) && selectedStages.every(s => existingBottomStages.includes(s));
+              return (
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    onClick={() => {
+                      setSelectedStages(allBottomSelected ? [] : [...existingBottomStages]);
+                    }}
+                    className={`text-xs font-medium w-12 cursor-pointer transition-all ${
+                      allBottomSelected
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200 px-2 py-0.5 rounded-full'
+                        : 'text-red-600 dark:text-red-400 hover:underline'
+                    }`}
+                  >
+                    Bottom
+                  </button>
+                  <div className="flex flex-wrap gap-1">
+                    {bottomStages.map((stageName) => {
+                      const isSelected = selectedStages.includes(stageName);
+                      const stageExists = stages.some(s => s.stage_name === stageName);
+                      if (!stageExists) return null;
+                      return (
+                        <button
+                          key={stageName}
+                          onClick={() => {
+                            setSelectedStages(prev =>
+                              isSelected
+                                ? prev.filter(s => s !== stageName)
+                                : [...prev, stageName]
+                            );
+                          }}
+                          className={`px-2.5 py-0.5 rounded-full text-xs transition-all ${
+                            isSelected
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200'
+                              : 'bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          {stageName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* Horizontal Divider */}
+        <div className="h-px bg-gray-300 dark:bg-gray-600"></div>
+
+        {/* Second Row - Date Range, Type, and Get Insights */}
+        <div className="flex flex-wrap items-center justify-center gap-6">
           {/* Date Range Buttons */}
           <div className="flex items-center gap-3">
             <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
@@ -657,7 +823,7 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
                 <span className="inline-block animate-bounce ml-0.5" style={{ animationDelay: '0.2s' }}>.</span>
               </p>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                Analyzing {insightType === 'use-cases' ? 'use cases' : 'risks'} for {selectedStage}
+                Analyzing {insightType === 'use-cases' ? 'use cases' : 'risks'} for {selectedStages.length} stage{selectedStages.length !== 1 ? 's' : ''}
               </p>
             </div>
           </div>
@@ -669,7 +835,7 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
         <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {insightType === 'use-cases' ? 'Use Cases' : 'Risks'} - {selectedStage}
+              {insightType === 'use-cases' ? 'Use Cases' : 'Risks'} - {selectedStages.length} stage{selectedStages.length !== 1 ? 's' : ''}
             </h3>
             <span className="text-sm text-gray-500 dark:text-gray-400">
               {insights.filters?.start_date} to {insights.filters?.end_date}

@@ -427,6 +427,15 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
     }
   };
 
+  // Format sentiment from snake_case to Title Case
+  const formatSentiment = (sentiment: string): string => {
+    if (!sentiment) return 'N/A';
+    return sentiment
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
   // Get signal color
   const getSignalColor = (signalType: string): { bg: string; text: string; border: string } => {
     const colors: Record<string, { bg: string; text: string; border: string }> = {
@@ -1142,7 +1151,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
           {/* Desktop Table View */}
           <div className="hidden md:block overflow-x-auto max-h-80 overflow-y-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr>
                   <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-[8%]">
                     Insights
@@ -1153,10 +1162,13 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                   <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-[40%]">
                     TLDR
                   </th>
-                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-[15%]">
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-[12%]">
                     Date
                   </th>
-                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-[12%]">
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-[15%]">
+                    Pulse of Meeting
+                  </th>
+                  <th className="px-4 py-3 bg-gray-50 dark:bg-slate-700 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-[10%]">
                     Signal
                   </th>
 
@@ -1251,6 +1263,11 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                         {formatDate(meeting.event_date)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                          {formatSentiment(meeting.sentiment)}
+                        </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${buyerIntentBadge.color}`}>

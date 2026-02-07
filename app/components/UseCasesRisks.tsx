@@ -1,7 +1,7 @@
 // app/components/UseCasesRisks.tsx
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { API_CONFIG } from '../utils/config';
 
 interface Stage {
@@ -41,8 +41,23 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
   const [insights, setInsights] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingTextIndex, setLoadingTextIndex] = useState(0);
-  const [hasAutoLoaded, setHasAutoLoaded] = useState(false);
   const [selectedRiskTypes, setSelectedRiskTypes] = useState<string[]>([]);
+  const [lastTouchPoints, setLastTouchPoints] = useState<Record<string, string>>({});
+  const [dealOwners, setDealOwners] = useState<Record<string, string>>({});
+  const [overviewDeal, setOverviewDeal] = useState<string | null>(null);
+  const [overviewContent, setOverviewContent] = useState<string | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [overviewCache, setOverviewCache] = useState<Record<string, string>>({});
+  const [overviewAbove, setOverviewAbove] = useState(false);
+  const overviewButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  const overviewBtnRefCallback = useCallback((node: HTMLButtonElement | null) => {
+    overviewButtonRef.current = node;
+    if (node) {
+      const rect = node.getBoundingClientRect();
+      setOverviewAbove(rect.bottom + 250 > window.innerHeight);
+    }
+  }, [overviewDeal]);
 
   const loadingTexts = [
     'Cogitating',
@@ -76,12 +91,156 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
     }
   }, [isInitialized, browserId]);
 
-  // Clear insights when insight type changes
+  // Auto-fetch insights when any filter changes
   useEffect(() => {
-    setInsights(null);
-    setError(null);
-    setSelectedRiskTypes([]); // Reset risk type filters
-  }, [insightType]);
+    if (!isInitialized || !browserId) return;
+    if (selectedStages.length === 0 || !selectedDateRange || !insightType) return;
+
+    setSelectedRiskTypes([]);
+    handleGetInsights();
+  }, [selectedStages, selectedDateRange, insightType, isInitialized, browserId]);
+
+  // Format a date string as "x days ago"
+  const formatTimeAgo = (dateStr: string): string => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return '1d ago';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffDays < 30) {
+      const weeks = Math.floor(diffDays / 7);
+      return `${weeks}w ago`;
+    }
+    const months = Math.floor(diffDays / 30);
+    return `${months}mo ago`;
+  };
+
+  const fetchOverview = async (dealName: string) => {
+    if (overviewDeal === dealName) {
+      setOverviewDeal(null);
+      return;
+    }
+    setOverviewDeal(dealName);
+    if (overviewCache[dealName]) {
+      setOverviewContent(overviewCache[dealName]);
+      return;
+    }
+    setOverviewLoading(true);
+    setOverviewContent(null);
+    try {
+      const response = await fetch(
+        `${API_CONFIG.getApiPath('/company-overview')}?dealName=${encodeURIComponent(dealName)}`,
+        {
+          headers: {
+            'X-Browser-ID': browserId,
+            'X-Session-ID': localStorage.getItem('sessionId') || '',
+          },
+        }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.company_overview || data.overview || JSON.stringify(data);
+        setOverviewContent(content);
+        setOverviewCache(prev => ({ ...prev, [dealName]: content }));
+      } else {
+        setOverviewContent('Failed to load overview.');
+      }
+    } catch {
+      setOverviewContent('Failed to load overview.');
+    } finally {
+      setOverviewLoading(false);
+    }
+  };
+
+  // Fetch last touch point dates when insights change
+  useEffect(() => {
+    if (!insights?.data || !isInitialized || !browserId) return;
+
+    const dealNames = new Set<string>();
+    selectedStages.forEach(stage => {
+      const stageData = insights.data[stage];
+      if (Array.isArray(stageData)) {
+        stageData.forEach((item: any) => dealNames.add(item.deal_name));
+      } else if (stageData && typeof stageData === 'object') {
+        Object.values(stageData).forEach((items: any) => {
+          if (Array.isArray(items)) {
+            items.forEach((item: any) => dealNames.add(item.deal_name));
+          }
+        });
+      }
+    });
+
+    if (dealNames.size === 0) return;
+
+    let cancelled = false;
+
+    const fetchTouchPoints = async () => {
+      const results: Record<string, string> = {};
+
+      const promises = Array.from(dealNames).map(async (dealName) => {
+        try {
+          const response = await fetch(
+            `${API_CONFIG.getApiPath('/deal-timeline')}?dealName=${encodeURIComponent(dealName)}`,
+            {
+              headers: {
+                'X-Browser-ID': browserId,
+                'X-Session-ID': localStorage.getItem('sessionId') || '',
+              },
+            }
+          );
+          if (response.ok) {
+            const data = await response.json();
+            if (data.events && data.events.length > 0) {
+              let latestDate = '';
+              data.events.forEach((event: any) => {
+                const d = event.event_date || event.date_str || '';
+                if (d > latestDate) latestDate = d;
+              });
+              if (latestDate) results[dealName] = latestDate;
+            }
+          }
+        } catch (err) {
+          console.error(`Error fetching timeline for ${dealName}:`, err);
+        }
+      });
+
+      await Promise.all(promises);
+      if (!cancelled) setLastTouchPoints(results);
+    };
+
+    const fetchDealOwners = async () => {
+      const results: Record<string, string> = {};
+
+      const promises = Array.from(dealNames).map(async (dealName) => {
+        try {
+          const response = await fetch(
+            `${API_CONFIG.getApiPath('/deal-info')}?dealName=${encodeURIComponent(dealName)}`,
+            {
+              headers: {
+                'X-Browser-ID': browserId,
+                'X-Session-ID': localStorage.getItem('sessionId') || '',
+              },
+            }
+          );
+          if (response.ok) {
+            const data = await response.json();
+            if (data.dealOwner) results[dealName] = data.dealOwner;
+          }
+        } catch (err) {
+          console.error(`Error fetching deal info for ${dealName}:`, err);
+        }
+      });
+
+      await Promise.all(promises);
+      if (!cancelled) setDealOwners(results);
+    };
+
+    fetchTouchPoints();
+    fetchDealOwners();
+    return () => { cancelled = true; };
+  }, [insights, isInitialized, browserId, selectedStages]);
 
   // Rotate loading text while loading
   useEffect(() => {
@@ -97,14 +256,6 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
     return () => clearInterval(interval);
   }, [loading, loadingTexts.length]);
 
-  // Auto-load default insights on component mount
-  useEffect(() => {
-    if (isInitialized && browserId && !hasAutoLoaded && selectedStages.length > 0 && selectedDateRange && insightType) {
-      console.log('Auto-loading insights for default selection');
-      setHasAutoLoaded(true);
-      handleGetInsights();
-    }
-  }, [isInitialized, browserId, hasAutoLoaded, selectedStages.length, selectedDateRange, insightType]);
 
   const fetchStages = async () => {
     setStagesLoading(true);
@@ -224,8 +375,6 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
     }
   };
 
-  const isButtonEnabled = selectedStages.length > 0 && selectedDateRange && insightType;
-
   const renderUseCases = () => {
     if (!insights?.data || selectedStages.length === 0) return null;
 
@@ -265,43 +414,99 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
     }));
 
     return (
-      <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-slate-700 sticky top-0 z-10">
+      <div className="overflow-x-auto max-h-[400px] overflow-y-auto rounded-md border border-gray-100 dark:border-slate-700">
+        <table className="min-w-full">
+          <thead className="sticky top-0 z-10 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-600">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                Deal Name
+              <th className="px-4 py-2 text-left text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide w-1/4">
+                Deal
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th className="px-4 py-2 text-left text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">
                 Use Cases
+              </th>
+              <th className="px-4 py-2 text-left text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide w-28">
+                Owner
+              </th>
+              <th className="px-4 py-2 text-right text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide w-24">
+                Last Touch
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-gray-700">
+          <tbody className="divide-y divide-gray-50 dark:divide-slate-700/50">
             {deduplicatedData.map((item, index: number) => (
-              <tr key={index} className="hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                  <div className="flex items-center gap-2">
-                    <span>{item.deal_name}</span>
+              <tr key={index} className="group hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                <td className="px-4 py-2 align-top">
+                  <div className="flex items-center gap-1.5">
                     <a
                       href={`/deal-timeline?deal=${encodeURIComponent(item.deal_name)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors"
+                      className="text-[13px] font-medium text-gray-800 dark:text-gray-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                       title="Open deal timeline"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
+                      {item.deal_name}
                     </a>
+                    <div className="relative">
+                      <button
+                        ref={overviewDeal === item.deal_name ? overviewBtnRefCallback : undefined}
+                        onClick={() => fetchOverview(item.deal_name)}
+                        className="p-0.5 text-violet-300 hover:text-violet-500 transition-colors rounded cursor-pointer"
+                        title="Latest activity"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M9 4a1 1 0 011.414 0l1.293 1.293a1 1 0 00.707.293H14a1 1 0 011 1v1.586a1 1 0 00.293.707L16.586 10A1 1 0 0116.586 11.414l-1.293 1.293a1 1 0 00-.293.707V15a1 1 0 01-1 1h-1.586a1 1 0 00-.707.293L10.414 17.586A1 1 0 019 17.586l-1.293-1.293A1 1 0 007 16H5.414a1 1 0 01-1-1v-1.586a1 1 0 00-.293-.707L2.828 11.414a1 1 0 010-1.414L4.121 8.707A1 1 0 004.414 8V6.414a1 1 0 011-1H7a1 1 0 00.707-.293L9 3.828z" />
+                          <path d="M17.5 13a.5.5 0 01.462.308l.58 1.42 1.42.58a.5.5 0 010 .924l-1.42.58-.58 1.42a.5.5 0 01-.924 0l-.58-1.42-1.42-.58a.5.5 0 010-.924l1.42-.58.58-1.42A.5.5 0 0117.5 13z" />
+                          <path d="M20 8a.5.5 0 01.429.243l.321.536.536.321a.5.5 0 010 .858l-.536.321-.321.536a.5.5 0 01-.858 0l-.321-.536-.536-.321a.5.5 0 010-.858l.536-.321.321-.536A.5.5 0 0120 8z" />
+                        </svg>
+                      </button>
+                      {overviewDeal === item.deal_name && (
+                        <div className={`absolute left-0 z-50 w-80 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-600 p-3 ${overviewAbove ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider truncate mr-2">{item.deal_name} - Latest Activity</span>
+                            <button
+                              onClick={() => setOverviewDeal(null)}
+                              className="p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                          {overviewLoading ? (
+                            <div className="flex items-center gap-2 py-3">
+                              <span className="text-violet-500 text-sm animate-spin inline-block">✻</span>
+                              <span className="text-xs text-gray-400">Loading overview...</span>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">{overviewContent}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
-                  <ul className="list-disc list-inside space-y-1">
-                    {item.use_cases.map((useCase, idx) => (
-                      <li key={idx}>{useCase}</li>
-                    ))}
-                  </ul>
+                <td className="px-4 py-2 text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">
+                  {item.use_cases.map((useCase, idx) => (
+                    <span key={idx}>
+                      {useCase}{idx < item.use_cases.length - 1 && <span className="mx-1.5 text-gray-300 dark:text-gray-600">&middot;</span>}
+                    </span>
+                  ))}
+                </td>
+                <td className="px-4 py-2 align-top whitespace-nowrap">
+                  {dealOwners[item.deal_name] ? (
+                    <span className="text-[12px] text-gray-600 dark:text-gray-400">{dealOwners[item.deal_name]}</span>
+                  ) : (
+                    <span className="inline-block w-3 h-3 rounded-full border-2 border-gray-200 dark:border-gray-600 border-t-gray-400 dark:border-t-gray-400 animate-spin" />
+                  )}
+                </td>
+                <td className="px-4 py-2 text-right align-top whitespace-nowrap">
+                  {lastTouchPoints[item.deal_name] ? (
+                    <span className="text-[12px] text-gray-500 dark:text-gray-400">
+                      {formatTimeAgo(lastTouchPoints[item.deal_name])}
+                    </span>
+                  ) : (
+                    <span className="inline-block w-3 h-3 rounded-full border-2 border-gray-200 dark:border-gray-600 border-t-gray-400 dark:border-t-gray-400 animate-spin" />
+                  )}
                 </td>
               </tr>
             ))}
@@ -494,6 +699,43 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                           </svg>
                         </a>
+                        <div className="relative">
+                          <button
+                            ref={overviewDeal === item.dealName ? overviewBtnRefCallback : undefined}
+                            onClick={() => fetchOverview(item.dealName)}
+                            className="p-0.5 text-violet-300 hover:text-violet-500 transition-colors rounded cursor-pointer"
+                            title="Latest activity"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M9 4a1 1 0 011.414 0l1.293 1.293a1 1 0 00.707.293H14a1 1 0 011 1v1.586a1 1 0 00.293.707L16.586 10A1 1 0 0116.586 11.414l-1.293 1.293a1 1 0 00-.293.707V15a1 1 0 01-1 1h-1.586a1 1 0 00-.707.293L10.414 17.586A1 1 0 019 17.586l-1.293-1.293A1 1 0 007 16H5.414a1 1 0 01-1-1v-1.586a1 1 0 00-.293-.707L2.828 11.414a1 1 0 010-1.414L4.121 8.707A1 1 0 004.414 8V6.414a1 1 0 011-1H7a1 1 0 00.707-.293L9 3.828z" />
+                              <path d="M17.5 13a.5.5 0 01.462.308l.58 1.42 1.42.58a.5.5 0 010 .924l-1.42.58-.58 1.42a.5.5 0 01-.924 0l-.58-1.42-1.42-.58a.5.5 0 010-.924l1.42-.58.58-1.42A.5.5 0 0117.5 13z" />
+                              <path d="M20 8a.5.5 0 01.429.243l.321.536.536.321a.5.5 0 010 .858l-.536.321-.321.536a.5.5 0 01-.858 0l-.321-.536-.536-.321a.5.5 0 010-.858l.536-.321.321-.536A.5.5 0 0120 8z" />
+                            </svg>
+                          </button>
+                          {overviewDeal === item.dealName && (
+                            <div className={`absolute left-0 z-50 w-80 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-600 p-3 ${overviewAbove ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider truncate mr-2">{item.dealName} - Latest Activity</span>
+                                <button
+                                  onClick={() => setOverviewDeal(null)}
+                                  className="p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                              {overviewLoading ? (
+                                <div className="flex items-center gap-2 py-3">
+                                  <span className="text-violet-500 text-sm animate-spin inline-block">✻</span>
+                                  <span className="text-xs text-gray-400">Loading overview...</span>
+                                </div>
+                              ) : (
+                                <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">{overviewContent}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
@@ -538,152 +780,33 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
           </div>
         ) : (
-          <div className="space-y-2">
-            {/* Top of Funnel */}
+          <div className="flex items-center justify-center gap-2">
             {(() => {
-              const topStages = ['0. Identification', '1. Sales Qualification', '2. Needs Analysis & Solution Mapping'];
-              const existingTopStages = topStages.filter(s => stages.some(st => st.stage_name === s));
-              const allTopSelected = existingTopStages.length > 0 && existingTopStages.every(s => selectedStages.includes(s)) && selectedStages.every(s => existingTopStages.includes(s));
-              return (
-                <div className="flex items-center justify-center gap-3">
+              const funnelGroups = [
+                { label: 'Top of Funnel', stages: ['0. Identification', '1. Sales Qualification', '2. Needs Analysis & Solution Mapping'], color: 'green' },
+                { label: 'Mid Funnel', stages: ['3. Technical Validation', '4. Proposal & Negotiation', 'Proposal'], color: 'yellow' },
+                { label: 'Bottom of Funnel', stages: ['Assessment', 'Closed Active Nurture', 'Closed Lost', 'Closed Marketing Nurture', 'Closed Won', 'Renew/Closed won', 'Churned'], color: 'red' },
+              ];
+              return funnelGroups.map(({ label, stages: groupStages, color }) => {
+                const existingStages = groupStages.filter(s => stages.some(st => st.stage_name === s));
+                const isSelected = existingStages.length > 0 && existingStages.every(s => selectedStages.includes(s)) && selectedStages.every(s => existingStages.includes(s));
+                const colorMap: Record<string, { active: string; inactive: string }> = {
+                  green: { active: 'bg-green-100 text-green-700 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700', inactive: 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700' },
+                  yellow: { active: 'bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900 dark:text-yellow-200 dark:border-yellow-700', inactive: 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700' },
+                  red: { active: 'bg-red-100 text-red-700 border-red-300 dark:bg-red-900 dark:text-red-200 dark:border-red-700', inactive: 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700' },
+                };
+                return (
                   <button
-                    onClick={() => {
-                      setSelectedStages(allTopSelected ? [] : [...existingTopStages]);
-                    }}
-                    className={`text-xs font-medium w-12 cursor-pointer transition-all ${
-                      allTopSelected
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200 px-2 py-0.5 rounded-full'
-                        : 'text-green-600 dark:text-green-400 hover:underline'
+                    key={label}
+                    onClick={() => setSelectedStages(isSelected ? [] : [...existingStages])}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border cursor-pointer transition-all ${
+                      isSelected ? colorMap[color].active : colorMap[color].inactive
                     }`}
                   >
-                    Top
+                    {label}
                   </button>
-                  <div className="flex flex-wrap gap-1">
-                    {topStages.map((stageName) => {
-                      const isSelected = selectedStages.includes(stageName);
-                      const stageExists = stages.some(s => s.stage_name === stageName);
-                      if (!stageExists) return null;
-                      return (
-                        <button
-                          key={stageName}
-                          onClick={() => {
-                            setSelectedStages(prev =>
-                              isSelected
-                                ? prev.filter(s => s !== stageName)
-                                : [...prev, stageName]
-                            );
-                          }}
-                          className={`px-2.5 py-0.5 rounded-full text-xs transition-all ${
-                            isSelected
-                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200'
-                              : 'bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'
-                          }`}
-                        >
-                          {stageName}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Mid Funnel */}
-            {(() => {
-              const midStages = ['3. Technical Validation', '4. Proposal & Negotiation', 'Proposal'];
-              const existingMidStages = midStages.filter(s => stages.some(st => st.stage_name === s));
-              const allMidSelected = existingMidStages.length > 0 && existingMidStages.every(s => selectedStages.includes(s)) && selectedStages.every(s => existingMidStages.includes(s));
-              return (
-                <div className="flex items-center justify-center gap-3">
-                  <button
-                    onClick={() => {
-                      setSelectedStages(allMidSelected ? [] : [...existingMidStages]);
-                    }}
-                    className={`text-xs font-medium w-12 cursor-pointer transition-all ${
-                      allMidSelected
-                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200 px-2 py-0.5 rounded-full'
-                        : 'text-yellow-600 dark:text-yellow-400 hover:underline'
-                    }`}
-                  >
-                    Mid
-                  </button>
-                  <div className="flex flex-wrap gap-1">
-                    {midStages.map((stageName) => {
-                      const isSelected = selectedStages.includes(stageName);
-                      const stageExists = stages.some(s => s.stage_name === stageName);
-                      if (!stageExists) return null;
-                      return (
-                        <button
-                          key={stageName}
-                          onClick={() => {
-                            setSelectedStages(prev =>
-                              isSelected
-                                ? prev.filter(s => s !== stageName)
-                                : [...prev, stageName]
-                            );
-                          }}
-                          className={`px-2.5 py-0.5 rounded-full text-xs transition-all ${
-                            isSelected
-                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200'
-                              : 'bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'
-                          }`}
-                        >
-                          {stageName}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Bottom Funnel */}
-            {(() => {
-              const bottomStages = ['Assessment', 'Closed Active Nurture', 'Closed Lost', 'Closed Marketing Nurture', 'Closed Won', 'Renew/Closed won', 'Churned'];
-              const existingBottomStages = bottomStages.filter(s => stages.some(st => st.stage_name === s));
-              const allBottomSelected = existingBottomStages.length > 0 && existingBottomStages.every(s => selectedStages.includes(s)) && selectedStages.every(s => existingBottomStages.includes(s));
-              return (
-                <div className="flex items-center justify-center gap-3">
-                  <button
-                    onClick={() => {
-                      setSelectedStages(allBottomSelected ? [] : [...existingBottomStages]);
-                    }}
-                    className={`text-xs font-medium w-12 cursor-pointer transition-all ${
-                      allBottomSelected
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200 px-2 py-0.5 rounded-full'
-                        : 'text-red-600 dark:text-red-400 hover:underline'
-                    }`}
-                  >
-                    Bottom
-                  </button>
-                  <div className="flex flex-wrap gap-1">
-                    {bottomStages.map((stageName) => {
-                      const isSelected = selectedStages.includes(stageName);
-                      const stageExists = stages.some(s => s.stage_name === stageName);
-                      if (!stageExists) return null;
-                      return (
-                        <button
-                          key={stageName}
-                          onClick={() => {
-                            setSelectedStages(prev =>
-                              isSelected
-                                ? prev.filter(s => s !== stageName)
-                                : [...prev, stageName]
-                            );
-                          }}
-                          className={`px-2.5 py-0.5 rounded-full text-xs transition-all ${
-                            isSelected
-                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200'
-                              : 'bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'
-                          }`}
-                        >
-                          {stageName}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
+                );
+              });
             })()}
           </div>
         )}
@@ -753,33 +876,6 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
             </div>
           </div>
 
-          {/* Vertical Divider */}
-          <div className="h-8 w-px bg-gray-300 dark:bg-gray-600"></div>
-
-          {/* Get Insights Button */}
-          <button
-            onClick={handleGetInsights}
-            disabled={!isButtonEnabled || loading}
-            className={`px-6 py-2 rounded-lg font-medium text-sm transition-all ${
-              isButtonEnabled && !loading
-                ? 'bg-indigo-200 dark:bg-indigo-300 text-indigo-900 dark:text-indigo-950 shadow-md hover:shadow-lg hover:bg-indigo-300 dark:hover:bg-indigo-400'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            {loading ? (
-              <div className="flex items-center justify-center">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-900 dark:border-indigo-950 mr-2"></div>
-                Loading...
-              </div>
-            ) : (
-              <div className="flex items-center justify-center whitespace-nowrap">
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                Get Insights
-              </div>
-            )}
-          </button>
         </div>
       </div>
 

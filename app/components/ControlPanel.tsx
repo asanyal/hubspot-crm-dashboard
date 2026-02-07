@@ -158,6 +158,12 @@ const ControlPanel: React.FC = () => {
     router.push(`/deals-by-stage?stage=${encodedStageName}&autoload=true`);
   };
 
+  // Handle refresh - clear cache and hard fetch from backend
+  const handleRefreshPipeline = useCallback(() => {
+    updateState('controlPanel.lastFetched', null);
+    fetchPipelineData();
+  }, [updateState, fetchPipelineData]);
+
   // Stat boxes component
   const StatBoxes = () => {
     const [currentPage, setCurrentPage] = useState(0);
@@ -260,7 +266,19 @@ const ControlPanel: React.FC = () => {
     };
     
     return (
-      <div className="mb-8" ref={containerRef}>
+      <div className="mb-8 relative" ref={containerRef}>
+        {/* Refresh Button */}
+        <button
+          onClick={handleRefreshPipeline}
+          disabled={loading}
+          className="absolute -top-1 right-0 p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+          aria-label="Refresh pipeline data"
+          title="Refresh pipeline data"
+        >
+          <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
         <div className="flex items-center justify-center space-x-4">
           {/* Left Carat */}
           <button

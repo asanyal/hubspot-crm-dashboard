@@ -142,6 +142,12 @@ interface StakeholdersData {
   stakeholders: Stakeholder[];
 }
 
+const getStakeholderDisplayName = (s: Stakeholder): string => {
+  if (s.name && s.name !== 'Unknown name') return s.name;
+  if (s.email) return s.email.split('@')[0];
+  return 'Unknown';
+};
+
 // Helper functions to process concerns array
 const processConcernsArray = (concernsArray: ConcernsItem[]): {
   hasPricingConcerns: boolean;
@@ -359,6 +365,7 @@ const DealTimeline: React.FC = () => {
   const [stakeholders, setStakeholders] = useState<Stakeholder[]>([]);
   const [loadingStakeholders, setLoadingStakeholders] = useState<boolean>(false);
   const [stakeholdersCache, setStakeholdersCache] = useState<Record<string, { data: Stakeholder[]; timestamp: number }>>({});
+  const [copiedStakeholderEmail, setCopiedStakeholderEmail] = useState<string | null>(null);
 
   // Add this with other state declarations at the top
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -4031,48 +4038,56 @@ useEffect(() => {
                 <div className="h-4 bg-gray-200 rounded w-3/4"></div>
               </div>
             ) : stakeholders.length > 0 ? (
-              <div className="max-h-[240px] overflow-y-auto space-y-4 pr-2">
+              <div className="max-h-[300px] overflow-y-auto pr-1 space-y-4">
                 {/* Decision Makers */}
                 {stakeholders.filter(s => s.potential_decision_maker).length > 0 && (
                   <div>
-                    <h4 className="font-medium text-gray-700 mb-3 text-xs uppercase tracking-wider sticky top-0 bg-white pb-2 flex items-center gap-2">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                    <h4 className="font-medium text-gray-700 mb-2.5 text-[10px] uppercase tracking-widest sticky top-0 bg-white pb-1 flex items-center gap-1.5">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-amber-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                       </svg>
-                      Decision Makers ({stakeholders.filter(s => s.potential_decision_maker).length})
+                      Decision Makers
                     </h4>
-                    <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
                       {stakeholders
                         .filter(stakeholder => stakeholder.potential_decision_maker)
                         .map((stakeholder, index) => (
                           <div
                             key={index}
-                            className="flex items-center justify-between py-2.5 px-3 bg-blue-50 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors"
+                            className="group relative p-2.5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-100 hover:border-blue-300 hover:shadow-sm transition-all duration-200 cursor-default"
                           >
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <div className="w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0"></div>
-                              <div className="flex-1 min-w-0">
-                                <div className="font-semibold text-gray-900">{stakeholder.name}</div>
-                                {stakeholder.title && (
-                                  <div className="text-xs text-gray-600 mt-0.5">{stakeholder.title}</div>
-                                )}
+                            <div className="flex items-start justify-between gap-1">
+                              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center flex-shrink-0 shadow-sm">
+                                <span className="text-white text-[9px] font-bold leading-none">{getStakeholderDisplayName(stakeholder).charAt(0).toUpperCase()}</span>
+                              </div>
+                              <div className="relative">
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(stakeholder.email);
+                                    setCopiedStakeholderEmail(stakeholder.email);
+                                    setTimeout(() => setCopiedStakeholderEmail(null), 1500);
+                                  }}
+                                  className="peer p-0.5 text-gray-300 hover:text-blue-500 rounded transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                  </svg>
+                                </button>
+                                <span className={`absolute bottom-full right-0 mb-1 px-1.5 py-0.5 text-[9px] font-medium rounded shadow-lg whitespace-nowrap pointer-events-none transition-opacity duration-150 ${
+                                  copiedStakeholderEmail === stakeholder.email
+                                    ? 'bg-green-600 text-white opacity-100'
+                                    : 'bg-gray-800 text-white opacity-0 peer-hover:opacity-100'
+                                }`}>
+                                  {copiedStakeholderEmail === stakeholder.email ? 'Copied!' : 'Copy email'}
+                                </span>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 ml-4">
-                              <span className="text-xs text-gray-600 truncate max-w-[180px]">
-                                {stakeholder.email}
-                              </span>
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(stakeholder.email);
-                                }}
-                                className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-100 rounded transition-colors flex-shrink-0"
-                                title="Copy email"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                </svg>
-                              </button>
+                            <div className="mt-1.5 min-w-0">
+                              <div className="font-semibold text-gray-900 text-[11px] truncate leading-tight">{getStakeholderDisplayName(stakeholder)}</div>
+                              {stakeholder.title && (
+                                <div className="text-[10px] text-indigo-600/70 truncate mt-0.5 leading-tight">{stakeholder.title}</div>
+                              )}
+                              <div className="text-[10px] text-gray-400 truncate mt-0.5 leading-tight">{stakeholder.email}</div>
                             </div>
                           </div>
                         ))}
@@ -4083,38 +4098,49 @@ useEffect(() => {
                 {/* Others */}
                 {stakeholders.filter(s => !s.potential_decision_maker).length > 0 && (
                   <div>
-                    <h4 className="font-medium text-gray-500 mb-3 text-xs uppercase tracking-wider sticky top-0 bg-white pb-2">
-                      Others ({stakeholders.filter(s => !s.potential_decision_maker).length})
+                    <h4 className="font-medium text-gray-400 mb-2.5 text-[10px] uppercase tracking-widest sticky top-0 bg-white pb-1">
+                      Others
                     </h4>
-                    <div className="space-y-1.5">
+                    <div className="grid grid-cols-3 gap-2">
                       {stakeholders
                         .filter(stakeholder => !stakeholder.potential_decision_maker)
                         .map((stakeholder, index) => (
                           <div
                             key={index}
-                            className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors"
+                            className="group relative p-2.5 bg-white rounded-lg border border-gray-150 hover:border-gray-300 hover:shadow-sm transition-all duration-200 cursor-default"
                           >
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-gray-900 text-sm">{stakeholder.name}</div>
-                              {stakeholder.title && (
-                                <div className="text-xs text-gray-500 mt-0.5">{stakeholder.title}</div>
-                              )}
+                            <div className="flex items-start justify-between gap-1">
+                              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center flex-shrink-0">
+                                <span className="text-white text-[9px] font-bold leading-none">{getStakeholderDisplayName(stakeholder).charAt(0).toUpperCase()}</span>
+                              </div>
+                              <div className="relative">
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(stakeholder.email);
+                                    setCopiedStakeholderEmail(stakeholder.email);
+                                    setTimeout(() => setCopiedStakeholderEmail(null), 1500);
+                                  }}
+                                  className="peer p-0.5 text-gray-300 hover:text-gray-500 rounded transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                  </svg>
+                                </button>
+                                <span className={`absolute bottom-full right-0 mb-1 px-1.5 py-0.5 text-[9px] font-medium rounded shadow-lg whitespace-nowrap pointer-events-none transition-opacity duration-150 ${
+                                  copiedStakeholderEmail === stakeholder.email
+                                    ? 'bg-green-600 text-white opacity-100'
+                                    : 'bg-gray-800 text-white opacity-0 peer-hover:opacity-100'
+                                }`}>
+                                  {copiedStakeholderEmail === stakeholder.email ? 'Copied!' : 'Copy email'}
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2 ml-4">
-                              <span className="text-xs text-gray-500 truncate max-w-[180px]">
-                                {stakeholder.email}
-                              </span>
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(stakeholder.email);
-                                }}
-                                className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors flex-shrink-0"
-                                title="Copy email"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                </svg>
-                              </button>
+                            <div className="mt-1.5 min-w-0">
+                              <div className="font-medium text-gray-800 text-[11px] truncate leading-tight">{getStakeholderDisplayName(stakeholder)}</div>
+                              {stakeholder.title && (
+                                <div className="text-[10px] text-gray-400 truncate mt-0.5 leading-tight">{stakeholder.title}</div>
+                              )}
+                              <div className="text-[10px] text-gray-400 truncate mt-0.5 leading-tight">{stakeholder.email}</div>
                             </div>
                           </div>
                         ))}

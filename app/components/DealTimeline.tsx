@@ -10,6 +10,17 @@ import {
 import { Deal } from '../context/AppContext';
 import { API_CONFIG } from '../utils/config';
 import { parseBuyerIntentExplanation } from '../utils/buyerIntentParser';
+import ReactMarkdown from 'react-markdown';
+
+// Helper function to format text with dashes as proper markdown bullet points
+const formatAsBulletPoints = (text: string): string => {
+  if (!text) return text;
+  // Replace " - " or ". - " with newline + "- " to create proper markdown bullets
+  return text.replace(/(\.|^)\s*-\s+/g, (match, punctuation, offset) => {
+    // Keep the first dash as-is (start of text), add newline before others
+    return offset === 0 ? '- ' : punctuation + '\n- ';
+  });
+};
 
 interface Contact {
   champion: boolean;
@@ -3879,7 +3890,9 @@ useEffect(() => {
                 </span>
               </div>
             ) : companyOverview ? (
-              <p className="text-base text-gray-700 leading-relaxed">{companyOverview}</p>
+              <div className="text-base text-gray-700 dark:text-gray-300 leading-relaxed prose prose-sm max-w-none prose-strong:text-gray-900 dark:prose-strong:text-gray-100 prose-ul:my-3 prose-ul:ml-0 prose-li:my-1.5 prose-li:ml-0 [&_ul]:list-disc [&_ul]:pl-5">
+                <ReactMarkdown>{formatAsBulletPoints(companyOverview)}</ReactMarkdown>
+              </div>
             ) : (
               <p className="text-base text-gray-400 italic">No latest activity available</p>
             )}

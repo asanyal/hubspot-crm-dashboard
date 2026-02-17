@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
+import ReactMarkdown from 'react-markdown';
 import { API_CONFIG } from '../utils/config';
 import { parseBuyerIntentExplanation } from '../utils/buyerIntentParser';
 
@@ -1616,8 +1617,8 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                       if (typeof selectedMeeting.buyer_intent_explanation === 'string') {
                         // Display string format directly
                         return (
-                          <div className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed whitespace-pre-wrap">
-                            {selectedMeeting.buyer_intent_explanation}
+                          <div className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed prose prose-sm max-w-none prose-strong:text-blue-900 dark:prose-strong:text-blue-100">
+                            <ReactMarkdown>{selectedMeeting.buyer_intent_explanation}</ReactMarkdown>
                           </div>
                         );
                       } else {
@@ -1633,8 +1634,8 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                             <h5 className="font-bold text-blue-900 dark:text-blue-100">{section.title}</h5>
                             <ul className="list-disc pl-5 space-y-1">
                               {section.bulletPoints.map((point, pointIndex) => (
-                                <li key={pointIndex} className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed">
-                                  {point}
+                                <li key={pointIndex} className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed prose prose-sm max-w-none prose-strong:text-blue-900 dark:prose-strong:text-blue-100 prose-p:inline">
+                                  <ReactMarkdown>{point}</ReactMarkdown>
                                 </li>
                               ))}
                             </ul>

@@ -101,7 +101,11 @@ const formatOwnerInitials = (owner: string | null | undefined): string => {
     .toUpperCase();
 };
 
-const DealStageSelector: React.FC = () => {
+interface DealStageSelectorProps {
+  isMainSidebarCollapsed?: boolean;
+}
+
+const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarCollapsed = false }) => {
   const { state, updateState } = useAppState();
   const { 
     selectedStage, 
@@ -1404,51 +1408,90 @@ const DealStageSelector: React.FC = () => {
 
   return (
     <div className="flex h-screen">
-      {/* Left Panel */}
-      <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
+      {/* Left Panel - Stages Sidebar */}
+      <div className={`w-80 bg-white border-r border-gray-200 overflow-y-auto transition-all duration-300 ${isMainSidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
         <div className="p-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold">Stages</h2>
         </div>
         
         {/* Stages List */}
-        <div className="divide-y divide-gray-100">
+        <div>
           {stagesLoading ? (
-            <div key="loading" className="p-4 text-gray-500 flex items-center">
+            <div key="loading" className="py-3 px-4 text-gray-500 flex items-center">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700 mr-2"></div>
               Loading stages...
             </div>
           ) : availableStages.length > 0 ? (
-            availableStages.map((stage) => {
-              const stageKey = stage.stage_id || stage.stage_name;
-              return (
-                <div
-                  key={`stage-${stageKey}`}
-                  className={`p-4 cursor-pointer hover:bg-gray-50 ${
-                    selectedStage === stage.stage_name ? 'bg-sky-50' : ''
-                  }`}
-                  onClick={() => handleStageSelect(stage.stage_name)}
-                >
-                  <div key={`stage-content-${stageKey}`} className="flex items-center gap-3">
-                    <div key={`stage-order-${stageKey}`} className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-medium text-gray-600">
-                      {stage.display_order}
+            (() => {
+              const funnelGroups = [
+                {
+                  label: 'Top of Funnel',
+                  stages: ['0. Identification', '1. Sales Qualification', '2. Needs Analysis & Solution Mapping'],
+                  color: 'text-green-700 bg-green-50'
+                },
+                {
+                  label: 'Mid Funnel',
+                  stages: ['3. Technical Validation', '4. Proposal & Negotiation', 'Proposal'],
+                  color: 'text-yellow-700 bg-yellow-50'
+                },
+                {
+                  label: 'Bottom of Funnel',
+                  stages: ['Assessment', 'Closed Active Nurture', 'Closed Lost', 'Closed Marketing Nurture', 'Closed Won', 'Renew/Closed won', 'Churned'],
+                  color: 'text-red-700 bg-red-50'
+                },
+              ];
+
+              return funnelGroups.map((group, groupIndex) => {
+                const groupStages = availableStages.filter(stage =>
+                  group.stages.includes(stage.stage_name)
+                );
+
+                if (groupStages.length === 0) return null;
+
+                return (
+                  <div key={group.label}>
+                    {/* Funnel Group Header */}
+                    <div className={`px-4 py-1 ${group.color} border-b border-gray-200`}>
+                      <span className="text-xs font-semibold uppercase tracking-wide">
+                        {group.label}
+                      </span>
                     </div>
-                    <div key={`stage-info-${stageKey}`} className="flex-1">
-                      <div className="font-medium text-gray-900">{stage.stage_name}</div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {stage.closed_won || stage.closed_lost ? '' : `${stage.probability}% Probability`}
-                      </div>
+
+                    {/* Stages in this group */}
+                    <div className="divide-y divide-gray-100">
+                      {groupStages.map((stage) => {
+                        const stageKey = stage.stage_id || stage.stage_name;
+                        return (
+                          <div
+                            key={`stage-${stageKey}`}
+                            className={`py-2 px-4 cursor-pointer hover:bg-gray-50 transition-colors ${
+                              selectedStage === stage.stage_name ? 'bg-sky-50' : ''
+                            }`}
+                            onClick={() => handleStageSelect(stage.stage_name)}
+                          >
+                            <div key={`stage-content-${stageKey}`} className="flex items-center justify-between">
+                              <div key={`stage-info-${stageKey}`} className="flex-1">
+                                <div className="font-medium text-gray-700 text-sm">{stage.stage_name}</div>
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {stage.closed_won || stage.closed_lost ? '' : `${stage.probability}% Probability`}
+                                </div>
+                              </div>
+                              {selectedStage === stage.stage_name && (
+                                <svg key={`stage-check-${stageKey}`} xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-sky-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    {selectedStage === stage.stage_name && (
-                      <svg key={`stage-check-${stageKey}`} xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-sky-600" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                    )}
                   </div>
-                </div>
-              );
-            })
+                );
+              });
+            })()
           ) : (
-            <div key="no-stages" className="p-4 text-gray-500">No stages found</div>
+            <div key="no-stages" className="py-3 px-4 text-gray-500">No stages found</div>
           )}
         </div>
       </div>

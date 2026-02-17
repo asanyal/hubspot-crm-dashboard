@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppProvider } from './context/AppContext';
 import { Providers } from './providers';
-import ConditionalHeader from './components/ConditionalHeader';
+import ConditionalSidebar from './components/ConditionalSidebar';
+import LayoutWrapper from './components/LayoutWrapper';
 import DynamicTitle from './components/DynamicTitle';
 import "./globals.css";
 
@@ -35,10 +36,10 @@ export default function RootLayout({
         <Providers>
           <AppProvider>
             <DynamicTitle />
-            <ConditionalHeader />
-            <main>
+            <ConditionalSidebar />
+            <LayoutWrapper>
               {children}
-            </main>
+            </LayoutWrapper>
           </AppProvider>
         </Providers>
       </body>

@@ -34,7 +34,7 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
     '1. Sales Qualification',
     '2. Needs Analysis & Solution Mapping'
   ]);
-  const [selectedDateRange, setSelectedDateRange] = useState<string | null>('3m');
+  const [selectedDateRange, setSelectedDateRange] = useState<string | null>('3w');
   const [loading, setLoading] = useState(false);
   const [stagesLoading, setStagesLoading] = useState(false);
   const [insights, setInsights] = useState<any>(null);

@@ -17,6 +17,7 @@ const ControlPanel: React.FC = () => {
   const [browserId, setBrowserId] = useState<string>('');
   const [isInitialized, setIsInitialized] = useState(false);
   const [meetingsLoaded, setMeetingsLoaded] = useState(false);
+  const handleMeetingsInitialLoad = useCallback(() => setMeetingsLoaded(true), []);
 
   // Define the funnel order for stages (used by StatBoxes)
   const funnelOrder = [
@@ -379,7 +380,7 @@ const ControlPanel: React.FC = () => {
         <LatestMeetings
           browserId={browserId}
           isInitialized={isInitialized}
-          onInitialLoad={() => setMeetingsLoaded(true)}
+          onInitialLoad={handleMeetingsInitialLoad}
         />
       </div>
 

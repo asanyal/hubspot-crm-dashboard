@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import ReactMarkdown from 'react-markdown';
@@ -17,7 +17,6 @@ interface Meeting {
   buyer_intent_explanation?: any;
   engagement_id?: string;
   deal_stage: string;
-  owner?: string;
 }
 
 interface LatestMeetingsProps {
@@ -41,6 +40,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   const [processedWithoutInsights, setProcessedWithoutInsights] = useState<Set<string>>(new Set());
   const [scrollToSection, setScrollToSection] = useState<string | null>(null);
   const router = useRouter();
+  const hasCalledInitialLoad = useRef(false);
 
   // Feature flag to disable buyer intent explanation fetching if CORS issues persist
   const ENABLE_BUYER_INTENT_ENHANCEMENT = true; // Re-enabled to restore insights functionality
@@ -181,7 +181,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
           // Set cached data immediately for fast loading
           setMeetings(cachedData);
           setLoading(false);
-          onInitialLoad?.();
+          if (!hasCalledInitialLoad.current) { hasCalledInitialLoad.current = true; onInitialLoad?.(); }
 
           // Check if cached data needs enhancement and do it in background (if enabled)
           if (ENABLE_BUYER_INTENT_ENHANCEMENT) {
@@ -198,17 +198,12 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
               });
               
               console.log('Enhancing cached data in background...');
-              
-              // First enhance with owners, then with explanations
-              enhanceMeetingsWithOwners(cachedData).then(ownerEnhancedData => {
-                return enhanceMeetingsWithExplanations(ownerEnhancedData);
-              }).then(fullyEnhancedData => {
-                setMeetings(fullyEnhancedData);
-                // Update cache with enhanced data
-                saveMeetingsToStorage(days, fullyEnhancedData);
+
+              enhanceMeetingsWithExplanations(cachedData).then(enhancedData => {
+                setMeetings(enhancedData);
+                saveMeetingsToStorage(days, enhancedData);
               }).catch(error => {
                 console.error('Error enhancing cached data:', error);
-                // Keep the cached data even if enhancement fails
               });
             }
           }
@@ -236,7 +231,7 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
         
         // Set meetings immediately for fast loading
         setMeetings(sortedMeetings);
-        onInitialLoad?.();
+        if (!hasCalledInitialLoad.current) { hasCalledInitialLoad.current = true; onInitialLoad?.(); }
 
         // Save basic meetings data to localStorage
         saveMeetingsToStorage(days, sortedMeetings);
@@ -256,25 +251,20 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
             });
           }
           
-          console.log('Enhancing meetings with owner and buyer intent information in background...');
-          
-          // First enhance with owners, then with explanations
-          enhanceMeetingsWithOwners(sortedMeetings).then(ownerEnhancedMeetings => {
-            return enhanceMeetingsWithExplanations(ownerEnhancedMeetings);
-          }).then(fullyEnhancedMeetings => {
-            setMeetings(fullyEnhancedMeetings);
-            // Update cache with enhanced data
-            saveMeetingsToStorage(days, fullyEnhancedMeetings);
+          console.log('Enhancing meetings with buyer intent information in background...');
+
+          enhanceMeetingsWithExplanations(sortedMeetings).then(enhancedMeetings => {
+            setMeetings(enhancedMeetings);
+            saveMeetingsToStorage(days, enhancedMeetings);
           }).catch(error => {
             console.error('Error enhancing meetings:', error);
-            // Keep the basic meetings even if enhancement fails
           });
         }
       }
     } catch (error) {
       console.error('Error fetching latest meetings:', error);
       setError('Failed to load latest meetings');
-      onInitialLoad?.();
+      if (!hasCalledInitialLoad.current) { hasCalledInitialLoad.current = true; onInitialLoad?.(); }
     } finally {
       setLoading(false);
     }
@@ -669,69 +659,6 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
     }
   }, [isModalOpen, scrollToSection]);
 
-  // Function to fetch deal owner information
-  const fetchDealOwner = useCallback(async (dealId: string): Promise<string | null> => {
-    try {
-      console.log('🔍 Fetching owner for deal:', dealId);
-      const response = await makeApiCall(`${API_CONFIG.getApiPath('/deal-info')}?dealName=${encodeURIComponent(dealId)}`);
-      if (response) {
-        const data = await response.json();
-        console.log('📊 Deal info response:', data);
-        console.log('👤 Deal owner:', data?.dealOwner);
-        return data?.dealOwner || null;
-      }
-    } catch (error) {
-      console.error('❌ Error fetching deal owner for:', dealId, error);
-    }
-    return null;
-  }, [makeApiCall]);
-
-  // Function to enhance meetings with owner information
-  const enhanceMeetingsWithOwners = useCallback(async (meetings: Meeting[]) => {
-    console.log('🚀 Starting owner enhancement for', meetings.length, 'meetings');
-    const BATCH_SIZE = 3; // Limit concurrent API calls
-    const enhancedMeetings = [...meetings];
-    
-    // Process meetings in batches
-    for (let i = 0; i < meetings.length; i += BATCH_SIZE) {
-      const batch = meetings.slice(i, i + BATCH_SIZE);
-      console.log(`📦 Processing batch ${Math.floor(i/BATCH_SIZE) + 1}, meetings ${i} to ${i + batch.length - 1}`);
-      
-      const batchPromises = batch.map(async (meeting, batchIndex) => {
-        const actualIndex = i + batchIndex;
-        
-        // If meeting already has owner, skip it
-        if (meeting.owner) {
-          console.log(`⏭️ Skipping ${meeting.deal_id}, already has owner: ${meeting.owner}`);
-          return;
-        }
-        
-        try {
-          console.log(`🔄 Fetching owner for meeting: ${meeting.deal_id}`);
-          const owner = await fetchDealOwner(meeting.deal_id);
-          enhancedMeetings[actualIndex] = {
-            ...meeting,
-            owner: owner || undefined
-          };
-          console.log(`✅ Enhanced meeting ${meeting.deal_id} with owner: ${owner || 'null'}`);
-        } catch (error) {
-          console.error(`❌ Error fetching owner for meeting ${meeting.deal_id}:`, error);
-        }
-      });
-      
-      // Wait for current batch to complete before starting next batch
-      await Promise.all(batchPromises);
-      
-      // Add a small delay between batches to be gentle on the API
-      if (i + BATCH_SIZE < meetings.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
-    
-    console.log('🏁 Owner enhancement complete');
-    return enhancedMeetings;
-  }, [fetchDealOwner]);
-
   // Function to fetch buyer intent explanation for a specific meeting
   const fetchBuyerIntentExplanation = useCallback(async (dealId: string, eventId: string) => {
     try {
@@ -784,7 +711,14 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
             ...meeting,
             buyer_intent_explanation: explanation
           };
-          
+
+          // Update this meeting in state immediately so its row resolves without waiting for the full batch
+          setMeetings(prev => prev.map(m =>
+            m.event_id === meeting.event_id
+              ? { ...m, buyer_intent_explanation: explanation }
+              : m
+          ));
+
           if (explanation && explanation !== 'N/A') {
             // Successfully got insights - remove from loading state
             setLoadingInsights(prev => {
@@ -1581,16 +1515,6 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
                   })()}
                 </div>
                 
-                {/* Deal Owner Section - Simple one line with icon */}
-                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-                  <div className="flex items-center justify-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-                    <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    <span className="font-medium">Deal Owner:</span>
-                    <span>{selectedMeeting.owner || 'Loading...'}</span>
-                  </div>
-                </div>
               </div>
 
               {/* Close Button */}

@@ -23,9 +23,10 @@ interface Meeting {
 interface LatestMeetingsProps {
   browserId: string;
   isInitialized: boolean;
+  onInitialLoad?: () => void;
 }
 
-const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialized }) => {
+const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialized, onInitialLoad }) => {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -176,11 +177,12 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
         const cachedData = loadMeetingsFromStorage(days);
         if (cachedData && cachedData.length > 0) {
           console.log('Using cached data for days:', days);
-          
+
           // Set cached data immediately for fast loading
           setMeetings(cachedData);
           setLoading(false);
-          
+          onInitialLoad?.();
+
           // Check if cached data needs enhancement and do it in background (if enabled)
           if (ENABLE_BUYER_INTENT_ENHANCEMENT) {
             const meetingsNeedingEnhancement = cachedData.filter((meeting: Meeting) => 
@@ -234,7 +236,8 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
         
         // Set meetings immediately for fast loading
         setMeetings(sortedMeetings);
-        
+        onInitialLoad?.();
+
         // Save basic meetings data to localStorage
         saveMeetingsToStorage(days, sortedMeetings);
         
@@ -271,10 +274,11 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
     } catch (error) {
       console.error('Error fetching latest meetings:', error);
       setError('Failed to load latest meetings');
+      onInitialLoad?.();
     } finally {
       setLoading(false);
     }
-  }, [makeApiCall, loadMeetingsFromStorage, saveMeetingsToStorage]);
+  }, [makeApiCall, loadMeetingsFromStorage, saveMeetingsToStorage, onInitialLoad]);
 
   // Fetch data when component mounts or timeframe changes
   useEffect(() => {

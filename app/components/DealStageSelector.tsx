@@ -560,6 +560,36 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
     };
   }, [searchTerm]);
 
+  // Compute which deals have theme matches for the current search term
+  const themeMatches = useMemo(() => {
+    const result: Record<string, { positives: boolean; risks: boolean }> = {};
+    const term = debouncedSearchTerm.toLowerCase().trim();
+    if (!term || !signalsData) return result;
+
+    const meetingMatchesTerm = (m: DealSignalMeeting): boolean => {
+      const explanation = m.buyer_intent_explanation;
+      if (!explanation) return false;
+      if (typeof explanation === 'string') return explanation.toLowerCase().includes(term);
+      return Object.entries(explanation).some(([theme, bullets]) =>
+        theme.toLowerCase().includes(term) ||
+        (Array.isArray(bullets) && bullets.some(b => typeof b === 'string' ? b.toLowerCase().includes(term) : JSON.stringify(b).toLowerCase().includes(term)))
+      );
+    };
+
+    Object.entries(signalsData).forEach(([dealName, signals]) => {
+      const meetings = signals.meetings || [];
+      const posMatch = meetings.some(m =>
+        (m.buyer_intent === 'Likely to buy' || m.buyer_intent === 'Very likely to buy') && meetingMatchesTerm(m)
+      );
+      const riskMatch = meetings.some(m =>
+        (m.buyer_intent === 'Less likely to buy' || m.buyer_intent === 'Neutral') && meetingMatchesTerm(m)
+      );
+      if (posMatch || riskMatch) {
+        result[dealName] = { positives: posMatch, risks: riskMatch };
+      }
+    });
+    return result;
+  }, [debouncedSearchTerm, signalsData]);
 
   // Handler for stage selection
   const handleStageSelect = useCallback((stageName: string): void => {
@@ -656,10 +686,11 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
         dealName.toLowerCase().includes(lowerCaseSearch) ||
         owner.toLowerCase().includes(lowerCaseSearch) ||
         amount.toLowerCase().includes(lowerCaseSearch) ||
-        expectedCloseDate.toLowerCase().includes(lowerCaseSearch)
+        expectedCloseDate.toLowerCase().includes(lowerCaseSearch) ||
+        !!themeMatches[dealName]
       );
     });
-  }, [selectedStage, dealsByStage, debouncedSearchTerm]);
+  }, [selectedStage, dealsByStage, debouncedSearchTerm, themeMatches]);
 
   const filteredDeals = useMemo(() => {
     const dealsForStage = (selectedStage && dealsByStage[selectedStage]) || [];
@@ -684,10 +715,11 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
         dealName.toLowerCase().includes(lowerCaseSearch) ||
         owner.toLowerCase().includes(lowerCaseSearch) ||
         amount.toLowerCase().includes(lowerCaseSearch) ||
-        expectedCloseDate.toLowerCase().includes(lowerCaseSearch)
+        expectedCloseDate.toLowerCase().includes(lowerCaseSearch) ||
+        !!themeMatches[dealName]
       );
     });
-  }, [selectedStage, dealsByStage, searchTerm]);
+  }, [selectedStage, dealsByStage, searchTerm, themeMatches]);
   
 
 
@@ -1239,10 +1271,12 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
               setDrawerType('positives');
               setDrawerOpen(true);
               setExpandedThemes(new Set());
-              setDrawerSearch('');
+              setDrawerSearch(themeMatches[dealName]?.positives ? debouncedSearchTerm : '');
             }}
             className={`inline-flex items-center justify-center min-w-[2.5rem] h-7 px-2.5 rounded-full text-xs font-medium cursor-pointer transition-all duration-300 border ${
-              positivesCount > 0
+              themeMatches[dealName]?.positives
+                ? 'bg-teal-600 text-white border-teal-600 shadow-md ring-2 ring-teal-300 hover:bg-teal-700'
+                : positivesCount > 0
                 ? 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100 hover:border-teal-300 hover:shadow-sm'
                 : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
             }`}
@@ -1352,10 +1386,12 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
               setDrawerType('risks');
               setDrawerOpen(true);
               setExpandedThemes(new Set());
-              setDrawerSearch('');
+              setDrawerSearch(themeMatches[dealName]?.risks ? debouncedSearchTerm : '');
             }}
             className={`inline-flex items-center justify-center min-w-[2.5rem] h-7 px-2.5 rounded-full text-xs font-medium cursor-pointer transition-all duration-300 border ${
-              risksCount > 0
+              themeMatches[dealName]?.risks
+                ? 'bg-rose-600 text-white border-rose-600 shadow-md ring-2 ring-rose-300 hover:bg-rose-700'
+                : risksCount > 0
                 ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 hover:border-rose-300 hover:shadow-sm'
                 : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
             }`}

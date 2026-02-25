@@ -16,8 +16,6 @@ const ControlPanel: React.FC = () => {
   // Add session management state
   const [browserId, setBrowserId] = useState<string>('');
   const [isInitialized, setIsInitialized] = useState(false);
-  const [meetingsLoaded, setMeetingsLoaded] = useState(false);
-  const handleMeetingsInitialLoad = useCallback(() => setMeetingsLoaded(true), []);
 
   // Define the funnel order for stages (used by StatBoxes)
   const funnelOrder = [
@@ -380,12 +378,11 @@ const ControlPanel: React.FC = () => {
         <LatestMeetings
           browserId={browserId}
           isInitialized={isInitialized}
-          onInitialLoad={handleMeetingsInitialLoad}
         />
       </div>
 
-      {/* Use Cases & Risks Section — starts only after meetings' initial fetch completes */}
-      <UseCasesRisks browserId={browserId} isInitialized={isInitialized && meetingsLoaded} />
+      {/* Use Cases & Risks Section — loads independently */}
+      <UseCasesRisks browserId={browserId} isInitialized={isInitialized} />
     </div>
   );
 };

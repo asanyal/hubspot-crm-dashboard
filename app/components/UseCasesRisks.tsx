@@ -333,8 +333,8 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
 
       const { start_date, end_date } = calculateDateRange(option);
 
-      // Fetch both use cases and risks for each stage
-      const fetchPromises = selectedStages.flatMap(async (stage) => {
+      // Fetch use cases and risks for each stage independently — progressively merge as each completes
+      const stagePromises = selectedStages.map(async (stage) => {
         const useCasesEndpoint = `/api/hubspot/stage-insights/use-cases?stage=${encodeURIComponent(stage)}&start_date=${start_date}&end_date=${end_date}`;
         const risksEndpoint = `/api/hubspot/stage-insights/risks?stage=${encodeURIComponent(stage)}&start_date=${start_date}&end_date=${end_date}`;
 
@@ -359,37 +359,32 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
         const useCasesData = useCasesResponse.ok ? await useCasesResponse.json() : null;
         const risksData = risksResponse.ok ? await risksResponse.json() : null;
 
-        return { useCasesData, risksData };
-      });
+        // Progressively merge this stage's results into insights
+        setInsights(prev => {
+          const updated = prev || { useCases: {}, risks: {}, filters: null };
+          const newUseCases = { ...updated.useCases };
+          const newRisks = { ...updated.risks };
+          let filters = updated.filters;
 
-      const results = await Promise.all(fetchPromises);
-
-      // Merge all results into a single insights object with both use cases and risks
-      const mergedUseCases: Record<string, any> = {};
-      const mergedRisks: Record<string, any> = {};
-      let filters: any = null;
-
-      results.forEach((result) => {
-        if (result.useCasesData?.data) {
-          Object.keys(result.useCasesData.data).forEach((stage) => {
-            mergedUseCases[stage] = result.useCasesData.data[stage];
-          });
-          if (!filters && result.useCasesData.filters) {
-            filters = result.useCasesData.filters;
+          if (useCasesData?.data) {
+            Object.keys(useCasesData.data).forEach((s) => {
+              newUseCases[s] = useCasesData.data[s];
+            });
+            if (!filters && useCasesData.filters) {
+              filters = useCasesData.filters;
+            }
           }
-        }
-        if (result.risksData?.data) {
-          Object.keys(result.risksData.data).forEach((stage) => {
-            mergedRisks[stage] = result.risksData.data[stage];
-          });
-        }
+          if (risksData?.data) {
+            Object.keys(risksData.data).forEach((s) => {
+              newRisks[s] = risksData.data[s];
+            });
+          }
+
+          return { useCases: newUseCases, risks: newRisks, filters };
+        });
       });
 
-      if (Object.keys(mergedUseCases).length > 0 || Object.keys(mergedRisks).length > 0) {
-        setInsights({ useCases: mergedUseCases, risks: mergedRisks, filters });
-      } else {
-        setError('No insights found for the selected stages');
-      }
+      await Promise.all(stagePromises);
     } catch (error) {
       console.error('Error fetching insights:', error);
       setError('An error occurred while fetching insights');
@@ -706,41 +701,38 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
       {/* Filters */}
       <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-4 mb-6 space-y-4">
         {/* Stage Multi-Select - Grouped by Funnel */}
-        {stagesLoading ? (
-          <div className="flex justify-center items-center h-8">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center gap-2">
-            {(() => {
-              const funnelGroups = [
-                { label: 'Top of Funnel', stages: ['0. Identification', '1. Sales Qualification', '2. Needs Analysis & Solution Mapping'], color: 'green' },
-                { label: 'Mid Funnel', stages: ['3. Technical Validation', '4. Proposal & Negotiation', 'Proposal'], color: 'yellow' },
-                { label: 'Bottom of Funnel', stages: ['Assessment', 'Closed Active Nurture', 'Closed Lost', 'Closed Marketing Nurture', 'Closed Won', 'Renew/Closed won', 'Churned'], color: 'red' },
-              ];
-              return funnelGroups.map(({ label, stages: groupStages, color }) => {
-                const existingStages = groupStages.filter(s => stages.some(st => st.stage_name === s));
-                const isSelected = existingStages.length > 0 && existingStages.every(s => selectedStages.includes(s)) && selectedStages.every(s => existingStages.includes(s));
-                const colorMap: Record<string, { active: string; inactive: string }> = {
-                  green: { active: 'bg-green-100 text-green-700 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700', inactive: 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700' },
-                  yellow: { active: 'bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900 dark:text-yellow-200 dark:border-yellow-700', inactive: 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700' },
-                  red: { active: 'bg-red-100 text-red-700 border-red-300 dark:bg-red-900 dark:text-red-200 dark:border-red-700', inactive: 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700' },
-                };
-                return (
-                  <button
-                    key={label}
-                    onClick={() => setSelectedStages(isSelected ? [] : [...existingStages])}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium border cursor-pointer transition-all ${
-                      isSelected ? colorMap[color].active : colorMap[color].inactive
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              });
-            })()}
-          </div>
-        )}
+        <div className="flex items-center justify-center gap-2">
+          {(() => {
+            const funnelGroups = [
+              { label: 'Top of Funnel', stages: ['0. Identification', '1. Sales Qualification', '2. Needs Analysis & Solution Mapping'], color: 'green' },
+              { label: 'Mid Funnel', stages: ['3. Technical Validation', '4. Proposal & Negotiation', 'Proposal'], color: 'yellow' },
+              { label: 'Bottom of Funnel', stages: ['Assessment', 'Closed Active Nurture', 'Closed Lost', 'Closed Marketing Nurture', 'Closed Won', 'Renew/Closed won', 'Churned'], color: 'red' },
+            ];
+            return funnelGroups.map(({ label, stages: groupStages, color }) => {
+              // If stages haven't loaded yet, use all hardcoded stages for the group
+              const existingStages = stages.length > 0
+                ? groupStages.filter(s => stages.some(st => st.stage_name === s))
+                : groupStages;
+              const isSelected = existingStages.length > 0 && existingStages.every(s => selectedStages.includes(s)) && selectedStages.every(s => existingStages.includes(s));
+              const colorMap: Record<string, { active: string; inactive: string }> = {
+                green: { active: 'bg-green-100 text-green-700 border-green-300 dark:bg-green-900 dark:text-green-200 dark:border-green-700', inactive: 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700' },
+                yellow: { active: 'bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-900 dark:text-yellow-200 dark:border-yellow-700', inactive: 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700' },
+                red: { active: 'bg-red-100 text-red-700 border-red-300 dark:bg-red-900 dark:text-red-200 dark:border-red-700', inactive: 'bg-white dark:bg-slate-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700' },
+              };
+              return (
+                <button
+                  key={label}
+                  onClick={() => setSelectedStages(isSelected ? [] : [...existingStages])}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border cursor-pointer transition-all ${
+                    isSelected ? colorMap[color].active : colorMap[color].inactive
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            });
+          })()}
+        </div>
 
         {/* Horizontal Divider */}
         <div className="h-px bg-gray-300 dark:bg-gray-600"></div>
@@ -787,8 +779,8 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
         </div>
       )}
 
-      {/* Loading State */}
-      {loading && (
+      {/* Loading State — full spinner only when no data has arrived yet */}
+      {loading && !insights && (
         <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
           <div className="flex flex-col items-center justify-center py-16">
             <div className="relative">
@@ -822,12 +814,18 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
         </div>
       )}
 
-      {/* Insights Display */}
-      {insights && !loading && (
+      {/* Insights Display — shows as soon as first stage data arrives */}
+      {insights && (
         <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
               {selectedStages.length} stage{selectedStages.length !== 1 ? 's' : ''}
+              {loading && (
+                <span className="ml-2 inline-flex items-center text-sm font-normal text-gray-400 dark:text-gray-500">
+                  <span className="inline-block w-3 h-3 mr-1.5 rounded-full border-2 border-gray-200 dark:border-gray-600 border-t-indigo-500 dark:border-t-indigo-400 animate-spin" />
+                  Loading more...
+                </span>
+              )}
             </h3>
             <span className="text-sm text-gray-500 dark:text-gray-400">
               {insights.filters?.start_date} to {insights.filters?.end_date}

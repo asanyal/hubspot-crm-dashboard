@@ -660,15 +660,21 @@ const LatestMeetings: React.FC<LatestMeetingsProps> = ({ browserId, isInitialize
   }, [isModalOpen, scrollToSection]);
 
   // Function to fetch buyer intent explanation for a specific meeting
+  // Set to true to route through Next.js API proxy (slower first call due to dev compilation);
+  // false calls the backend directly like get-latest-meetings does.
+  const USE_PROXY_FOR_DEAL_TIMELINE = false;
+
   const fetchBuyerIntentExplanation = useCallback(async (dealId: string, eventId: string) => {
     try {
-      // Use local Next.js API route instead of direct backend call to avoid CORS
-      const response = await makeApiCall(`/api/hubspot/v2/deal-timeline?dealName=${encodeURIComponent(dealId)}`);
+      const url = USE_PROXY_FOR_DEAL_TIMELINE
+        ? `/api/hubspot/v2/deal-timeline?dealName=${encodeURIComponent(dealId)}`
+        : `${API_CONFIG.getApiPath('/deal-timeline')}?dealName=${encodeURIComponent(dealId)}`;
+      const response = await makeApiCall(url);
       if (response) {
         const data = await response.json();
         if (data.events && Array.isArray(data.events)) {
           // Find the specific meeting by event_id
-          const meeting = data.events.find((event: any) => 
+          const meeting = data.events.find((event: any) =>
             event.event_id === eventId || event.id === eventId
           );
           return meeting?.buyer_intent_explanation || null;

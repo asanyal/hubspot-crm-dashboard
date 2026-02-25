@@ -73,17 +73,6 @@ interface TimelineData {
   end_date: string;
 }
 
-interface DealInfo {
-  dealId: string;
-  dealOwner: string;
-  activityCount: number;
-  startDate: string;
-  endDate: string;
-  dealStage: string;
-  createdate?: string;
-  createdDate?: string;
-}
-
 interface SelectOption {
   value: string;
   label: string;
@@ -243,6 +232,64 @@ interface ChartDataPoint {
   [key: string]: any; // Add index signature to allow string indexing
 }
 
+const DealInfoBanner: React.FC<{ dealName: string }> = ({ dealName }) => {
+  const [info, setInfo] = useState<{
+    dealOwner: string;
+    dealStage: string;
+    activityCount: number;
+    endDate: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    setInfo(null);
+    fetch(`${API_CONFIG.getApiPath('/deal-info')}?dealName=${encodeURIComponent(dealName)}`)
+      .then(res => res.json())
+      .then(data => setInfo(data))
+      .catch(err => console.error('deal-info error:', err));
+  }, [dealName]);
+
+  return (
+    <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-100">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div className="space-y-1">
+          <span className="text-xs text-gray-400 uppercase tracking-wide">Activities</span>
+          {info ? (
+            <div className="font-semibold text-gray-900 text-sm">{info.activityCount || 0}</div>
+          ) : (
+            <div className="animate-pulse h-5 w-16 bg-gray-200 rounded"></div>
+          )}
+        </div>
+        <div className="space-y-1">
+          <span className="text-xs text-gray-400 uppercase tracking-wide">Owner</span>
+          {info ? (
+            <div className="font-semibold text-gray-900 text-sm">{info.dealOwner}</div>
+          ) : (
+            <div className="animate-pulse h-5 w-24 bg-gray-200 rounded"></div>
+          )}
+        </div>
+        <div className="space-y-1">
+          <span className="text-xs text-gray-400 uppercase tracking-wide">Stage</span>
+          {info ? (
+            <div className="font-semibold text-gray-900 text-sm">{info.dealStage}</div>
+          ) : (
+            <div className="animate-pulse h-5 w-28 bg-gray-200 rounded"></div>
+          )}
+        </div>
+        <div className="space-y-1">
+          <span className="text-xs text-gray-400 uppercase tracking-wide">Expected Close</span>
+          {info ? (
+            <div className="font-semibold text-gray-900 text-sm">
+              {info.endDate ? new Date(info.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
+            </div>
+          ) : (
+            <div className="animate-pulse h-5 w-20 bg-gray-200 rounded"></div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const DealTimeline: React.FC = () => {
   // Get state from context
   const { state, updateState } = useAppState();
@@ -267,7 +314,6 @@ const DealTimeline: React.FC = () => {
 
   // Component-level UI state (doesn't need to persist)
   const [selectedOption, setSelectedOption] = useState<SelectOption | null>(null);
-  const [dealInfo, setDealInfo] = useState<DealInfo | null>(null);
   const [chartData, setChartData] = useState<any[]>([]);
   const [startIndex, setStartIndex] = useState<number>(0);
   const [endIndex, setEndIndex] = useState<number>(0);
@@ -301,7 +347,6 @@ const DealTimeline: React.FC = () => {
   const [isUrlProcessed, setIsUrlProcessed] = useState<boolean>(false);
 
   // References to prevent useEffect loops
-  const dealInfoRef = useRef<DealInfo | null>(null);
   const timelineDataRef = useRef<TimelineData | null>(null);
   const selectedDealRef = useRef<Deal | null>(null);
   const allDealsRef = useRef<Deal[]>([]);
@@ -314,7 +359,6 @@ const DealTimeline: React.FC = () => {
   const DATA_EXPIRY_TIME = 1500000;
 
   // Add new state for storing deal info for all deals
-  const [allDealsInfo, setAllDealsInfo] = useState<Record<string, DealInfo>>({});
 
   // Add this near the top of the component, after the state declarations
   const [isUnmounting, setIsUnmounting] = useState<boolean>(false);
@@ -672,7 +716,6 @@ const DealTimeline: React.FC = () => {
     setChartData([]);
     setMeetingContacts({});
     setActivitiesCount(null);
-    setDealInfo(null);
     setSelectedOption(null);
     setStartIndex(0);
     setEndIndex(0);
@@ -697,9 +740,6 @@ const DealTimeline: React.FC = () => {
     timelineDataRef.current = timelineData;
   }, [timelineData]);
 
-  useEffect(() => {
-    dealInfoRef.current = dealInfo;
-  }, [dealInfo]);
 
   useEffect(() => {
     allDealsRef.current = allDeals;
@@ -1044,35 +1084,6 @@ const DealTimeline: React.FC = () => {
     }
   }, [makeApiCall]);
 
-  // Update fetchDealInfo to use API_CONFIG
-  const fetchDealInfo = useCallback(async (dealName: string) => {
-    console.log('[fetchDealInfo] ===== FUNCTION CALLED =====');
-    console.log('[fetchDealInfo] Deal name:', dealName);
-    console.log('[fetchDealInfo] Timestamp:', new Date().toISOString());
-
-    try {
-      const response = await makeApiCall(`${API_CONFIG.getApiPath('/deal-info')}?dealName=${encodeURIComponent(dealName)}`);
-
-      if (response) {
-        const info = await response.json();
-        console.log('[fetchDealInfo] Response received at:', new Date().toISOString());
-        console.log('[fetchDealInfo] Full response data:', info);
-        console.log('[fetchDealInfo] Available date fields:', {
-          startDate: info.startDate,
-          createdate: info.createdate,
-          createdDate: info.createdDate,
-          allKeys: Object.keys(info)
-        });
-        setDealInfo(info);
-        setAllDealsInfo(prev => ({
-          ...prev,
-          [dealName]: info
-        }));
-      }
-    } catch (error) {
-      console.error('Error fetching deal info:', error);
-    }
-  }, [makeApiCall]);
 
   // Update fetchActivitiesCount to use API_CONFIG
   const fetchActivitiesCount = useCallback(async (dealName: string) => {
@@ -1208,7 +1219,6 @@ const DealTimeline: React.FC = () => {
   }, [
     DATA_EXPIRY_TIME,
     updateState,
-    fetchDealInfo,
     fetchActivitiesCount,
     isUnmounting,
     makeApiCall,
@@ -2990,7 +3000,7 @@ const fetchMeetingContacts = useCallback(async (subject: string, date: string) =
         setLoadingStartTime(null);
       }
     }
-  }, [updateState, fetchDealInfo, fetchActivitiesCount, lastFetched, fetchMeetingContacts, loadingChampions, makeApiCall, DATA_EXPIRY_TIME]);
+  }, [updateState, fetchActivitiesCount, lastFetched, fetchMeetingContacts, loadingChampions, makeApiCall, DATA_EXPIRY_TIME]);
 
 // Update handleDealChange to ensure champions are fetched for new deals
 const handleDealChange = useCallback(async (selectedOption: any) => {
@@ -3212,35 +3222,12 @@ useEffect(() => {
 // MODULAR API CALL SYSTEM - Each component has independent API handler
 // ========================================================================
 
-// API Handler 1: Deal Info (for header banner)
+
+// API Handler 2: Company Overview (for Latest Activity section) - manual trigger only
 useEffect(() => {
   if (!selectedDeal?.name) return;
-
-  const dealName = selectedDeal.name;
-  console.log('[API-DealInfo] ===== API HANDLER 1 TRIGGERED =====');
-  console.log('[API-DealInfo] Fetching for:', dealName);
-  console.log('[API-DealInfo] Timestamp:', new Date().toISOString());
-
-  // Clear previous data immediately for new deal
-  setDealInfo(null);
-
-  // Fire API call
-  fetchDealInfo(dealName);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [selectedDeal?.name]);
-
-// API Handler 2: Company Overview (for Latest Activity section)
-useEffect(() => {
-  if (!selectedDeal?.name) return;
-
-  const dealName = selectedDeal.name;
-  console.log('[API-CompanyOverview] Fetching for:', dealName);
-
-  // Clear previous data immediately for new deal
+  // Clear previous data when deal changes
   setCompanyOverview(null);
-
-  // Fire API call
-  fetchCompanyOverview(dealName);
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [selectedDeal?.name]);
 
@@ -3808,61 +3795,8 @@ useEffect(() => {
         </div>
       ) : selectedDeal ? (
         <div className="space-y-6">
-          {/* Deal Info Banner - Always show, with loading state if needed */}
-          <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-100">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <div className="space-y-1">
-                <span className="text-xs text-gray-400 uppercase tracking-wide">Activities</span>
-                {dealInfo ? (
-                  <div className="font-semibold text-gray-900 dark:text-white text-sm">
-                    {dealInfo.activityCount || 0}
-                  </div>
-                ) : (
-                  <div className="animate-pulse h-5 w-24 bg-gray-200 rounded"></div>
-                )}
-              </div>
-              <div className="space-y-1">
-                <span className="text-xs text-gray-400 uppercase tracking-wide">Owner</span>
-                {dealInfo ? (
-                  <div className="font-semibold text-gray-900 dark:text-white text-sm">{dealInfo.dealOwner}</div>
-                ) : (
-                  <div className="animate-pulse h-5 w-32 bg-gray-200 rounded"></div>
-                )}
-              </div>
-              <div className="space-y-1">
-                <span className="text-xs text-gray-400 uppercase tracking-wide">Stage</span>
-                {dealInfo ? (
-                  <div className="font-semibold text-gray-900 dark:text-white text-sm">{dealInfo.dealStage}</div>
-                ) : (
-                  <div className="animate-pulse h-5 w-28 bg-gray-200 rounded"></div>
-                )}
-              </div>
-              <div className="space-y-1">
-                <span className="text-xs text-gray-400 uppercase tracking-wide">Last Touch</span>
-                {dealInfo ? (
-                  (() => {
-                    const latestDate = getLatestEventDate(timelineData);
-                    return latestDate ? (
-                      <div className="flex items-center gap-2">
-                        <div className="font-semibold text-gray-900 dark:text-white text-sm">{formatDate(latestDate)}</div>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                          calculateDaysPassed(latestDate) > 10
-                            ? 'bg-red-100 text-red-700'
-                            : 'bg-green-100 text-green-700'
-                        }`}>
-                          {calculateDaysPassed(latestDate)}d
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="font-semibold text-gray-900 dark:text-white text-sm">-</div>
-                    );
-                  })()
-                ) : (
-                  <div className="animate-pulse h-5 w-24 bg-gray-200 rounded"></div>
-                )}
-              </div>
-            </div>
-          </div>
+          {/* Deal Info Banner */}
+          <DealInfoBanner dealName={selectedDeal.name} />
 
           {/* Latest Activity Section */}
           <div className={`p-6 rounded-lg shadow-sm border transition-all duration-500 ${
@@ -3894,156 +3828,77 @@ useEffect(() => {
                 <ReactMarkdown>{formatAsBulletPoints(companyOverview)}</ReactMarkdown>
               </div>
             ) : (
-              <p className="text-base text-gray-400 italic">No latest activity available</p>
+              <button
+                onClick={() => selectedDeal?.name && fetchCompanyOverview(selectedDeal.name)}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-sky-700 bg-sky-50 border border-sky-200 rounded-lg hover:bg-sky-100 hover:border-sky-300 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Get the latest on this deal
+              </button>
             )}
           </div>
 
-          {/* Concerns Section */}
-          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-            <h3 className="font-semibold text-gray-700 dark:text-white mb-4">Deal Insights</h3>
+          {/* Deal Insights + Stakeholders Side-by-Side */}
+          <div className="grid grid-cols-2 gap-4">
+          {/* Deal Insights Section */}
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+            <h3 className="font-semibold text-gray-700 dark:text-white mb-3 text-base">Deal Insights</h3>
             {loadingConcerns ? (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="animate-pulse h-32 bg-gray-200 rounded-lg"></div>
-                <div className="animate-pulse h-32 bg-gray-200 rounded-lg"></div>
+              <div className="flex flex-wrap gap-2">
+                <div className="animate-pulse h-7 w-28 bg-gray-200 rounded-full"></div>
+                <div className="animate-pulse h-7 w-32 bg-gray-200 rounded-full"></div>
+                <div className="animate-pulse h-7 w-36 bg-gray-200 rounded-full"></div>
               </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {/* Positives Card */}
-                {(() => {
-                  // Check if there are any activities first
-                  const hasActivities = timelineData?.events && timelineData.events.length > 0;
+            ) : (() => {
+              const hasActivities = timelineData?.events && timelineData.events.length > 0;
+              const processedConcerns = hasActivities ? processConcernsArray(concerns) : null;
+              const hasDecisionMaker = stakeholders.some(s => s.potential_decision_maker);
+              const buyingSignals = hasActivities ? (timelineData?.events?.filter(e =>
+                e.type === 'Meeting' && (e.buyer_intent === 'Likely to buy' || e.buyer_intent === 'Very likely to buy')
+              ).length || 0) : 0;
+              const lessLikelySignals = hasActivities ? (timelineData?.events?.filter(e =>
+                e.type === 'Meeting' && e.buyer_intent === 'Less likely to buy'
+              ).length || 0) : 0;
 
-                  if (!hasActivities) {
-                    // If no activities, show 0 positives
-                    return (
-                      <button
-                        onClick={() => {
-                          setSelectedConcern('positives');
-                          setSelectedDate(null);
-                          setSelectedEventId(null);
-                          setIsDrawerOpen(true);
-                        }}
-                        className="p-6 rounded-lg border-2 border-green-200 bg-green-50 hover:bg-green-100 transition-all hover:shadow-md text-left cursor-pointer"
-                      >
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-semibold text-green-800 text-lg">Positives</h4>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </div>
-                        <div className="text-3xl font-bold text-green-700 mb-1">0</div>
-                        <div className="text-sm text-green-600">positive signals</div>
-                      </button>
-                    );
-                  }
+              const positiveChips: { title: string; dotColor: string; color: string }[] = [];
+              const riskChips: { title: string; dotColor: string; color: string }[] = [];
 
-                  const processedConcerns = processConcernsArray(concerns);
-                  const positiveEmails = timelineData?.events?.filter(e =>
-                    (e.type === 'Incoming Email' || e.type === 'Outgoing Email') && e.sentiment === 'positive'
-                  ).length || 0;
-                  const buyingSignals = timelineData?.events?.filter(e =>
-                    e.type === 'Meeting' && (e.buyer_intent === 'Likely to buy' || e.buyer_intent === 'Very likely to buy')
-                  ).length || 0;
-                  const hasDecisionMaker = stakeholders.some(s => s.potential_decision_maker);
+              if (processedConcerns) {
+                if (!processedConcerns.hasCompetitor) positiveChips.push({ title: 'No Competitors', dotColor: 'bg-blue-400', color: 'bg-blue-50 text-blue-700 border-blue-100' });
+                if (!processedConcerns.hasPricingConcerns) positiveChips.push({ title: 'No Pricing Concerns', dotColor: 'bg-emerald-400', color: 'bg-emerald-50 text-emerald-700 border-emerald-100' });
+              }
+              if (hasDecisionMaker) positiveChips.push({ title: 'Decision Maker Present', dotColor: 'bg-violet-400', color: 'bg-violet-50 text-violet-700 border-violet-100' });
+              if (buyingSignals > 0) positiveChips.push({ title: `${buyingSignals} Buying Signal${buyingSignals > 1 ? 's' : ''}`, dotColor: 'bg-emerald-500', color: 'bg-emerald-50 text-emerald-700 border-emerald-100' });
 
-                  const positivesCount =
-                    (positiveEmails > 0 ? 1 : 0) +
-                    buyingSignals +
-                    (!processedConcerns.hasCompetitor ? 1 : 0) +
-                    (!processedConcerns.hasPricingConcerns ? 1 : 0) +
-                    (hasDecisionMaker ? 1 : 0);
+              if (processedConcerns) {
+                if (processedConcerns.hasCompetitor) riskChips.push({ title: 'Competitor Mentioned', dotColor: 'bg-rose-400', color: 'bg-rose-50 text-rose-600 border-rose-100' });
+                if (processedConcerns.hasPricingConcerns) riskChips.push({ title: 'Pricing Concerns', dotColor: 'bg-amber-400', color: 'bg-amber-50 text-amber-600 border-amber-100' });
+              }
+              if (!hasDecisionMaker) riskChips.push({ title: 'No Decision Maker', dotColor: 'bg-orange-400', color: 'bg-orange-50 text-orange-600 border-orange-100' });
+              if (lessLikelySignals > 0) riskChips.push({ title: `${lessLikelySignals} Risk Signal${lessLikelySignals > 1 ? 's' : ''}`, dotColor: 'bg-rose-500', color: 'bg-rose-50 text-rose-600 border-rose-100' });
 
-                  return (
-                    <button
-                      onClick={() => {
-                        setSelectedConcern('positives');
-                        setSelectedDate(null);
-                        setSelectedEventId(null);
-                        setIsDrawerOpen(true);
-                      }}
-                      className="p-6 rounded-lg border-2 border-green-200 bg-green-50 hover:bg-green-100 transition-all hover:shadow-md text-left cursor-pointer"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-semibold text-green-800 text-lg">Positives</h4>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <div className="text-3xl font-bold text-green-700 mb-1">{positivesCount}</div>
-                      <div className="text-sm text-green-600">positive signals</div>
-                    </button>
-                  );
-                })()}
+              const allChips = [...positiveChips, ...riskChips];
 
-                {/* Risks Card */}
-                {(() => {
-                  // Check if there are any activities first
-                  const hasActivities = timelineData?.events && timelineData.events.length > 0;
-
-                  if (!hasActivities) {
-                    // If no activities, show 0 risks
-                    return (
-                      <button
-                        onClick={() => {
-                          setSelectedConcern('risks');
-                          setSelectedDate(null);
-                          setSelectedEventId(null);
-                          setIsDrawerOpen(true);
-                        }}
-                        className="p-6 rounded-lg border-2 border-red-200 bg-red-50 hover:bg-red-100 transition-all hover:shadow-md text-left cursor-pointer"
-                      >
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-semibold text-red-800 text-lg">Risks</h4>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
-                        </div>
-                        <div className="text-3xl font-bold text-red-700 mb-1">0</div>
-                        <div className="text-sm text-red-600">risk factors</div>
-                      </button>
-                    );
-                  }
-
-                  const processedConcerns = processConcernsArray(concerns);
-                  const lessLikelySignals = timelineData?.events?.filter(e =>
-                    e.type === 'Meeting' && e.buyer_intent === 'Less likely to buy'
-                  ).length || 0;
-                  const hasDecisionMaker = stakeholders.some(s => s.potential_decision_maker);
-
-                  const risksCount =
-                    (!hasDecisionMaker ? 1 : 0) +
-                    (processedConcerns.hasCompetitor ? 1 : 0) +
-                    lessLikelySignals +
-                    (processedConcerns.hasPricingConcerns ? 1 : 0);
-
-                  return (
-                    <button
-                      onClick={() => {
-                        setSelectedConcern('risks');
-                        setSelectedDate(null);
-                        setSelectedEventId(null);
-                        setIsDrawerOpen(true);
-                      }}
-                      className="p-6 rounded-lg border-2 border-red-200 bg-red-50 hover:bg-red-100 transition-all hover:shadow-md text-left cursor-pointer"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-semibold text-red-800 text-lg">Risks</h4>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                      </div>
-                      <div className="text-3xl font-bold text-red-700 mb-1">{risksCount}</div>
-                      <div className="text-sm text-red-600">risk factors</div>
-                    </button>
-                  );
-                })()}
-              </div>
-            )}
+              return allChips.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {allChips.map((chip, idx) => (
+                    <span key={idx} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border ${chip.color}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${chip.dotColor}`} />
+                      {chip.title}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-gray-400 italic">No insights available</div>
+              );
+            })()}
           </div>
 
           {/* Stakeholders Section */}
-          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-            <h3 className="font-semibold text-gray-700 dark:text-white mb-4">Stakeholders</h3>
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+            <h3 className="font-semibold text-gray-700 dark:text-white mb-3 text-base">Stakeholders</h3>
             {loadingStakeholders ? (
               <div className="animate-pulse space-y-3">
                 <div className="h-4 bg-gray-200 rounded w-3/4"></div>
@@ -4061,7 +3916,7 @@ useEffect(() => {
                       </svg>
                       Decision Makers
                     </h4>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       {stakeholders
                         .filter(stakeholder => stakeholder.potential_decision_maker)
                         .map((stakeholder, index) => (
@@ -4114,7 +3969,7 @@ useEffect(() => {
                     <h4 className="font-medium text-gray-400 mb-2.5 text-[10px] uppercase tracking-widest sticky top-0 bg-white pb-1">
                       Others
                     </h4>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       {stakeholders
                         .filter(stakeholder => !stakeholder.potential_decision_maker)
                         .map((stakeholder, index) => (
@@ -4165,6 +4020,7 @@ useEffect(() => {
               <div className="text-sm text-gray-400 italic">No stakeholders found</div>
             )}
           </div>
+          </div>{/* End Deal Insights + Stakeholders grid */}
 
           {/* Deal Logs Section */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-100">

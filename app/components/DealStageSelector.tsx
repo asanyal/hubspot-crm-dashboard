@@ -36,10 +36,18 @@ interface Deal {
 
 
 
+interface DealSignalMeeting {
+  subject: string;
+  date: string;
+  buyer_intent: string;
+  buyer_intent_explanation: Record<string, string[]> | string;
+}
+
 interface DealSignals {
   very_likely_to_buy: number;
   likely_to_buy: number;
   less_likely_to_buy: number;
+  meetings?: DealSignalMeeting[];
 }
 
 interface DealSignalsData {
@@ -121,7 +129,7 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [sorting, setSorting] = useState<SortingState>([
-    { id: 'Deal_Name', desc: false }
+    { id: 'deal_name', desc: false }
   ]);
   const [hasMounted, setHasMounted] = useState(false);
   const [failedStages, setFailedStages] = useState<Set<string>>(new Set());
@@ -137,6 +145,11 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
     'deal_name', 'positives', 'risks', 'stage', 'activity_count'
   ]));
   const [isColumnMenuOpen, setIsColumnMenuOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerDealName, setDrawerDealName] = useState<string | null>(null);
+  const [drawerType, setDrawerType] = useState<'positives' | 'risks' | null>(null);
+  const [expandedThemes, setExpandedThemes] = useState<Set<string>>(new Set());
+  const [drawerSearch, setDrawerSearch] = useState('');
   const router = useRouter();
   
   // Track URL parameters
@@ -158,6 +171,16 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
     return new URLSearchParams();
   }, []);
   
+  // Escape key to close drawer
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerOpen(false);
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [drawerOpen]);
+
   // Handle search input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
@@ -741,6 +764,12 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
     if (storedData) {
       try {
         const parsedData = JSON.parse(storedData);
+        // Invalidate cache if it lacks meetings data (old format)
+        const firstDeal = Object.values(parsedData)[0] as DealSignals | undefined;
+        if (firstDeal && !firstDeal.meetings) {
+          localStorage.removeItem(storageKey);
+          return false;
+        }
         setSignalsData(parsedData);
         return true;
       } catch (error) {
@@ -1088,17 +1117,28 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
       header: 'Deal Name',
       size: 250,
       maxSize: 250,
-      cell: info => (
-        <div className="max-w-[250px] truncate">
-          <button
-            onClick={() => navigateToDealTimeline(info.getValue())}
-            className="font-medium text-sky-600 hover:text-sky-800 hover:underline text-left truncate"
-            title={info.getValue()}
-          >
-            {info.getValue()}
-          </button>
-        </div>
-      ),
+      cell: info => {
+        const dealName = info.getValue();
+        const encodedDealName = encodeURIComponent(dealName);
+        return (
+          <div className="max-w-[250px] flex items-center gap-1.5">
+            <span className="font-medium text-gray-900 truncate" title={dealName}>
+              {dealName}
+            </span>
+            <a
+              href={`/deal-timeline?dealName=${encodedDealName}&autoload=true&t=${Date.now()}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-shrink-0 text-sky-600 hover:text-sky-800 transition-colors"
+              title="Open deal timeline"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          </div>
+        );
+      },
     }),
     columnHelper.accessor((row) => {
       const dealName = row.Deal_Name;
@@ -1111,8 +1151,11 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
       const noDecisionMaker = insightsData?.no_decision_maker?.includes(dealName) || false;
 
       const buyingSignals = (signals?.likely_to_buy || 0) + (signals?.very_likely_to_buy || 0);
+      const positiveMeetings = (signals?.meetings || []).filter((m: any) =>
+        m.buyer_intent === 'Likely to buy' || m.buyer_intent === 'Very likely to buy'
+      ).length;
 
-      let count = buyingSignals;
+      let count = buyingSignals + positiveMeetings;
       if (!hasNoCompetitorData && !hasCompetitor) count += 1;
       if (!hasNoPricingData && !hasPricingConcerns) count += 1;
       if (!hasNoDecisionMakerData && !noDecisionMaker) count += 1;
@@ -1146,11 +1189,16 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
         const hasNoPricing = !hasNoPricingData && !hasPricingConcerns;
         const hasDecisionMaker = !hasNoDecisionMakerData && !noDecisionMaker;
 
+        const positiveMeetingsCount = (signals?.meetings || []).filter((m: any) =>
+          m.buyer_intent === 'Likely to buy' || m.buyer_intent === 'Very likely to buy'
+        ).length;
+
         const positivesCount =
           buyingSignals +
           (hasNoCompetitor ? 1 : 0) +
           (hasNoPricing ? 1 : 0) +
-          (hasDecisionMaker ? 1 : 0);
+          (hasDecisionMaker ? 1 : 0) +
+          positiveMeetingsCount;
 
         // Build tooltip content - only show actual signals
         const positiveSignals = [];
@@ -1185,39 +1233,22 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
         }
 
         return (
-          <div className="group relative">
-            <div className={`inline-flex items-center justify-center min-w-[2.5rem] h-7 px-2.5 rounded-full text-xs font-medium cursor-pointer transition-all duration-300 border ${
+          <button
+            onClick={() => {
+              setDrawerDealName(dealName);
+              setDrawerType('positives');
+              setDrawerOpen(true);
+              setExpandedThemes(new Set());
+              setDrawerSearch('');
+            }}
+            className={`inline-flex items-center justify-center min-w-[2.5rem] h-7 px-2.5 rounded-full text-xs font-medium cursor-pointer transition-all duration-300 border ${
               positivesCount > 0
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 hover:shadow-sm'
+                ? 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100 hover:border-teal-300 hover:shadow-sm'
                 : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
-            }`}>
-              <span className="tabular-nums">{positivesCount}</span>
-            </div>
-            <div className="invisible group-hover:visible absolute z-[100] left-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
-              <div className="bg-gradient-to-r from-green-500 to-emerald-600 px-4 py-3">
-                <div className="font-semibold text-white text-sm">✨ Positive Signals</div>
-              </div>
-              <div className="p-3 max-h-96 overflow-y-auto">
-                {positiveSignals.length > 0 ? (
-                  <div className="space-y-3">
-                    {positiveSignals.map((signal, idx) => (
-                      <div key={idx} className="flex gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <div className={`flex-shrink-0 w-8 h-8 ${signal.color} rounded-lg flex items-center justify-center text-white text-sm`}>
-                          {signal.icon}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-gray-900 text-xs">{signal.title}</div>
-                          {signal.value && <div className="text-xs text-green-700 font-medium mt-1">{signal.value}</div>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6 text-gray-500 text-sm">No positive signals detected</div>
-                )}
-              </div>
-            </div>
-          </div>
+            }`}
+          >
+            <span className="tabular-nums">{positivesCount}</span><span className="ml-1">signals</span>
+          </button>
         );
       },
     }),
@@ -1232,8 +1263,11 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
       const noDecisionMaker = insightsData?.no_decision_maker?.includes(dealName) || false;
 
       const lessLikelySignals = signals?.less_likely_to_buy || 0;
+      const riskMeetings = (signals?.meetings || []).filter((m: any) =>
+        m.buyer_intent === 'Less likely to buy' || m.buyer_intent === 'Neutral'
+      ).length;
 
-      let count = 0;
+      let count = riskMeetings;
       if (!hasNoDecisionMakerData && noDecisionMaker) count += 1;
       if (!hasNoCompetitorData && hasCompetitor) count += 1;
       count += lessLikelySignals;
@@ -1268,11 +1302,16 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
         const hasCompetitorFlag = !hasNoCompetitorData && hasCompetitor;
         const hasPricingFlag = !hasNoPricingData && hasPricingConcerns;
 
+        const riskMeetingsCount = (signals?.meetings || []).filter((m: any) =>
+          m.buyer_intent === 'Less likely to buy' || m.buyer_intent === 'Neutral'
+        ).length;
+
         const risksCount =
           (hasNoDecisionMakerFlag ? 1 : 0) +
           (hasCompetitorFlag ? 1 : 0) +
           lessLikelySignals +
-          (hasPricingFlag ? 1 : 0);
+          (hasPricingFlag ? 1 : 0) +
+          riskMeetingsCount;
 
         // Build tooltip content - only show actual risks
         const riskSignals = [];
@@ -1307,43 +1346,26 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
         }
 
         return (
-          <div className="group relative">
-            <div className={`inline-flex items-center justify-center min-w-[2.5rem] h-7 px-2.5 rounded-full text-xs font-medium cursor-pointer transition-all duration-300 border ${
+          <button
+            onClick={() => {
+              setDrawerDealName(dealName);
+              setDrawerType('risks');
+              setDrawerOpen(true);
+              setExpandedThemes(new Set());
+              setDrawerSearch('');
+            }}
+            className={`inline-flex items-center justify-center min-w-[2.5rem] h-7 px-2.5 rounded-full text-xs font-medium cursor-pointer transition-all duration-300 border ${
               risksCount > 0
                 ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 hover:border-rose-300 hover:shadow-sm'
                 : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
-            }`}>
-              <span className="tabular-nums">{risksCount}</span>
-            </div>
-            <div className="invisible group-hover:visible absolute z-[100] right-0 top-full mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden">
-              <div className="bg-gradient-to-r from-red-500 to-rose-600 px-4 py-3">
-                <div className="font-semibold text-white text-sm">⚡ Risk Factors</div>
-              </div>
-              <div className="p-3 max-h-96 overflow-y-auto">
-                {riskSignals.length > 0 ? (
-                  <div className="space-y-3">
-                    {riskSignals.map((signal, idx) => (
-                      <div key={idx} className="flex gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <div className={`flex-shrink-0 w-8 h-8 ${signal.color} rounded-lg flex items-center justify-center text-white text-sm`}>
-                          {signal.icon}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-gray-900 text-xs">{signal.title}</div>
-                          {signal.value && <div className="text-xs text-red-700 font-medium mt-1">{signal.value}</div>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6 text-gray-500 text-sm">No risk factors detected</div>
-                )}
-              </div>
-            </div>
-          </div>
+            }`}
+          >
+            <span className="tabular-nums">{risksCount}</span><span className="ml-1">signals</span>
+          </button>
         );
       },
     }),
-    columnHelper.accessor('Deal_Name', {
+    columnHelper.accessor(row => row.Deal_Name, {
       id: 'stage',
       header: 'Stage',
       cell: info => {
@@ -1360,7 +1382,7 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
         );
       },
     }),
-    columnHelper.accessor('Deal_Name', {
+    columnHelper.accessor(row => row.Deal_Name, {
       id: 'activity_count',
       header: 'Activity Count',
       cell: info => {
@@ -1524,7 +1546,7 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
           
           {error && (
             <div className="text-red-500 mb-4 p-3 bg-red-50 rounded-md">
-              {error}
+              {typeof error === 'string' ? error : (error as any)?.header || (error as any)?.details || 'An error occurred'}
               <button
                 className="ml-3 text-red-700 underline"
                 onClick={handleRefresh}
@@ -1716,17 +1738,18 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {table.getRowModel().rows.map(row => (
-                    <tr key={row.id} className="hover:bg-sky-50 transition-colors">
+                    <tr key={row.id} className={`group hover:bg-sky-50 transition-colors ${drawerOpen && drawerDealName === row.original.Deal_Name ? 'bg-sky-50' : ''}`}>
                       {row.getVisibleCells().map((cell, index) => {
                         const isPinned = pinnedColumns.has(cell.column.id);
                         const pinnedIndex = Array.from(pinnedColumns).indexOf(cell.column.id);
                         const leftPosition = pinnedIndex >= 0 ? `${pinnedIndex * 250}px` : 'auto';
+                        const isActiveRow = drawerOpen && drawerDealName === row.original.Deal_Name;
 
                         return (
                           <td
                             key={cell.id}
                             className={`py-3 px-4 ${
-                              isPinned ? 'sticky z-20 bg-white hover:bg-sky-50 shadow-sm transition-colors' : ''
+                              isPinned ? `sticky z-20 shadow-sm transition-colors ${isActiveRow ? 'bg-sky-50' : 'bg-white group-hover:bg-sky-50'}` : ''
                             }`}
                             style={isPinned ? { left: leftPosition, minWidth: '250px', maxWidth: '250px' } : {}}
                           >
@@ -1750,6 +1773,276 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
             </div>
           ) : null}
         </div>
+      </div>
+
+      {/* Signals Drawer */}
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 bg-black/20 z-40"
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
+      <div
+        className={`fixed top-0 right-0 h-full w-[480px] bg-white shadow-xl z-50 overflow-y-auto transform ${
+          drawerOpen ? 'translate-x-0' : 'translate-x-full'
+        } transition-transform duration-300 ease-in-out`}
+      >
+        {drawerDealName && drawerType && (() => {
+          const signals = signalsData?.[drawerDealName];
+          const meetings = signals?.meetings || [];
+          const isPositives = drawerType === 'positives';
+
+          // Compute summary cards
+          const hasNoCompetitorData = insightsData?.using_competitor_no_data?.includes(drawerDealName) || false;
+          const hasCompetitor = insightsData?.using_competitor?.includes(drawerDealName) || false;
+          const hasNoPricingData = insightsData?.pricing_concerns_no_data?.includes(drawerDealName) || false;
+          const hasPricingConcerns = insightsData?.pricing_concerns?.includes(drawerDealName) || false;
+          const hasNoDecisionMakerData = insightsData?.no_decision_maker_no_data?.includes(drawerDealName) || false;
+          const noDecisionMaker = insightsData?.no_decision_maker?.includes(drawerDealName) || false;
+
+          const summaryCards: { title: string; color: string; dotColor: string }[] = [];
+          if (isPositives) {
+            if (!hasNoCompetitorData && !hasCompetitor) summaryCards.push({ title: 'No Competitors', dotColor: 'bg-blue-400', color: 'bg-blue-50 text-blue-700 border-blue-100' });
+            if (!hasNoPricingData && !hasPricingConcerns) summaryCards.push({ title: 'No Pricing Concerns', dotColor: 'bg-teal-500', color: 'bg-teal-50 text-teal-800 border-teal-100' });
+            if (!hasNoDecisionMakerData && !noDecisionMaker) summaryCards.push({ title: 'Decision Maker Present', dotColor: 'bg-violet-400', color: 'bg-violet-50 text-violet-700 border-violet-100' });
+          } else {
+            if (!hasNoCompetitorData && hasCompetitor) summaryCards.push({ title: 'Competitor Mentioned', dotColor: 'bg-rose-400', color: 'bg-rose-50 text-rose-600 border-rose-100' });
+            if (!hasNoPricingData && hasPricingConcerns) summaryCards.push({ title: 'Pricing Concerns', dotColor: 'bg-amber-400', color: 'bg-amber-50 text-amber-600 border-amber-100' });
+            if (!hasNoDecisionMakerData && noDecisionMaker) summaryCards.push({ title: 'No Decision Maker', dotColor: 'bg-orange-400', color: 'bg-orange-50 text-orange-600 border-orange-100' });
+          }
+
+          // Filter meetings by intent and collect themes
+          const relevantMeetings = meetings.filter(m => {
+            if (isPositives) {
+              return m.buyer_intent === 'Likely to buy' || m.buyer_intent === 'Very likely to buy';
+            }
+            return m.buyer_intent === 'Less likely to buy' || m.buyer_intent === 'Neutral';
+          });
+
+          // Collect themes per meeting, keeping meeting context for each
+          const themeEntries: { theme: string; bullets: string[]; subject: string; date: string }[] = [];
+          relevantMeetings.forEach(meeting => {
+            const explanation = meeting.buyer_intent_explanation;
+            if (!explanation) return;
+
+            // Handle dict format (newer meetings)
+            if (typeof explanation === 'object' && !Array.isArray(explanation)) {
+              Object.entries(explanation).forEach(([theme, rawBullets]) => {
+                const bulletArr = Array.isArray(rawBullets) ? rawBullets : [rawBullets];
+                const bullets = (bulletArr as any[]).flatMap(b => {
+                  if (typeof b === 'string') return [b];
+                  if (b && typeof b === 'object' && b.header) {
+                    const lines: string[] = [b.header];
+                    if (Array.isArray(b.details)) lines.push(...b.details);
+                    return lines;
+                  }
+                  return [String(b)];
+                });
+                themeEntries.push({ theme, bullets, subject: meeting.subject, date: meeting.date });
+              });
+            }
+            // Handle markdown string format (older meetings)
+            else if (typeof explanation === 'string' && explanation.trim().length > 0) {
+              const lines = explanation.split('\n');
+              let currentTheme = '';
+              let currentBullets: string[] = [];
+
+              const flushTheme = () => {
+                if (currentTheme && currentBullets.length > 0) {
+                  themeEntries.push({ theme: currentTheme, bullets: currentBullets, subject: meeting.subject, date: meeting.date });
+                }
+                currentBullets = [];
+              };
+
+              lines.forEach(line => {
+                const trimmed = line.trim();
+                if (!trimmed) return;
+                // Markdown heading = theme
+                if (trimmed.startsWith('# ')) {
+                  flushTheme();
+                  currentTheme = trimmed.replace(/^#+\s*/, '');
+                } else {
+                  // Strip leading "- " bullets
+                  const bullet = trimmed.replace(/^[-*]\s*/, '');
+                  if (bullet) currentBullets.push(bullet);
+                }
+              });
+              flushTheme();
+            }
+          });
+          // Sort by date descending (latest first)
+          themeEntries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+          return (
+            <>
+              {/* Sticky header */}
+              <div className={`sticky top-0 z-10 border-b border-gray-200 ${
+                isPositives
+                  ? 'bg-gradient-to-r from-teal-600 to-teal-700'
+                  : 'bg-gradient-to-r from-red-500 to-rose-600'
+              }`}>
+                <div className="px-5 py-4 flex items-center justify-between">
+                  <div>
+                    <div className="text-white/80 text-xs font-medium uppercase tracking-wide">
+                      {isPositives ? 'Signals & Themes' : 'Risk Factors'}
+                    </div>
+                    <div className="text-white font-semibold text-base mt-0.5 truncate max-w-[360px]">
+                      {drawerDealName}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setDrawerOpen(false)}
+                    className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-5 space-y-4">
+                {/* Summary cards */}
+                {summaryCards.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {summaryCards.map((card, idx) => (
+                      <span key={idx} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border ${card.color}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${card.dotColor}`} />
+                        {card.title}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Search bar */}
+                {themeEntries.length > 0 && (
+                  <div className="relative">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                    </svg>
+                    <input
+                      type="text"
+                      value={drawerSearch}
+                      onChange={e => setDrawerSearch(e.target.value)}
+                      placeholder="Search themes..."
+                      className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-300 transition-colors"
+                    />
+                    {drawerSearch && (
+                      <button
+                        onClick={() => setDrawerSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Themed breakdown */}
+                {(() => {
+                  const searchLower = drawerSearch.toLowerCase().trim();
+                  const filteredEntries = searchLower
+                    ? themeEntries.filter(entry =>
+                        entry.theme.toLowerCase().includes(searchLower) ||
+                        entry.bullets.some(b => b.toLowerCase().includes(searchLower))
+                      )
+                    : themeEntries;
+
+                  const highlightMatch = (text: string) => {
+                    if (!searchLower) return text;
+                    const idx = text.toLowerCase().indexOf(searchLower);
+                    if (idx === -1) return text;
+                    return <span>{text.slice(0, idx)}<mark className="bg-orange-200 text-inherit rounded-sm">{text.slice(idx, idx + searchLower.length)}</mark>{text.slice(idx + searchLower.length)}</span>;
+                  };
+
+                  return filteredEntries.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-1">
+                      {drawerType === 'positives' ? 'Themes from meetings with positive signals' : 'Themes from meetings with neutral or negative signals'}
+                      {searchLower && ` · ${filteredEntries.length} of ${themeEntries.length}`}
+                    </div>
+                    {filteredEntries.map((entry, entryIdx) => {
+                      const themeKey = `${entry.theme}|||${entry.subject}|||${entry.date}`;
+                      const hasBulletMatch = searchLower && entry.bullets.some(b => b.toLowerCase().includes(searchLower));
+                      const isExpanded = expandedThemes.has(themeKey) || !!hasBulletMatch;
+                      return (
+                        <div key={themeKey + entryIdx} className="border border-gray-200 rounded-lg overflow-hidden">
+                          <button
+                            onClick={() => {
+                              setExpandedThemes(prev => {
+                                const next = new Set(prev);
+                                if (next.has(themeKey)) next.delete(themeKey);
+                                else next.add(themeKey);
+                                return next;
+                              });
+                            }}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium text-gray-800">{highlightMatch(entry.theme)}</span>
+                              <div className="text-xs text-gray-400 mt-0.5 truncate">
+                                <span className="font-semibold text-gray-600">{(() => {
+                                  const days = Math.floor((Date.now() - new Date(entry.date).getTime()) / 86400000);
+                                  if (days === 0) return 'Today';
+                                  if (days === 1) return '1 day ago';
+                                  if (days < 30) return `${days} days ago`;
+                                  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+                                  return `${Math.floor(days / 365)}y ago`;
+                                })()}</span> &middot; {drawerDealName} | {entry.subject}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                isPositives ? 'bg-teal-100 text-teal-800' : 'bg-rose-100 text-rose-700'
+                              }`}>
+                                {entry.bullets.length}
+                              </span>
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className={`h-4 w-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                          </button>
+                          {isExpanded && (
+                            <div className="px-4 py-3">
+                              <ul className="space-y-1.5">
+                                {entry.bullets.map((bullet, bIdx) => (
+                                  <li key={bIdx} className="flex items-start gap-2 text-sm text-gray-700">
+                                    <span className={`mt-1.5 flex-shrink-0 h-1.5 w-1.5 rounded-full ${
+                                      isPositives ? 'bg-teal-500' : 'bg-rose-400'
+                                    }`} />
+                                    {highlightMatch(bullet)}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : searchLower ? (
+                  <div className="text-center py-8 text-gray-400 text-sm">
+                    No themes matching &ldquo;{drawerSearch}&rdquo;
+                  </div>
+                ) : (
+                  summaryCards.length === 0 && (
+                    <div className="text-center py-10 text-gray-500 text-sm">
+                      {isPositives ? 'No positive signals detected' : 'No risk factors detected'}
+                    </div>
+                  )
+                );
+                })()}
+              </div>
+            </>
+          );
+        })()}
       </div>
     </div>
   );

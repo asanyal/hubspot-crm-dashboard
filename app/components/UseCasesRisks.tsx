@@ -29,11 +29,7 @@ interface UseCasesRisksProps {
 
 const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized }) => {
   const [stages, setStages] = useState<Stage[]>([]);
-  const [selectedStages, setSelectedStages] = useState<string[]>([
-    '0. Identification',
-    '1. Sales Qualification',
-    '2. Needs Analysis & Solution Mapping'
-  ]);
+  const [selectedStages, setSelectedStages] = useState<string[]>([]);
   const [selectedDateRange, setSelectedDateRange] = useState<string | null>('3w');
   const [loading, setLoading] = useState(false);
   const [stagesLoading, setStagesLoading] = useState(false);
@@ -90,14 +86,13 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
     }
   }, [isInitialized, browserId]);
 
-  // Auto-fetch insights when any filter changes
-  useEffect(() => {
+  // Manual search trigger
+  const handleSearch = () => {
     if (!isInitialized || !browserId) return;
     if (selectedStages.length === 0 || !selectedDateRange) return;
-
     setSelectedRiskTypes([]);
     handleGetInsights();
-  }, [selectedStages, selectedDateRange, isInitialized, browserId]);
+  };
 
   // Format a date string as "x days ago"
   const formatTimeAgo = (dateStr: string): string => {
@@ -696,12 +691,15 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6 transition-colors">
-      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Use Cases & Risks</h2>
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Use Cases & Risks</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Assess use cases and risks on different stages of the funnel</p>
+      </div>
 
-      {/* Filters */}
-      <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-4 mb-6 space-y-4">
-        {/* Stage Multi-Select - Grouped by Funnel */}
-        <div className="flex items-center justify-center gap-2">
+      {/* Filters — single row */}
+      <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-3 mb-6">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Funnel Chips */}
           {(() => {
             const funnelGroups = [
               { label: 'Top of Funnel', stages: ['0. Identification', '1. Sales Qualification', '2. Needs Analysis & Solution Mapping'], color: 'green' },
@@ -709,7 +707,6 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
               { label: 'Bottom of Funnel', stages: ['Assessment', 'Closed Active Nurture', 'Closed Lost', 'Closed Marketing Nurture', 'Closed Won', 'Renew/Closed won', 'Churned'], color: 'red' },
             ];
             return funnelGroups.map(({ label, stages: groupStages, color }) => {
-              // If stages haven't loaded yet, use all hardcoded stages for the group
               const existingStages = stages.length > 0
                 ? groupStages.filter(s => stages.some(st => st.stage_name === s))
                 : groupStages;
@@ -732,38 +729,48 @@ const UseCasesRisks: React.FC<UseCasesRisksProps> = ({ browserId, isInitialized 
               );
             });
           })()}
-        </div>
 
-        {/* Horizontal Divider */}
-        <div className="h-px bg-gray-300 dark:bg-gray-600"></div>
+          {/* Vertical Divider */}
+          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1"></div>
 
-        {/* Second Row - Date Range */}
-        <div className="flex flex-wrap items-center justify-center gap-3">
           {/* Date Range Buttons */}
-          <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
-            Date Range
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {dateRangeOptions.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => setSelectedDateRange(option.value)}
-                title={option.label}
-                className={`group relative px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  selectedDateRange === option.value
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
-                }`}
-              >
-                {option.value.toUpperCase()}
-                {/* Tooltip on hover */}
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
-                  {option.label}
-                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
-                </div>
-              </button>
-            ))}
-          </div>
+          {dateRangeOptions.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => setSelectedDateRange(option.value)}
+              title={option.label}
+              className={`group relative px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                selectedDateRange === option.value
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
+              }`}
+            >
+              {option.value.toUpperCase()}
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                {option.label}
+                <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+              </div>
+            </button>
+          ))}
+
+          {/* Vertical Divider */}
+          <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1"></div>
+
+          {/* Search Button */}
+          <button
+            onClick={handleSearch}
+            disabled={selectedStages.length === 0 || !selectedDateRange || loading}
+            className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${
+              selectedStages.length === 0 || !selectedDateRange || loading
+                ? 'bg-gray-200 dark:bg-slate-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                : 'bg-sky-600 text-white hover:bg-sky-700 shadow-sm'
+            }`}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            Search
+          </button>
         </div>
       </div>
 

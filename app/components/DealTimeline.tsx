@@ -749,6 +749,17 @@ const DealTimeline: React.FC = () => {
   useEffect(() => {
     setHasMounted(true);
 
+    // Clear any previously persisted deal unless URL specifies one
+    const searchParams = new URLSearchParams(window.location.search);
+    const dealFromUrl = searchParams.get('dealName') || searchParams.get('deal_name') || searchParams.get('deal');
+    if (!dealFromUrl) {
+      updateState('dealTimeline.selectedDeal', null);
+      updateState('dealTimeline.activities', null);
+      updateState('dealTimeline.lastFetched', null);
+      setSelectedOption(null);
+      setCurrentDealId(null);
+    }
+
     // Clear error when component mounts
     if (error) {
       updateState('dealTimeline.error', null);

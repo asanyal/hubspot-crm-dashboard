@@ -1672,7 +1672,7 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
       {/* Left Panel - Stages Sidebar */}
       <div className={`w-80 bg-white border-r border-gray-200 overflow-y-auto transition-all duration-300 ${isMainSidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
         <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold">Stages</h2>
+          <h2 className="text-lg font-semibold">Choose a Funnel or Stage 👇</h2>
         </div>
         
         {/* Stages List */}

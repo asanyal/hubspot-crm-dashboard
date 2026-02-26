@@ -2058,9 +2058,51 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
             </div>
           ) : selectedStage && !loading ? (
             <div className="text-center py-10 text-gray-600">
-              {failedStages.has(selectedStage) ? 
-                "Failed to load deals for this stage." : 
+              {failedStages.has(selectedStage) ?
+                "Failed to load deals for this stage." :
                 "No deals found in this stage."}
+            </div>
+          ) : !selectedStage && !loading && !funnelGroupLoading ? (
+            <div className="flex flex-col items-center justify-center py-28">
+              <div className="relative mb-8">
+                {/* Decorative rings */}
+                <div className="absolute -inset-4 rounded-full bg-gradient-to-br from-sky-100 to-indigo-100 opacity-60 animate-pulse"></div>
+                <div className="absolute -inset-8 rounded-full bg-gradient-to-tr from-teal-50 to-purple-50 opacity-40"></div>
+                {/* Main circle */}
+                <div className="relative w-32 h-32 rounded-full bg-gradient-to-br from-sky-50 via-white to-indigo-50 border border-sky-100 flex items-center justify-center shadow-sm">
+                  {/* Chart bars */}
+                  <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    {/* Bar 1 - green/teal */}
+                    <rect x="8" y="32" width="10" height="24" rx="3" fill="url(#bar1)" />
+                    {/* Bar 2 - sky/blue */}
+                    <rect x="22" y="20" width="10" height="36" rx="3" fill="url(#bar2)" />
+                    {/* Bar 3 - indigo/purple */}
+                    <rect x="36" y="12" width="10" height="44" rx="3" fill="url(#bar3)" />
+                    {/* Sparkle */}
+                    <circle cx="52" cy="16" r="2.5" fill="#f59e0b" />
+                    <circle cx="56" cy="10" r="1.5" fill="#fbbf24" />
+                    <circle cx="48" cy="10" r="1" fill="#fcd34d" />
+                    {/* Trend line */}
+                    <path d="M12 30 L27 18 L41 10" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeDasharray="3 3" opacity="0.6" />
+                    <defs>
+                      <linearGradient id="bar1" x1="13" y1="32" x2="13" y2="56" gradientUnits="userSpaceOnUse">
+                        <stop stopColor="#2dd4bf" />
+                        <stop offset="1" stopColor="#14b8a6" />
+                      </linearGradient>
+                      <linearGradient id="bar2" x1="27" y1="20" x2="27" y2="56" gradientUnits="userSpaceOnUse">
+                        <stop stopColor="#38bdf8" />
+                        <stop offset="1" stopColor="#0ea5e9" />
+                      </linearGradient>
+                      <linearGradient id="bar3" x1="41" y1="12" x2="41" y2="56" gradientUnits="userSpaceOnUse">
+                        <stop stopColor="#a78bfa" />
+                        <stop offset="1" stopColor="#7c3aed" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
+              </div>
+              <p className="text-lg font-semibold bg-gradient-to-r from-sky-600 to-indigo-600 bg-clip-text text-transparent">Pick a Funnel or a Stage</p>
+              <p className="text-sm text-gray-400 mt-1">Get insights across deals</p>
             </div>
           ) : null}
         </div>

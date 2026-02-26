@@ -157,15 +157,30 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
   ]);
   const [hasMounted, setHasMounted] = useState(false);
   const [failedStages, setFailedStages] = useState<Set<string>>(new Set());
-  const [selectedStages, setSelectedStages] = useState<Set<string>>(new Set());
+  const [selection, setSelection] = useState<{ type: 'funnel'; label: string } | { type: 'stage'; name: string } | null>(null);
   const [funnelGroupLoading, setFunnelGroupLoading] = useState(false);
   const [dealStageMap, setDealStageMap] = useState<Record<string, string>>({});
+
+  // Derive selectedStages from the single selection for downstream logic
+  const selectedStages = useMemo((): Set<string> => {
+    if (!selection) return new Set();
+    if (selection.type === 'stage') return new Set([selection.name]);
+    // selection.type === 'funnel'
+    const group = FUNNEL_GROUPS.find(g => g.label === selection.label);
+    if (!group) return new Set();
+    const stageNames = availableStages
+      .filter(s => group.stages.includes(s.stage_name))
+      .map(s => s.stage_name);
+    return new Set(stageNames);
+  }, [selection, availableStages]);
 
   const [activityCounts, setActivityCounts] = useState<Record<string, number | 'N/A'>>({});
   const [activityCountsLoading, setActivityCountsLoading] = useState(false);
   const [signalsData, setSignalsData] = useState<DealSignalsData | null>(null);
   const [signalsLoading, setSignalsLoading] = useState(false);
+  const [signalsFetched, setSignalsFetched] = useState(false);
   const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsFetched, setInsightsFetched] = useState(false);
   const [insightsData, setInsightsData] = useState<DealInsights | null>(null);
   const [pinnedColumns, setPinnedColumns] = useState<Set<string>>(new Set(['deal_name']));
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set([
@@ -532,13 +547,8 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
         }
       }
 
-      // Add URL stage to selected stages
-      setSelectedStages(prev => {
-        if (prev.has(urlStage)) return prev;
-        const next = new Set(prev);
-        next.add(urlStage);
-        return next;
-      });
+      // Set URL stage as the active selection
+      setSelection({ type: 'stage', name: urlStage });
     }
 
     // Clear URL parameters after handling them
@@ -620,12 +630,23 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
     return Array.from(stages).sort().join(' + ');
   }, []);
 
-  // Ref to hold latest dealsByStage to avoid effect dependency loops
+  // Refs to hold latest values to avoid effect dependency loops
   const dealsByStageRef = useRef(dealsByStage);
   dealsByStageRef.current = dealsByStage;
+  const selectedStageRef = useRef(selectedStage);
+  selectedStageRef.current = selectedStage;
+  const selectedStagesRef = useRef(selectedStages);
+  selectedStagesRef.current = selectedStages;
+
+  // Track the last synced fingerprint to avoid redundant updates
+  const lastSyncedFingerprint = useRef<string | null>(null);
 
   // Helper: sync combined deals into dealsByStage under composite key and update context
-  const syncCombinedDeals = useCallback((stages: Set<string>) => {
+  const syncCombinedDeals = useCallback((stages: Set<string>, fingerprint: string) => {
+    // Skip if we already synced for this exact fingerprint
+    if (fingerprint === lastSyncedFingerprint.current) return;
+    lastSyncedFingerprint.current = fingerprint;
+
     const compositeKey = computeCompositeKey(stages);
     if (!compositeKey) {
       updateState('dealsByStage.selectedStage', null);
@@ -653,7 +674,7 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
     updateState('dealsByStage.selectedStage', compositeKey);
   }, [computeCompositeKey, updateState]);
 
-  // Handler for stage selection (multi-select toggle)
+  // Handler for individual stage selection (radio-style: one at a time)
   const handleStageSelect = useCallback(async (stageName: string): Promise<void> => {
     if (stagesLoading) return;
 
@@ -668,20 +689,19 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
 
     updateState('dealsByStage.error', null);
 
-    setSelectedStages(prev => {
-      const next = new Set(prev);
-      if (next.has(stageName)) {
-        // Deselect
-        next.delete(stageName);
-      } else {
-        // Select
-        next.add(stageName);
-      }
-      return next;
-    });
+    // Clear secondary data for fresh load
+    setInsightsData(null);
+    setInsightsFetched(false);
+    setActivityCounts({});
+    setSignalsData(null);
+    setSignalsFetched(false);
+
+    // Radio toggle: deselect if already selected, otherwise select this stage
+    const isAlreadySelected = selection?.type === 'stage' && selection.name === stageName;
+    setSelection(isAlreadySelected ? null : { type: 'stage', name: stageName });
 
     // Fetch deals if not cached
-    if (!dealsByStage[stageName] && !failedStages.has(stageName)) {
+    if (!isAlreadySelected && !dealsByStage[stageName] && !failedStages.has(stageName)) {
       updateState('dealsByStage.loading', true);
       try {
         const response = await makeApiCall(`${API_CONFIG.getApiPath('/deals')}?stage=${encodeURIComponent(stageName)}`);
@@ -704,9 +724,9 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
         updateState('dealsByStage.loading', false);
       }
     }
-  }, [stagesLoading, failedStages, updateState, dealsByStage, makeApiCall]);
+  }, [stagesLoading, failedStages, selection, updateState, dealsByStage, makeApiCall]);
 
-  // Handler for funnel group selection (multi-select toggle for Top/Mid, no-op for Bottom)
+  // Handler for funnel group selection (radio-style: Top/Mid only, no-op for Bottom)
   const handleFunnelGroupSelect = useCallback(async (groupLabel: string) => {
     if (stagesLoading || funnelGroupLoading) return;
 
@@ -723,26 +743,22 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
 
     updateState('dealsByStage.error', null);
 
-    // Check if all group stages are currently selected
-    const allSelected = groupStageNames.every(name => selectedStages.has(name));
-
-    if (allSelected) {
-      // Deselect all stages in this group
-      setSelectedStages(prev => {
-        const next = new Set(prev);
-        groupStageNames.forEach(name => next.delete(name));
-        return next;
-      });
+    // Radio toggle: deselect if already selected, otherwise select this funnel
+    const isAlreadySelected = selection?.type === 'funnel' && selection.label === groupLabel;
+    if (isAlreadySelected) {
+      setSelection(null);
       return;
     }
 
-    // Select all stages in this group
+    // Select this funnel group
     setFunnelGroupLoading(true);
 
     // Clear secondary data for fresh load
     setInsightsData(null);
+    setInsightsFetched(false);
     setActivityCounts({});
     setSignalsData(null);
+    setSignalsFetched(false);
 
     try {
       // Fetch deals for any uncached stages in parallel
@@ -769,12 +785,7 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
         updateState('dealsByStage.dealsByStage', updatedDealsByStage);
       }
 
-      // Add all group stages to selected
-      setSelectedStages(prev => {
-        const next = new Set(prev);
-        groupStageNames.forEach(name => next.add(name));
-        return next;
-      });
+      setSelection({ type: 'funnel', label: groupLabel });
     } catch (error) {
       console.error('Error fetching funnel group deals:', error);
       updateState('dealsByStage.error', `Failed to load deals for ${groupLabel}`);
@@ -782,20 +793,20 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
       setFunnelGroupLoading(false);
       updateState('dealsByStage.loading', false);
     }
-  }, [stagesLoading, funnelGroupLoading, availableStages, dealsByStage, selectedStages, updateState, makeApiCall]);
+  }, [stagesLoading, funnelGroupLoading, availableStages, dealsByStage, selection, updateState, makeApiCall]);
 
-  // Compute a stable fingerprint of the deals data for selected stages only
-  const selectedStagesDataFingerprint = useMemo(() => {
+  // Stable string fingerprint of which stages are selected + their deal counts
+  const selectedStagesFingerprint = useMemo(() => {
     return Array.from(selectedStages)
       .sort()
       .map(s => `${s}:${(dealsByStage[s] || []).length}`)
       .join('|');
   }, [selectedStages, dealsByStage]);
 
-  // Sync combined deals whenever selectedStages changes or their deal data loads
+  // Sync combined deals whenever selection or deal data changes (using stable string trigger)
   useEffect(() => {
-    syncCombinedDeals(selectedStages);
-  }, [selectedStages, selectedStagesDataFingerprint]);
+    syncCombinedDeals(selectedStagesRef.current, selectedStagesFingerprint);
+  }, [selectedStagesFingerprint, syncCombinedDeals]);
 
   // Navigate to deal timeline
   const navigateToDealTimeline = useCallback((dealName: string) => {
@@ -924,6 +935,7 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
       try {
         const parsedData = JSON.parse(storedData);
         setInsightsData(parsedData);
+        setInsightsFetched(true);
         return true;
       } catch (error) {
         console.error('Error parsing stored insights:', error);
@@ -976,6 +988,7 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
           return false;
         }
         setSignalsData(parsedData);
+        setSignalsFetched(true);
         return true;
       } catch (error) {
         console.error('Error parsing stored signals:', error);
@@ -996,7 +1009,7 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
   // Fetch insights data
   const fetchInsights = useCallback(async (dealNames: string[]) => {
     if (!dealNames.length) return;
-    
+
     setInsightsLoading(true);
     try {
       const response = await makeApiCall(`${API_CONFIG.getApiPath('/deal-insights-aggregate')}`, {
@@ -1006,20 +1019,23 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
         },
         body: JSON.stringify(dealNames),
       });
-      
+
       if (response) {
         const data = await response.json();
         setInsightsData(data);
-        if (selectedStage) {
-          saveInsightsToStorage(selectedStage, data);
+        setInsightsFetched(true);
+        const currentStage = selectedStageRef.current;
+        if (currentStage) {
+          saveInsightsToStorage(currentStage, data);
         }
       }
     } catch (error) {
       console.error('Error fetching insights:', error);
+      setInsightsFetched(true); // Mark as fetched even on error so we don't block UI
     } finally {
       setInsightsLoading(false);
     }
-  }, [makeApiCall, selectedStage, saveInsightsToStorage]);
+  }, [makeApiCall, saveInsightsToStorage]);
 
   // Fetch activity counts for all deals
   const fetchActivityCounts = useCallback(async (dealNames: string[]) => {
@@ -1051,28 +1067,33 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
       });
 
       setActivityCounts(countsMap);
-      if (selectedStage) {
-        saveActivityCountsToStorage(selectedStage, countsMap);
+      const currentStage = selectedStageRef.current;
+      if (currentStage) {
+        saveActivityCountsToStorage(currentStage, countsMap);
       }
     } catch (error) {
       console.error('Error fetching activity counts:', error);
     } finally {
       setActivityCountsLoading(false);
     }
-  }, [makeApiCall, selectedStage, saveActivityCountsToStorage]);
+  }, [makeApiCall, saveActivityCountsToStorage]);
 
   // Fetch signals data for all deals in batches of 10
   const fetchSignals = useCallback(async (dealNames: string[]) => {
     if (!dealNames.length) return;
-    
+
     setSignalsLoading(true);
     try {
       const BATCH_SIZE = 10;
       const allSignalsData: DealSignalsData = {};
-      
+
+      // Sort deal names alphabetically to match initial table order (deal_name asc),
+      // so loading indicators disappear top-to-bottom
+      const sortedDealNames = [...dealNames].sort((a, b) => a.localeCompare(b));
+
       // Process deals in batches
-      for (let i = 0; i < dealNames.length; i += BATCH_SIZE) {
-        const batch = dealNames.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < sortedDealNames.length; i += BATCH_SIZE) {
+        const batch = sortedDealNames.slice(i, i + BATCH_SIZE);
         console.log(`Fetching signals for batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(dealNames.length / BATCH_SIZE)} (${batch.length} deals)`);
         
         try {
@@ -1091,7 +1112,8 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
             
             // Update state with partial data as it comes in
             setSignalsData(prev => ({ ...prev, ...batchData }));
-            
+            setSignalsFetched(true);
+
             console.log(`Batch ${Math.floor(i / BATCH_SIZE) + 1} completed - ${Object.keys(batchData).length} deals updated`);
           }
         } catch (error) {
@@ -1106,17 +1128,18 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
       }
       
       // Save complete data to storage
-      if (selectedStage) {
-        saveSignalsToStorage(selectedStage, allSignalsData);
+      const currentStage = selectedStageRef.current;
+      if (currentStage) {
+        saveSignalsToStorage(currentStage, allSignalsData);
       }
-      
+
       console.log(`Completed fetching signals for ${dealNames.length} deals in ${Math.ceil(dealNames.length / BATCH_SIZE)} batches`);
     } catch (error) {
       console.error('Error in fetchSignals:', error);
     } finally {
       setSignalsLoading(false);
     }
-  }, [makeApiCall, selectedStage, saveSignalsToStorage]);
+  }, [makeApiCall, saveSignalsToStorage]);
 
   // Function to toggle column pinning
   const toggleColumnPin = useCallback((columnId: string) => {
@@ -1169,72 +1192,62 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
 
   // Effect to fetch insights after deals load
   useEffect(() => {
-    if (!selectedStage || !dealsByStage[selectedStage]) return;
+    const currentDeals = dealsByStageRef.current;
+    if (!selectedStage || !currentDeals[selectedStage]) return;
 
     // Try to load from storage first
     if (loadInsightsFromStorage(selectedStage)) {
       return;
     }
 
-    const dealNames = dealsByStage[selectedStage].map(deal => deal.Deal_Name);
-    
-    // Clear any existing timeout
+    const dealNames = currentDeals[selectedStage].map((deal: Deal) => deal.Deal_Name);
+
     const timeoutId = setTimeout(() => {
       fetchInsights(dealNames);
-    }, 1000); // 1 second delay
+    }, 1000);
 
     return () => clearTimeout(timeoutId);
-  }, [selectedStage, dealsByStage, fetchInsights, loadInsightsFromStorage]);
+  }, [selectedStage, fetchInsights, loadInsightsFromStorage]);
 
   // Effect to fetch activity counts after deals load
   useEffect(() => {
-    if (!selectedStage || !dealsByStage[selectedStage]) return;
+    const currentDeals = dealsByStageRef.current;
+    if (!selectedStage || !currentDeals[selectedStage]) return;
 
     // Try to load from storage first
     if (loadActivityCountsFromStorage(selectedStage)) {
       return;
     }
 
-    const dealNames = dealsByStage[selectedStage].map(deal => deal.Deal_Name);
-    
-    // Clear any existing timeout
+    const dealNames = currentDeals[selectedStage].map((deal: Deal) => deal.Deal_Name);
+
     const timeoutId = setTimeout(() => {
       fetchActivityCounts(dealNames);
-    }, 1500); // 1.5 second delay to avoid overwhelming the API
+    }, 1500);
 
     return () => clearTimeout(timeoutId);
-  }, [selectedStage, dealsByStage, fetchActivityCounts, loadActivityCountsFromStorage]);
+  }, [selectedStage, fetchActivityCounts, loadActivityCountsFromStorage]);
 
   // Effect to fetch signals after deals load
   useEffect(() => {
-    if (!selectedStage || !dealsByStage[selectedStage]) return;
+    const currentDeals = dealsByStageRef.current;
+    if (!selectedStage || !currentDeals[selectedStage]) return;
 
-    const dealNames = dealsByStage[selectedStage].map(deal => deal.Deal_Name);
+    const dealNames = currentDeals[selectedStage].map((deal: Deal) => deal.Deal_Name);
 
     // Try to load from storage first
     if (loadSignalsFromStorage(selectedStage)) {
       return;
     }
 
-    // Clear any existing timeout
     const timeoutId = setTimeout(() => {
       fetchSignals(dealNames);
-    }, 2000); // 2 second delay to avoid overwhelming the API
+    }, 2000);
 
     return () => clearTimeout(timeoutId);
-  }, [selectedStage, dealsByStage, fetchSignals, loadSignalsFromStorage]);
+  }, [selectedStage, fetchSignals, loadSignalsFromStorage]);
 
-  // Auto-sort by positives once signals data loads
-  useEffect(() => {
-    // Only auto-sort if we have signals data and we're not already sorted by positives
-    if (signalsData && Object.keys(signalsData).length > 0 && !signalsLoading) {
-      const currentSort = sorting[0];
-      // If not already sorted by positives, set it to descending
-      if (!currentSort || currentSort.id !== 'positives') {
-        setSorting([{ id: 'positives', desc: true }]);
-      }
-    }
-  }, [signalsData, signalsLoading]);
+  // Keep default sort as deal name ascending (users can manually change via column headers)
 
 
 
@@ -1254,8 +1267,10 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
 
     // Clear cached secondary data and storage
     setInsightsData(null);
+    setInsightsFetched(false);
     setActivityCounts({});
     setSignalsData(null);
+    setSignalsFetched(false);
     if (selectedStage) {
       localStorage.removeItem(getInsightsStorageKey(selectedStage));
       localStorage.removeItem(getActivityCountsStorageKey(selectedStage));
@@ -1271,7 +1286,7 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
     }
 
     // Re-fetch deals for all currently selected stages
-    const stagesToRefresh = Array.from(selectedStages);
+    const stagesToRefresh = Array.from(selectedStagesRef.current);
     if (stagesToRefresh.length === 0) return;
 
     setFunnelGroupLoading(true);
@@ -1300,8 +1315,8 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
       updateState('dealsByStage.dealsByStage', updatedDealsByStage);
       updateState('dealsByStage.lastFetched', Date.now());
 
-      // Re-sync combined deals (the effect will fire, but also trigger manually for immediate update)
-      syncCombinedDeals(selectedStages);
+      // Force re-sync by clearing the fingerprint cache so the effect picks it up
+      lastSyncedFingerprint.current = null;
     } catch (error) {
       console.error('Error refreshing deals:', error);
       updateState('dealsByStage.error', 'Failed to refresh deals. Please try again.');
@@ -1309,7 +1324,7 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
       setFunnelGroupLoading(false);
       updateState('dealsByStage.loading', false);
     }
-  }, [updateState, fetchStages, selectedStage, selectedStages, availableStages, makeApiCall, syncCombinedDeals, getInsightsStorageKey, getActivityCountsStorageKey, getSignalsStorageKey]);
+  }, [updateState, fetchStages, selectedStage, availableStages, makeApiCall, syncCombinedDeals, getInsightsStorageKey, getActivityCountsStorageKey, getSignalsStorageKey]);
 
   // Function to render sort indicator
   const renderSortIndicator = (column: any) => {
@@ -1383,6 +1398,9 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
       const hasNoDecisionMakerData = insightsData?.no_decision_maker_no_data?.includes(dealName) || false;
       const noDecisionMaker = insightsData?.no_decision_maker?.includes(dealName) || false;
 
+      // If data hasn't been fetched yet, return -1 to sort loading rows to the bottom
+      if (!signalsFetched || !insightsFetched) return -1;
+
       const buyingSignals = (signals?.likely_to_buy || 0) + (signals?.very_likely_to_buy || 0);
       const positiveMeetings = (signals?.meetings || []).filter((m: any) =>
         m.buyer_intent === 'Likely to buy' || m.buyer_intent === 'Very likely to buy'
@@ -1407,8 +1425,8 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
         const hasNoDecisionMakerData = insightsData?.no_decision_maker_no_data?.includes(dealName) || false;
         const noDecisionMaker = insightsData?.no_decision_maker?.includes(dealName) || false;
 
-        // Show loading if still loading data
-        if ((signalsLoading && !signals) || insightsLoading) {
+        // Show loading if data hasn't been fetched yet, or this deal's signals are still pending
+        if (!insightsFetched || !signalsFetched || (signalsLoading && !signals) || insightsLoading) {
           return (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 text-xs">
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10" strokeDasharray="4 4" /></svg>
@@ -1497,6 +1515,9 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
       const hasNoDecisionMakerData = insightsData?.no_decision_maker_no_data?.includes(dealName) || false;
       const noDecisionMaker = insightsData?.no_decision_maker?.includes(dealName) || false;
 
+      // If data hasn't been fetched yet, return -1 to sort loading rows to the bottom
+      if (!signalsFetched || !insightsFetched) return -1;
+
       const lessLikelySignals = signals?.less_likely_to_buy || 0;
       const riskMeetings = (signals?.meetings || []).filter((m: any) =>
         m.buyer_intent === 'Less likely to buy' || m.buyer_intent === 'Neutral'
@@ -1522,8 +1543,8 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
         const hasNoDecisionMakerData = insightsData?.no_decision_maker_no_data?.includes(dealName) || false;
         const noDecisionMaker = insightsData?.no_decision_maker?.includes(dealName) || false;
 
-        // Show loading if still loading data
-        if ((signalsLoading && !signals) || insightsLoading) {
+        // Show loading if data hasn't been fetched yet, or this deal's signals are still pending
+        if (!insightsFetched || !signalsFetched || (signalsLoading && !signals) || insightsLoading) {
           return (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 text-xs">
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10" strokeDasharray="4 4" /></svg>
@@ -1648,7 +1669,7 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
         return <span>{count}</span>;
       },
     }),
-  ], [columnHelper, navigateToDealTimeline, selectedStage, dealStageMap, insightsData, activityCounts, activityCountsLoading, signalsData, signalsLoading, insightsLoading]);
+  ], [columnHelper, navigateToDealTimeline, selectedStage, dealStageMap, insightsData, insightsFetched, activityCounts, activityCountsLoading, signalsData, signalsFetched, signalsLoading, insightsLoading]);
 
   // Filter columns based on visibility
   const columns = useMemo(() => {
@@ -1672,102 +1693,120 @@ const DealStageSelector: React.FC<DealStageSelectorProps> = ({ isMainSidebarColl
       {/* Left Panel - Stages Sidebar */}
       <div className={`w-80 bg-white border-r border-gray-200 overflow-y-auto transition-all duration-300 ${isMainSidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
         <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold">Choose a Funnel or Stage 👇</h2>
+          <h2 className="text-lg font-semibold">Pick a Funnel</h2>
         </div>
-        
-        {/* Stages List */}
-        <div>
-          {stagesLoading ? (
-            <div key="loading" className="py-3 px-4 text-gray-500 flex items-center">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700 mr-2"></div>
-              Loading stages...
-            </div>
-          ) : availableStages.length > 0 ? (
-            (() => {
-              return FUNNEL_GROUPS.map((group) => {
-                const groupStages = availableStages.filter(stage =>
-                  group.stages.includes(stage.stage_name)
-                );
 
-                if (groupStages.length === 0) return null;
+        {stagesLoading ? (
+          <div key="loading" className="py-3 px-4 text-gray-500 flex items-center">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700 mr-2"></div>
+            Loading stages...
+          </div>
+        ) : availableStages.length > 0 ? (
+          <>
+            {/* Segmented funnel pill bar */}
+            <div className="p-3 border-b border-gray-200">
+              <div className="flex gap-2">
+                {FUNNEL_GROUPS.map((group) => {
+                  const isBottomOfFunnel = group.label === 'Bottom of Funnel';
+                  const isActive = selection?.type === 'funnel' && selection.label === group.label;
+                  const shortLabel = group.label === 'Top of Funnel' ? 'Top' : group.label === 'Mid Funnel' ? 'Mid' : 'Bottom';
 
-                const groupStageNames = groupStages.map(s => s.stage_name);
-                const allGroupSelected = groupStageNames.every(name => selectedStages.has(name));
-                const someGroupSelected = groupStageNames.some(name => selectedStages.has(name));
-                const isBottomOfFunnel = group.label === 'Bottom of Funnel';
+                  // Map group colors to pill styles
+                  const pillColors = group.label === 'Top of Funnel'
+                    ? { active: 'bg-green-600 text-white shadow-sm', inactive: 'bg-green-50 text-green-700 hover:bg-green-100 cursor-pointer' }
+                    : group.label === 'Mid Funnel'
+                      ? { active: 'bg-yellow-500 text-white shadow-sm', inactive: 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100 cursor-pointer' }
+                      : { active: '', inactive: 'bg-gray-100 text-gray-400 cursor-not-allowed' };
 
-                return (
-                  <div key={group.label}>
-                    {/* Funnel Group Header */}
-                    <div
-                      className={`px-4 py-2 border-b transition-all duration-200 flex items-center justify-between group ${
-                        isBottomOfFunnel ? 'cursor-default' : 'cursor-pointer'
-                      } ${
-                        allGroupSelected && !isBottomOfFunnel
-                          ? 'bg-sky-100 text-sky-800 border-sky-200'
-                          : `${group.color} border-gray-200 ${!isBottomOfFunnel ? 'hover:brightness-[0.92]' : ''}`
+                  return (
+                    <button
+                      key={group.label}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        isActive
+                          ? pillColors.active
+                          : pillColors.inactive
                       }`}
                       onClick={() => !isBottomOfFunnel && handleFunnelGroupSelect(group.label)}
+                      disabled={isBottomOfFunnel}
+                      title={isBottomOfFunnel ? 'Select individual stages below' : `Select all ${shortLabel} of Funnel stages`}
                     >
-                      <span className={`text-xs font-semibold uppercase tracking-wide select-none ${!isBottomOfFunnel && !allGroupSelected ? 'group-hover:underline group-hover:underline-offset-2' : ''}`}>
-                        {group.label}
-                      </span>
-                      {!isBottomOfFunnel && (
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full transition-colors duration-200 ${
-                            allGroupSelected
-                              ? 'bg-sky-200/60 text-sky-700'
-                              : 'bg-black/5 group-hover:bg-black/10'
-                          }`}>
-                            {allGroupSelected ? 'Selected' : someGroupSelected ? 'Partial' : 'Select'}
-                          </span>
-                          {allGroupSelected && (
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-sky-600" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                      {shortLabel}
+                    </button>
+                  );
+                })}
+              </div>
+              {funnelGroupLoading && (
+                <div className="flex items-center justify-center mt-2 text-xs text-gray-500">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-sky-600 mr-1.5"></div>
+                  Loading funnel...
+                </div>
+              )}
+            </div>
 
-                    {/* Stages in this group */}
-                    <div className="divide-y divide-gray-100">
-                      {groupStages.map((stage) => {
-                        const stageKey = stage.stage_id || stage.stage_name;
-                        const isStageSelected = selectedStages.has(stage.stage_name);
-                        return (
-                          <div
-                            key={`stage-${stageKey}`}
-                            className={`py-2 px-4 cursor-pointer hover:bg-gray-50 transition-colors duration-150 ${
-                              isStageSelected ? 'bg-sky-50' : ''
-                            }`}
-                            onClick={() => handleStageSelect(stage.stage_name)}
-                          >
-                            <div key={`stage-content-${stageKey}`} className="flex items-center justify-between">
-                              <div key={`stage-info-${stageKey}`} className="flex-1">
-                                <div className={`font-medium text-sm ${isStageSelected ? 'text-sky-700' : 'text-gray-700'}`}>{stage.stage_name}</div>
-                                <div className="text-xs text-gray-500 mt-0.5">
-                                  {stage.closed_won || stage.closed_lost ? '' : `${stage.probability}% Probability`}
-                                </div>
-                              </div>
+            {/* Divider */}
+            <div className="flex items-center gap-3 px-4 py-2.5">
+              <div className="flex-1 border-t border-gray-200"></div>
+              <span className="text-[11px] text-gray-400 uppercase tracking-wider font-medium whitespace-nowrap">Or pick a stage</span>
+              <div className="flex-1 border-t border-gray-200"></div>
+            </div>
+
+            {/* Grouped stage list with radio dots */}
+            {FUNNEL_GROUPS.map((group) => {
+              const groupStages = availableStages.filter(stage =>
+                group.stages.includes(stage.stage_name)
+              );
+
+              if (groupStages.length === 0) return null;
+
+              return (
+                <div key={group.label}>
+                  {/* Group label (non-clickable) */}
+                  <div className={`px-4 py-1.5 border-b border-gray-100 ${group.color}`}>
+                    <span className="text-[11px] font-semibold uppercase tracking-wide">
+                      {group.label}
+                    </span>
+                  </div>
+
+                  {/* Individual stages */}
+                  <div className="divide-y divide-gray-100">
+                    {groupStages.map((stage) => {
+                      const stageKey = stage.stage_id || stage.stage_name;
+                      const isStageSelected = selection?.type === 'stage' && selection.name === stage.stage_name;
+                      return (
+                        <div
+                          key={`stage-${stageKey}`}
+                          className={`py-2 px-4 cursor-pointer hover:bg-gray-50 transition-colors duration-150 ${
+                            isStageSelected ? 'bg-sky-50' : ''
+                          }`}
+                          onClick={() => handleStageSelect(stage.stage_name)}
+                        >
+                          <div className="flex items-center gap-3">
+                            {/* Radio dot */}
+                            <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors duration-150 ${
+                              isStageSelected ? 'border-sky-600' : 'border-gray-300'
+                            }`}>
                               {isStageSelected && (
-                                <svg key={`stage-check-${stageKey}`} xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-sky-600 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                </svg>
+                                <div className="w-2 h-2 rounded-full bg-sky-600"></div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className={`font-medium text-sm ${isStageSelected ? 'text-sky-700' : 'text-gray-700'}`}>{stage.stage_name}</div>
+                              {!stage.closed_won && !stage.closed_lost && (
+                                <div className="text-xs text-gray-500 mt-0.5">{stage.probability}% Probability</div>
                               )}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              });
-            })()
-          ) : (
-            <div key="no-stages" className="py-3 px-4 text-gray-500">No stages found</div>
-          )}
-        </div>
+                </div>
+              );
+            })}
+          </>
+        ) : (
+          <div key="no-stages" className="py-3 px-4 text-gray-500">No stages found</div>
+        )}
       </div>
 
       {/* Main Content */}
